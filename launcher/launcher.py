@@ -3,9 +3,11 @@
 import ctypes
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from contextlib import ExitStack
 from pathlib import Path
@@ -21,25 +23,46 @@ from gilhound.updater._layout import (
     rejected,
     replace_launcher,
     same_location,
+    version_lease,
     write_pointer,
 )
+from gilhound.updater.instance import request_show, show_event
 from gilhound.updater.motw import unblock
 
 
-def _clean(root: Path, keep: set[str | None]) -> None:
+def _clean(root: Path, keep: set[str | None]) -> list[Path]:
+    """Retire unused bundles under install.lock. Delete their contents after unlocking."""
+    retired = [
+        folder for folder in root.glob("retired-app-*")
+        if re.fullmatch(r"retired-app-[0-9a-f]{32}", folder.name)
+        and folder.is_dir() and not folder.is_junction() and not folder.is_symlink()
+    ]
+    busy = set()
+    for path in (*root.glob("lease-*.lock"), *root.glob("use-*.lock")):
+        prefix, name = path.stem.split("-", 1)
+        version = name.rsplit("-", 1)[0] if prefix == "lease" else name
+        try:
+            with lock(path, timeout=0):
+                pass
+            path.unlink(missing_ok=True)
+        except OSError:
+            busy.add(version)
     for folder in root.glob("app-*"):
         version = folder.name[4:]
-        if version in keep or not folder.is_dir() or folder.is_symlink() or folder.is_junction():
+        if version in keep or version in busy:
+            continue
+        if not folder.is_dir() or folder.is_symlink() or folder.is_junction():
             continue
         try:
             precedence(version)
-            with lock(root / f"use-{version}.lock", timeout=0):
-                # Windows also protects a mapped executable after a supervisor crash.
-                (folder / EXE).unlink(missing_ok=True)
-                shutil.rmtree(folder)
-            (root / f"use-{version}.lock").unlink(missing_ok=True)
+            # Windows protects a mapped executable even after a legacy supervisor crash.
+            (folder / EXE).unlink(missing_ok=True)
+            target = root / f"retired-app-{uuid4().hex}"
+            folder.rename(target)
+            retired.append(target)
         except (OSError, ValueError):
             logging.info("Deferred cleanup of %s", version)
+    return retired
 
 
 def _start(root: Path, version: str, marker: Path | None = None) -> subprocess.Popen:
@@ -47,10 +70,13 @@ def _start(root: Path, version: str, marker: Path | None = None) -> subprocess.P
     args = [folder / EXE, "--launcher-pid", str(os.getpid())]
     if marker:
         args.extend(["--ready-marker", marker])
+    env = {**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"}
+    env.pop("GILHOUND_RESTART_VERSION", None)
+    logging.info("Starting app-%s", version)
     return subprocess.Popen(
         args,
         cwd=folder,
-        env={**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"},
+        env=env,
     )
 
 
@@ -93,8 +119,21 @@ def _bundles(root: Path) -> list[str]:
 
 
 def launch(root: Path) -> int:
+    restart = os.environ.get("GILHOUND_RESTART_VERSION")
+    while True:
+        with show_event(root) as (event, first):
+            if first:
+                return _supervise(root)
+            if not restart or _read_pointer(root, "pending.txt") != restart:
+                request_show(root, event)
+                return 0
+        # The old app and supervisor are releasing their event after the restart request.
+        time.sleep(0.05)
+
+
+def _supervise(root: Path) -> int:
     with ExitStack() as leases:
-        with lock(root / "install.lock", timeout=75):
+        with lock(root / "install.lock"):
             versions = _bundles(root)
             current = _read_pointer(root, "current.txt")
             pending = _read_pointer(root, "pending.txt")
@@ -119,15 +158,18 @@ def launch(root: Path) -> int:
                 (root / "pending.txt").unlink(missing_ok=True)
                 pending = None
             app = None
+            rollback = None
             if pending:
                 fallback = previous if retry else current
-                leases.enter_context(lock(root / f"use-{pending}.lock", shared=True))
+                leases.enter_context(version_lease(root, pending))
                 marker = root / f"ready-{pending}-{uuid4().hex}"
                 try:
                     app = _start(root, pending, marker)
                     _await_startup(app, marker)
                 except (OSError, RuntimeError):
                     logging.exception("Rolling back %s to %s", pending, fallback)
+                    rollback = (f"Gilhound v{pending} failed to start. Reopened v{fallback}. "
+                                f"See {root / 'launcher.log'} for details.")
                     write_pointer(root, "failed.txt", pending)
                     if retry:
                         current = fallback
@@ -141,10 +183,22 @@ def launch(root: Path) -> int:
                 finally:
                     marker.unlink(missing_ok=True)
                 (root / "pending.txt").unlink(missing_ok=True)
-            _clean(root, {current, previous})
             if app is None:
-                leases.enter_context(lock(root / f"use-{current}.lock", shared=True))
+                leases.enter_context(version_lease(root, current))
                 app = _start(root, current)
+            retired = _clean(root, {current, previous})
+        if rollback and getattr(sys, "frozen", False):
+            threading.Thread(
+                target=ctypes.windll.user32.MessageBoxW,
+                args=(None, rollback, "Gilhound update", 0x30), daemon=True,
+            ).start()
+        for folder in retired:
+            try:
+                shutil.rmtree(folder)
+            except FileNotFoundError:
+                pass
+            except OSError:
+                logging.info("Deferred removal of %s", folder.name)
         return app.wait()
 
 
@@ -231,8 +285,8 @@ def main() -> int:
             )
             return 0
         return launch(root)
-    except Exception:
-        logging.exception("Launcher failed")
+    except Exception as exc:
+        logging.exception("Launcher failed: %s: %s", type(exc).__name__, exc)
         ctypes.windll.user32.MessageBoxW(
             None, f"Gilhound could not start. See {root / 'launcher.log'}", "Gilhound", 16
         )

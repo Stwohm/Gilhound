@@ -806,6 +806,8 @@ export interface components {
              * @default 0
              */
             done: number;
+            /** Error */
+            error?: string | null;
             /** Id */
             id: string;
             result?: components["schemas"]["Result"] | null;

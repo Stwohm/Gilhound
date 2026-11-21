@@ -19,7 +19,8 @@ import uvicorn
 from gilhound import __version__
 from gilhound.api.app import create_app
 from gilhound.runtime.diagnostics import LOG
-from gilhound.updater._layout import acknowledge_startup
+from gilhound.updater import instance
+from gilhound.updater._layout import acknowledge_startup, install_root
 
 
 def webview2_available(library: Path) -> bool:
@@ -69,10 +70,23 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "Gilhound", 0x10,
             )
             return 1
+    if sys.platform == "win32" and getattr(sys, "frozen", False):
+        root = install_root()
+        root.mkdir(parents=True, exist_ok=True)
+        with instance.show_event(root) as (handle, first):
+            if not first and not args.launcher_pid:
+                instance.request_show(root, handle)
+                return 0
+            pid = root / "window.pid"
+            pid.write_text(str(os.getpid()))
+            try:
+                return _window(args, handle)
+            finally:
+                pid.unlink(missing_ok=True)
     return _window(args)
 
 
-def _window(args: argparse.Namespace) -> int:
+def _window(args: argparse.Namespace, event: int = 0) -> int:
     import webview
 
     if sys.platform == "win32" and not webview2_available(Path(webview.__file__).parent / "lib"):
@@ -97,6 +111,8 @@ def _window(args: argparse.Namespace) -> int:
         )
         worker = threading.Thread(target=server.run, kwargs={"sockets": [listener]})
         worker.start()
+        closing = threading.Event()
+        show_worker = None
         try:
             while not server.started:
                 if not worker.is_alive():
@@ -105,6 +121,21 @@ def _window(args: argparse.Namespace) -> int:
             window = webview.create_window(
                 "Gilhound", f"http://127.0.0.1:{port}/", width=1200, height=800
             )
+            if event:
+                def listen() -> None:
+                    while not window.events.shown.wait(0.2):
+                        if closing.is_set():
+                            return
+                    while not closing.is_set():
+                        if instance.wait_show(event) and not closing.is_set():
+                            hwnd = window.native.Handle.ToInt64()
+                            if instance.minimized(hwnd):
+                                window.restore()
+                            window.show()
+                            instance.foreground(hwnd)
+
+                show_worker = threading.Thread(target=listen, daemon=True)
+                show_worker.start()
             if args.ready_marker or getattr(sys, "frozen", False):
                 def acknowledge() -> None:
                     if worker.is_alive() and not server.should_exit:
@@ -118,6 +149,9 @@ def _window(args: argparse.Namespace) -> int:
                 icon=str(icon) if icon.is_file() else None,
             )
         finally:
+            closing.set()
+            if show_worker:
+                show_worker.join(1)
             server.should_exit = True
             worker.join()
     return 0

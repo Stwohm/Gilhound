@@ -18,9 +18,14 @@ type Progress = Callable[[int, int], None]
 class Job(BaseModel):
     id: str
     state: Literal["queued", "running", "complete", "failed"] = "queued"
+    error: str | None = None
     done: int = 0
     total: int | None = None
     result: Result | None = None
+
+
+class JobError(RuntimeError):
+    """A failure with a message suitable for display in the desktop UI."""
 
 
 class Jobs:
@@ -49,8 +54,10 @@ class Jobs:
                 job.state = "running"
             try:
                 result = task(progress)
-            except Exception:
+            except Exception as exc:
                 with self.lock:
+                    if isinstance(exc, JobError):
+                        job.error = str(exc)
                     job.state = "failed"
             else:
                 with self.lock:

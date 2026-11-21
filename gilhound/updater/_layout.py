@@ -1,5 +1,6 @@
 """Shared on-disk protocol for the launcher and updater (stdlib only)."""
 
+import errno
 import filecmp
 import logging
 import os
@@ -130,7 +131,7 @@ def ready(folder: Path) -> bool:
 
 
 @contextmanager
-def lock(path: Path, *, shared: bool = False, timeout: float = 30) -> Iterator[None]:
+def lock(path: Path, *, timeout: float | None = None) -> Iterator[None]:
     """Process-owned byte lock. Windows and POSIX release it on process exit."""
     with path.open("a+b") as handle:
         handle.seek(0)
@@ -138,23 +139,32 @@ def lock(path: Path, *, shared: bool = False, timeout: float = 30) -> Iterator[N
             import msvcrt
 
             def acquire() -> None:
-                mode = msvcrt.LK_NBRLCK if shared else msvcrt.LK_NBLCK
-                msvcrt.locking(handle.fileno(), mode, 1)
+                msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
         else:
             import fcntl
 
             def acquire() -> None:
-                mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
-                fcntl.flock(handle, mode | fcntl.LOCK_NB)
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
-        deadline = time.monotonic() + timeout
+        deadline = None if timeout is None else time.monotonic() + timeout
         while True:
             try:
                 acquire()
                 break
-            except OSError:
-                if time.monotonic() >= deadline:
+            except OSError as exc:
+                if exc.errno not in (errno.EACCES, errno.EAGAIN, errno.EDEADLK):
+                    raise
+                if deadline is not None and time.monotonic() >= deadline:
                     raise TimeoutError("Installation is busy") from None
                 time.sleep(0.05)
         yield
 
+
+@contextmanager
+def version_lease(root: Path, version: str) -> Iterator[None]:
+    path = root / f"lease-{version}-{uuid4().hex}.lock"
+    try:
+        with lock(path, timeout=0):
+            yield
+    finally:
+        path.unlink(missing_ok=True)

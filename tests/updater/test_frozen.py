@@ -105,3 +105,78 @@ old["apply_and_restart"]()
     assert (root / "Gilhound.exe").read_bytes() == staged_launcher.read_bytes()
     assert (root / "current.txt").read_text() == "0.1.6"
     assert not (root / "pending.txt").exists()
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires the Windows desktop")
+def test_frozen_second_launch_restores_window(tmp_path: Path) -> None:
+    import ctypes
+    from ctypes import wintypes
+
+    from gilhound import __version__
+
+    bundle = REPO / f"dist/Gilhound-{__version__}-win64.zip"
+    if not bundle.exists():
+        pytest.skip("build the current desktop archive with packaging/build.ps1")
+    local = tmp_path / "Local AppData"
+    root = local / "Gilhound"
+    roaming = tmp_path / "Roaming"
+    settings = roaming / "Gilhound/settings.json"
+    settings.parent.mkdir(parents=True)
+    settings.write_text('{"home_world":"Cerberus","buy_region":"Europe","auto_snipe_enabled":false}')
+    env = {**os.environ, "LOCALAPPDATA": str(local), "APPDATA": str(roaming),
+           "GILHOUND_UPDATE_FEED": "offline:", "PYINSTALLER_RESET_ENVIRONMENT": "1"}
+    with ZipFile(bundle) as archive:
+        archive.extractall(root)
+    (root / "current.txt").write_text(__version__)
+
+    user = ctypes.windll.user32
+    callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    windows = []
+    pid = None
+
+    @callback
+    def collect(hwnd: int, _: int) -> bool:
+        owner = wintypes.DWORD()
+        user.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        if owner.value == pid and user.IsWindowVisible(hwnd):
+            caption = ctypes.create_unicode_buffer(256)
+            user.GetWindowTextW(hwnd, caption, len(caption))
+            if caption.value == "Gilhound":
+                windows.append(hwnd)
+        return True
+
+    args = [root / "Gilhound.exe"]
+    first = subprocess.Popen(args, env=env, cwd=root)
+    try:
+        deadline = time.monotonic() + 60
+        while not windows and time.monotonic() < deadline:
+            assert first.poll() is None
+            pidfile = root / "window.pid"
+            if pidfile.exists() and (value := pidfile.read_text()).isdigit():
+                pid = int(value)
+                user.EnumWindows(collect, 0)
+            time.sleep(0.05)
+        assert windows, (root / "launcher.log").read_text()
+        hwnd = windows[0]
+        user.ShowWindow(hwnd, 6)  # SW_MINIMIZE
+        assert user.IsIconic(hwnd)
+        leases = list(root.glob("lease-*.lock"))
+        assert len(leases) == 1
+        start = time.monotonic()
+        subprocess.run(args, env=env, cwd=root, timeout=5, check=True)
+        elapsed = time.monotonic() - start
+        print(f"Frozen second launch: {elapsed:.3f}s")
+        assert elapsed < 1.5
+        deadline = time.monotonic() + 2
+        while user.GetForegroundWindow() != hwnd and time.monotonic() < deadline:
+            time.sleep(0.025)
+        assert user.IsWindow(hwnd) and not user.IsIconic(hwnd)
+        assert user.GetForegroundWindow() == hwnd
+        assert int(pidfile.read_text()) == pid and first.poll() is None
+        assert list(root.glob("lease-*.lock")) == leases
+        assert (root / "launcher.log").read_text().count(f"Starting app-{__version__}") == 1
+        user.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
+        assert first.wait(15) == 0
+    finally:
+        if first.poll() is None:
+            subprocess.run(["taskkill", "/pid", str(first.pid), "/t", "/f"], capture_output=True)
+            first.wait(10)

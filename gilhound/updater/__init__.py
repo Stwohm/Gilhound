@@ -163,7 +163,7 @@ def apply_and_restart() -> NoReturn:
     version = pointer(root, "pending.txt")
     if not version or not ready(root / f"app-{version}"):
         raise RuntimeError("No complete update is staged")
-    env = {**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"}
+    env = {**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1", "GILHOUND_RESTART_VERSION": version}
     subprocess.Popen([root / "Gilhound.exe"], cwd=root, env=env)
     # F2 may call from an API worker thread. SystemExit only ends that thread.
     os._exit(0)

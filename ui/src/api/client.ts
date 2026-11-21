@@ -142,7 +142,7 @@ const realApi: Api = {
   checkUpdate: () => json("/api/update/check", "POST"),
   async applyUpdate(progress) {
     const current = await waitForJob("/api/update/apply", undefined, progress);
-    if (current.state !== "complete") throw new Error("Update failed. Please retry.");
+    if (current.state !== "complete") throw new Error(current.error || "Update failed. Please retry.");
   },
   exportDiagnostics: async () => (await request("/api/diagnostics/export", "POST")).blob(),
   testDiscord: async () => {

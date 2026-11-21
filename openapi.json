@@ -477,6 +477,17 @@
             "title": "Done",
             "type": "integer"
           },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -3629,7 +3640,7 @@
   },
   "info": {
     "title": "Gilhound API",
-    "version": "0.2.2"
+    "version": "0.2.3"
   },
   "openapi": "3.1.0",
   "paths": {

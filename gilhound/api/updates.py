@@ -11,7 +11,7 @@ from threading import Lock
 from fastapi import HTTPException
 
 from gilhound import __version__, updater
-from gilhound.api.jobs import Job, Jobs, Progress
+from gilhound.api.jobs import Job, JobError, Jobs, Progress
 from gilhound.models import AppInfo
 from gilhound.runtime.diagnostics import LOG
 from gilhound.updater._layout import EXE, install_root, ready, same_location
@@ -102,12 +102,16 @@ class Updates:
             raise HTTPException(409, "Update already in progress.")
 
         def restart(progress: Progress) -> None:
+            phase = "download and stage the update"
             try:
                 updater.download_and_stage(release, progress)
+                phase = "restart the installed launcher"
                 updater.apply_and_restart()
-            except Exception:
-                LOG.warning("Update installation failed")
-                raise
+            except Exception as exc:
+                LOG.exception("Update installation failed")
+                raise JobError(
+                    f"Could not {phase} ({type(exc).__name__}). See gilhound.log for details."
+                ) from exc
             finally:
                 self.applying.release()
 

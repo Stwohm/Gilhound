@@ -10,6 +10,7 @@ from urllib.request import urlopen
 from zipfile import ZipFile
 
 import pytest
+from fastapi.testclient import TestClient
 
 import gilhound
 from gilhound import updater
@@ -48,7 +49,7 @@ def layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     popen = subprocess.Popen
 
     def run_script(args: list, **kwargs: object) -> subprocess.Popen:
-        return popen([sys.executable, *args], **kwargs)
+        return popen(args if args[0] == sys.executable else [sys.executable, *args], **kwargs)
 
     monkeypatch.setattr(launcher.subprocess, "Popen", run_script)
     return root
@@ -111,7 +112,7 @@ def test_update_cycle(layout: Path, feed: Path, monkeypatch: pytest.MonkeyPatch)
     old = layout / "app-0.1.0"
     assert old.is_dir() and not (layout / "pending.txt").exists()
     assert (layout / "current.txt").read_text() == "0.1.1"
-    with lock(layout / "use-0.1.0.lock", shared=True):
+    with lock(layout / "use-0.1.0.lock"):
         assert launcher.launch(layout) == 0
         assert old.is_dir()
     assert launcher.launch(layout) == 0
@@ -346,3 +347,81 @@ def test_travel_disclosure(file: str) -> None:
     guide = (script.parents[1] / file).read_text(encoding="utf-8").lower()
     for term in ("optional", "restocky", "**go**", "/li <world> market", "per click", "clipboard"):
         assert term in guide, file
+
+
+def test_clean_live_and_crashed_leases(layout: Path) -> None:
+    from gilhound.updater._layout import version_lease
+
+    unused = layout / "app-0.0.8"
+    shutil.copytree(layout / "app-0.1.0", unused)
+    legacy = layout / "use-0.1.0.lock"
+    legacy.touch()
+    with version_lease(layout, "0.0.8"):
+        launcher._clean(layout, {"0.1.0"})
+        assert (unused / EXE).is_file()
+        assert not legacy.exists()
+
+    crashed = subprocess.run(
+        [sys.executable, "-c",
+         "from gilhound.updater._layout import version_lease; from pathlib import Path; "
+         "import os,sys; lease=version_lease(Path(sys.argv[1]), '0.0.8'); "
+         "lease.__enter__(); os._exit(3)", str(layout)],
+        cwd=script.parents[1],
+    )
+    assert crashed.returncode == 3 and list(layout.glob("lease-*.lock"))
+    assert launcher.launch(layout) == 0
+    assert not unused.exists() and not list(layout.glob("lease-*.lock"))
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="requires the Windows instance event")
+def test_download_and_restart_from_api(
+    layout: Path, feed: Path, client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from threading import Event
+
+    from gilhound.api import updates
+    from gilhound.updater._layout import version_lease
+    from gilhound.updater.instance import show_event
+
+    # Stand in only for the two frozen executable entry points; both use the
+    # production launcher protocol, including a separate restart process.
+    (layout / "app-0.1.0").rename(layout / "app-0.2.1")
+    (layout / "current.txt").write_text("0.2.1")
+    monkeypatch.setattr(gilhound, "__version__", "0.2.1")
+    info = release(feed, version="0.2.2")
+    with ZipFile(feed / info.filename, "a") as archive:
+        archive.writestr(f"app-{info.version}/Gilhound.exe", f"""
+import runpy, sys, subprocess
+from pathlib import Path
+entry = runpy.run_path({str(script)!r})
+spawn = subprocess.Popen
+subprocess.Popen = lambda args, **kw: spawn([sys.executable, *args], **kw)
+sys.exit(entry['launch'](Path.cwd()))
+""")
+    digest = hashlib.sha256((feed / info.filename).read_bytes()).hexdigest()
+    (feed / "SHA256SUMS.txt").write_text(f"{digest}  {info.filename}\n")
+    (layout / "Gilhound.exe").write_text("previous launcher")
+    monkeypatch.setattr(updates, "installed", lambda: True)
+    exiting = Event()
+    monkeypatch.setattr(updater.os, "_exit", lambda status: exiting.set())
+    spawn = subprocess.Popen
+    restarts = []
+
+    def restart(args: list, **kwargs: object) -> subprocess.Popen:
+        child = spawn(args, **kwargs)
+        restarts.append(child)
+        return child
+
+    monkeypatch.setattr(subprocess, "Popen", restart)
+    with show_event(layout), version_lease(layout, "0.2.1"), lock(layout / "use-0.2.1.lock"):
+        assert client.post("/api/update/check").json()["latest_version"] == info.version
+        job = client.post("/api/update/apply")
+        assert job.status_code == 202
+        assert exiting.wait(5)
+        assert (layout / "pending.txt").read_text() == info.version
+        assert len(restarts) == 1 and restarts[0].poll() is None
+    assert restarts[0].wait(10) == 0
+    assert (layout / "started").read_text().splitlines() == [f"app-{info.version}"]
+    assert (layout / "current.txt").read_text() == info.version
+    assert (layout / "previous.txt").read_text() == "0.2.1"
+    assert not (layout / "pending.txt").exists()

@@ -145,3 +145,24 @@ def test_feed_failure_cached(
     assert "WARNING Update check failed" in log.read_text()
     assert client.get("/api/info").json()["latest_version"] is None
     feed.assert_called_once()
+
+
+@pytest.mark.parametrize("restart", [False, True])
+def test_update_job_explains_failure(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, restart: bool,
+) -> None:
+    release = updater.UpdateInfo("9.0.0", "asset", "sum")
+    monkeypatch.setattr(updates, "installed", lambda: True)
+    monkeypatch.setattr(updater, "check", lambda: release)
+    failure = PermissionError("access denied")
+    stage = Mock(side_effect=None if restart else failure)
+    monkeypatch.setattr(updater, "download_and_stage", stage)
+    monkeypatch.setattr(updater, "apply_and_restart", Mock(side_effect=failure))
+    assert client.post("/api/update/check").status_code == 200
+    job = client.post("/api/update/apply").json()
+    deadline = time.monotonic() + 5
+    while job["state"] in {"queued", "running"} and time.monotonic() < deadline:
+        job = client.get("/api/jobs/" + job["id"]).json()
+    assert job["state"] == "failed"
+    phase = "restart the installed launcher" if restart else "download and stage the update"
+    assert phase in job["error"] and "PermissionError" in job["error"]
