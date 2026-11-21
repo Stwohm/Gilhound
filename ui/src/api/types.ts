@@ -175,6 +175,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/partner/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Preview Share */
+        post: operations["preview_share_api_partner_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/partner/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Partner Share */
+        post: operations["partner_share_api_partner_share_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/partner/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Partner Status */
+        get: operations["partner_status_api_partner_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/pnl": {
         parameters: {
             query?: never;
@@ -596,6 +647,18 @@ export interface components {
             /** Started Ts */
             started_ts: number;
         };
+        /** AvoidItem */
+        AvoidItem: {
+            /** Hq */
+            hq: boolean;
+            /** Id */
+            id: number;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+        };
         /** BridgeGo */
         BridgeGo: {
             /** World */
@@ -724,6 +787,32 @@ export interface components {
         };
         /** @enum {string} */
         Kind: "scan" | "snipe" | "retainer";
+        /** PartnerRetainer */
+        PartnerRetainer: {
+            /** Name */
+            name: string;
+            /**
+             * World
+             * @default
+             */
+            world: string;
+        };
+        /** PartnerShare */
+        PartnerShare: {
+            /** Created Ts */
+            created_ts: number;
+            /** Items */
+            items: components["schemas"]["AvoidItem"][];
+            /** Retainers */
+            retainers?: components["schemas"]["PartnerRetainer"][];
+            /** Sender */
+            sender: string;
+            /**
+             * Version
+             * @constant
+             */
+            version: 1;
+        };
         /** PnLSummary */
         PnLSummary: {
             /**
@@ -973,6 +1062,10 @@ export interface components {
             gap_pct: number | null;
             /** @description Item and quality variant. */
             item: components["schemas"]["ItemRef"];
+            /** Partner */
+            partner?: ("now" | "regular" | "manual") | null;
+            /** Partner Detail */
+            partner_detail?: string | null;
             /**
              * Profit Per Unit
              * @description Net gil per unit from buying regionally and selling at the retainer price.
@@ -993,6 +1086,11 @@ export interface components {
              * @description Retainer's listed gil per unit.
              */
             their_ppu: number;
+            /**
+             * You List
+             * @default false
+             */
+            you_list: boolean;
         };
         /** RetainerScanParams */
         RetainerScanParams: {
@@ -1373,6 +1471,10 @@ export interface components {
             nearby_units?: number | null;
             /** Next Listing Gap */
             next_listing_gap?: number | null;
+            /** Partner */
+            partner?: ("now" | "regular" | "manual") | null;
+            /** Partner Detail */
+            partner_detail?: string | null;
             /** Profit Per Day */
             profit_per_day?: number | null;
             /**
@@ -1408,6 +1510,16 @@ export interface components {
             volume_proof: components["schemas"]["VolumeProof"];
             /** Whole Stack Outlay */
             whole_stack_outlay?: number | null;
+            /**
+             * You List
+             * @default false
+             */
+            you_list: boolean;
+        };
+        /** ShareCode */
+        ShareCode: {
+            /** Code */
+            code: string;
         };
         /** SnipeHit */
         SnipeHit: {
@@ -1508,6 +1620,10 @@ export interface components {
              * @description Last notification in UTC epoch seconds, if sent.
              */
             notified_ts?: number | null;
+            /** Partner */
+            partner?: ("now" | "regular" | "manual") | null;
+            /** Partner Detail */
+            partner_detail?: string | null;
             /** Profit Per Day */
             profit_per_day?: number | null;
             /**
@@ -1545,6 +1661,11 @@ export interface components {
             volume_proof: components["schemas"]["VolumeProof"];
             /** Whole Stack Outlay */
             whole_stack_outlay?: number | null;
+            /**
+             * You List
+             * @default false
+             */
+            you_list: boolean;
         };
         /** SnipeRule */
         SnipeRule: {
@@ -1595,6 +1716,8 @@ export interface components {
              * @default 0
              */
             notified: number;
+            /** Partner Age Min */
+            partner_age_min?: number | null;
             /**
              * Running
              * @default false
@@ -1691,13 +1814,45 @@ export interface components {
              * @default 1
              */
             min_net_multiple: number;
+            /** Own Avoid */
+            own_avoid?: components["schemas"]["AvoidItem"][];
+            /** Own Retainers */
+            own_retainers?: components["schemas"]["PartnerRetainer"][];
+            /**
+             * Partner Cache Min
+             * @default 45
+             */
+            partner_cache_min: number;
+            partner_manual?: components["schemas"]["PartnerShare"] | null;
+            /**
+             * Partner Regular Days
+             * @default 5
+             */
+            partner_regular_days: number;
+            /** Partner Retainers */
+            partner_retainers?: components["schemas"]["PartnerRetainer"][];
+            /**
+             * Partner Window Days
+             * @default 14
+             */
+            partner_window_days: number;
             /**
              * Scan Interval Min
              * @description Minutes between snipe scans.
              * @default 5
              */
             scan_interval_min: number;
+            /**
+             * Share Sender
+             * @default
+             */
+            share_sender: string;
             snipe_rule?: components["schemas"]["SnipeRule"];
+            /**
+             * Suppress Partner Discord
+             * @default true
+             */
+            suppress_partner_discord: boolean;
             /**
              * Travel Cost
              * @description Travel cost in gil keyed by data centre name.
@@ -1766,13 +1921,45 @@ export interface components {
              * @default 1
              */
             min_net_multiple: number;
+            /** Own Avoid */
+            own_avoid?: components["schemas"]["AvoidItem"][];
+            /** Own Retainers */
+            own_retainers?: components["schemas"]["PartnerRetainer"][];
+            /**
+             * Partner Cache Min
+             * @default 45
+             */
+            partner_cache_min: number;
+            partner_manual?: components["schemas"]["PartnerShare"] | null;
+            /**
+             * Partner Regular Days
+             * @default 5
+             */
+            partner_regular_days: number;
+            /** Partner Retainers */
+            partner_retainers?: components["schemas"]["PartnerRetainer"][];
+            /**
+             * Partner Window Days
+             * @default 14
+             */
+            partner_window_days: number;
             /**
              * Scan Interval Min
              * @description Minutes between snipe scans.
              * @default 5
              */
             scan_interval_min: number;
+            /**
+             * Share Sender
+             * @default
+             */
+            share_sender: string;
             snipe_rule?: components["schemas"]["SnipeRule"];
+            /**
+             * Suppress Partner Discord
+             * @default true
+             */
+            suppress_partner_discord: boolean;
             /**
              * Travel Cost
              * @description Travel cost in gil keyed by data centre name.
@@ -2352,6 +2539,151 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_share_api_partner_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShareCode"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerShare"];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    partner_share_api_partner_share_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartnerShare"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string;
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    partner_status_api_partner_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
         };

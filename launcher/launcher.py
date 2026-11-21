@@ -23,6 +23,7 @@ from gilhound.updater._layout import (
     same_location,
     write_pointer,
 )
+from gilhound.updater.motw import unblock
 
 
 def _clean(root: Path, keep: set[str | None]) -> None:
@@ -193,6 +194,7 @@ def install(source: Path, root: Path) -> None:
                 if partial.exists():
                     shutil.rmtree(partial)
                 shutil.copytree(bundle, partial, ignore=shutil.ignore_patterns("READY"))
+                unblock(partial)
                 (partial / "READY").touch()
                 if folder.exists():
                     shutil.rmtree(folder)

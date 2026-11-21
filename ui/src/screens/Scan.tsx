@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
+import { PartnerBadge, usePartnerFilter, visiblePartnerRow } from "../Partner";
 import { api } from "../api/client";
 import { Item, Notice, PageTitle, Section, Table, age, errorMessage, gil, number, time } from "../common";
 import type { Schema } from "../common";
@@ -140,6 +141,7 @@ function Detail({ row, home, archived }: { row: Row; home: string; archived: boo
   );
 }
 export function ScanResults({ result, archived = false, retry, edit }: { result: Result; archived?: boolean; retry?: () => void; edit?: () => void }) {
+  const {hide,control} = usePartnerFilter();
   const [visible, setVisible] = useState(readColumns);
   const [selected, setSelected] = useState<number[]>([]);
   const [expanded, setExpanded] = useState<number>();
@@ -156,7 +158,7 @@ export function ScanResults({ result, archived = false, retry, edit }: { result:
   const columns = visible.flatMap((label) => definitions.filter((c) => c.label === label));
   const home = result.params.home_world;
   const sorted = useMemo(() => {
-    const rows = result.rows.map((row, i) => ({ row, i }));
+    const rows = result.rows.map((row, i) => ({ row, i })).filter(({row}) => visiblePartnerRow(row, hide));
     const col = definitions.find(c => c.label === sort.label);
     if (!col) return rows;
     return rows.sort((a, b) => {
@@ -168,7 +170,7 @@ export function ScanResults({ result, archived = false, retry, edit }: { result:
         (typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y)))
       );
     });
-  }, [result.rows, sort]);
+  }, [result.rows, sort, hide]);
   useEffect(() => {
     const close = (e: KeyboardEvent) => { if (e.key === "Escape") setExpanded(undefined); };
     window.addEventListener("keydown", close);
@@ -208,6 +210,7 @@ export function ScanResults({ result, archived = false, retry, edit }: { result:
   }
   return (
     <Section title="Scan results" detail={`${result.rows.length} matches · ${time(result.finished_ts)}`}>
+      {control}
       {result.warnings?.map((w, i) => (
         <Notice key={i} tone="warn">
           {w}
@@ -331,7 +334,7 @@ export function ScanResults({ result, archived = false, retry, edit }: { result:
                           >
                             {expanded === i ? "▾" : "▸"}
                           </button>
-                          <Item item={row.item} buyWorld={row.buy_world} quote={quote(row)} />
+                          <PartnerBadge row={row}/><Item item={row.item} buyWorld={row.buy_world} quote={quote(row)} />
                           {row.ask_below_floor && <small className="warning-text">Below floor at observed ask</small>}
                           {row.large_buy_below_multiple && <small className="warning-text">Large buy below return target</small>}
                         </>

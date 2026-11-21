@@ -138,7 +138,7 @@ def batches(settings: UserSettings, hits: list[SnipeHit]) -> Iterator[list[tuple
     batch: list[tuple[str, dict]] = []
     size = 0
     for hit in hits:
-        if not hit.tier.send_discord:
+        if not hit.tier.send_discord or (hit.partner and settings.suppress_partner_discord):
             continue
         embed = discord_embed(hit, settings.home_world, settings.discord_coin_emoji)
         length = embed_length(embed)

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
+import { PartnerBadge, usePartnerFilter, visiblePartnerRow } from "../Partner";
 import { api, mockMode } from "../api/client";
 import { demoRetainer } from "../api/mock";
 import {
@@ -61,13 +62,15 @@ export default function Retainer({ settings }: { settings: Settings }) {
 }
 
 export function RetainerResults({result,running=false,archived=false}: {archived?:boolean;result?: Schema<"RetainerScanResult">;running?: boolean}) {
+  const {hide,control} = usePartnerFilter();
   return <Section title="Retainer listings" detail={result ? `${result.params.retainer_name} · ${number(result.items_scanned)} items checked in ${number(result.duration_s)} s` : undefined}>
+      {control}
       {result?.warnings?.map((warning, index) => <Notice tone="warn" key={index}>{warning}</Notice>)}
       {result?.rows.length ? <Table label="Retainer listings"><thead><tr>
         {["Item", "Listed price", "Qty", archived ? "Retainer listing last seen at scan time" : "Retainer listing last seen", "Cheapest world / DC", "Cheapest price", "Cheapest qty", "Spread to retainer’s asking price", "Profit / unit"].map((label) => <th key={label} scope="col">{label}</th>)}
       </tr></thead><tbody>
-        {result.rows.map((row, index) => <tr key={index}>
-          <td><Item quote={row.cheapest_world && row.cheapest_ppu && row.cheapest_qty ? {
+        {result.rows.filter(r => visiblePartnerRow(r, hide)).map((row, index) => <tr key={index}>
+          <td><PartnerBadge row={row}/><Item quote={row.cheapest_world && row.cheapest_ppu && row.cheapest_qty ? {
             item:row.item,buy_world:row.cheapest_world,buy_ppu:row.cheapest_ppu,buy_qty_at_price:row.cheapest_qty,
           }:undefined} buyWorld={row.cheapest_world} item={row.item} /></td><td>{gil(row.their_ppu)}</td><td>{number(row.qty)}</td>
           <td><Badge tone={ageTone(row.data_age_h)}>{age(row.data_age_h)}</Badge></td>

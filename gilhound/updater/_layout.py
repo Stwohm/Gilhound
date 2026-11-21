@@ -13,6 +13,8 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from uuid import uuid4
 
+from .motw import unblock
+
 EXE = "gilhound-app.exe"
 _NUMBER = r"(0|[1-9][0-9]*)"
 _IDS = r"[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*"
@@ -56,6 +58,7 @@ def replace_launcher(source: Path, root: Path) -> None:
     temp = root / "Gilhound.exe.partial"
     shutil.copyfile(source, temp)
     try:
+        unblock(temp)
         try:
             temp.replace(target)
         except PermissionError:

@@ -25,6 +25,7 @@ from gilhound.models import (
     BridgeResult,
     BridgeStatus,
     ItemRef,
+    PartnerShare,
     PnLSummary,
     Position,
     QuoteRequest,
@@ -42,11 +43,16 @@ from gilhound.models import (
 )
 from gilhound.runtime import Runtime
 from gilhound.runtime.discord import DeliveryError
+from gilhound.runtime.partner import MAX_CODE, decode, encode
 from gilhound.runtime.profiles import Library, ProfileChange, ProfileList
 from gilhound.runtime.store import ArchiveEntry, ArchiveSummary, Kind
 
 LOCAL_HOST = re.compile(r"(?:localhost|127\.0\.0\.1)(?::([0-9]{1,5}))?", re.ASCII | re.I)
 UI_ICONS = ("/favicon.ico", "/favicon.png", "/apple-touch-icon.png")
+
+
+class ShareCode(BaseModel):
+    code: str = Field(max_length=MAX_CODE)
 
 
 class PositionCost(BaseModel):
@@ -84,6 +90,7 @@ def create_app(
         runtime = runtime or Runtime()
         if schedule:
             runtime.scheduler.start()
+            runtime.partners.refresh()
         try:
             yield
         finally:
@@ -165,6 +172,24 @@ def create_app(
     def apply_update() -> Job:
         return updates.apply(jobs)
 
+    @app.get("/api/partner/status")
+    def partner_status() -> dict:
+        return runtime.partners.status(runtime.settings.get())
+
+    @app.post("/api/partner/share")
+    def partner_share(share: PartnerShare) -> str:
+        try:
+            return encode(share)
+        except ValueError as exc:
+            raise HTTPException(422, "Share exceeds size limit") from exc
+
+    @app.post("/api/partner/preview")
+    def preview_share(request: ShareCode) -> PartnerShare:
+        try:
+            return decode(request.code)
+        except ValueError as exc:
+            raise HTTPException(422, "Invalid partner share code") from exc
+
     @app.get("/api/settings")
     def get_settings() -> UserSettings:
         return runtime.settings.get()
@@ -214,7 +239,7 @@ def create_app(
     @app.get("/api/history/{key}")
     def history_entry(key: int) -> ArchiveEntry:
         try:
-            return runtime.history.entry(key)
+            return runtime.archive_entry(key)
         except KeyError as exc:
             raise HTTPException(404, "Archive entry not found.") from exc
 
@@ -239,6 +264,7 @@ def create_app(
     @app.get("/api/snipes")
     def get_snipes() -> list[SnipeHit]:
         hits = runtime.history.hits(current=True)
+        runtime.partners.mark(hits, runtime.settings.get())
         runtime.items.decorate((r.item for r in hits), runtime.settings.get().home_world)
         return hits
 

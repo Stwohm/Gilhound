@@ -39,3 +39,16 @@ To let **Go** move your character, enable the optional bridge in Restocky
 If the bridge is unavailable, **Go** copies the command to your clipboard.
 You can also choose **Copy route** at any time, then paste and run it in game.
 
+### Python.Runtime.Loader.Initialize or desktop runtime failure
+
+Close Gilhound. For a trusted release, open the downloaded zip's Properties, select
+Unblock if present, then extract it again and run Gilhound.exe. To repair the
+installed 0.2.0 files, run this in PowerShell and reopen Gilhound:
+
+```powershell
+Get-ChildItem -LiteralPath "$env:LOCALAPPDATA\Gilhound\app-0.2.0" -Recurse -File | Unblock-File
+```
+
+If the window still fails to open, install or repair Microsoft Edge WebView2
+Runtime and .NET Framework 4.8. Version 0.2.1 clears download marks during
+installation, update staging and frozen desktop startup.
