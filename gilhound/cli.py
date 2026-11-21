@@ -3,15 +3,14 @@
 import argparse
 import json
 import sys
-import time
 from collections.abc import Sequence
 from contextlib import closing
 from typing import Any
 
 from gilhound.ledger.fifo import rollup_sales
-from gilhound.models import PartnerShare, RetainerScanParams, ScanPreset
+from gilhound.models import PartnerShareDraft, RetainerScanParams, ScanPreset
 from gilhound.runtime import Runtime
-from gilhound.runtime.partner import decode, encode
+from gilhound.runtime.partner import ShareSizeError, current_share, decode, encode, snapshot_summary
 from gilhound.runtime.profiles import BUILTINS
 
 
@@ -51,17 +50,18 @@ def report(runtime: Runtime, args: argparse.Namespace) -> dict:
     if args.command == "partner":
         settings = runtime.settings.get()
         if args.action == "share":
-            share = PartnerShare(version=1, sender=settings.share_sender,
-                                 created_ts=int(time.time()), items=settings.own_avoid,
-                                 retainers=settings.own_retainers if args.include_retainers else [])
-            return {"code": encode(share)}
+            share = PartnerShareDraft(
+                sender=settings.share_sender, items=settings.own_avoid,
+                retainers=settings.own_retainers if args.include_retainers else [],
+            )
+            return {"code": encode(current_share(share, runtime.plugins))}
         if args.action == "import":
             share = decode(args.code)
             previous = settings.partner_manual
             before = {(i.id, i.hq) for i in previous.items} if previous else set()
             after = {(i.id, i.hq) for i in share.items}
             changes = {"adds": sorted(after - before), "removes": sorted(before - after),
-                       "created_ts": share.created_ts}
+                       "created_ts": share.created_ts, **snapshot_summary(share)}
             if args.preview:
                 return changes
             runtime.settings.save(settings.model_copy(update={
@@ -208,6 +208,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = report(runtime, args)
         if args.command != "history" or args.action != "show":
             result = rounded(result)
+    except ShareSizeError as exc:
+        print(json.dumps({"command": args.command, "error": str(exc)}))
+        return 1
     except (Exception, SystemExit) as exc:
         if isinstance(exc, SystemExit) and exc.code in (None, 0):
             return 0

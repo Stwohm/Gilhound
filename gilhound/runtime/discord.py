@@ -9,6 +9,8 @@ from threading import Event
 from urllib.error import HTTPError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+import httpx
+
 from gilhound.market.snipe import discord_embed, embed_length
 from gilhound.models import SnipeHit, UserSettings
 
@@ -26,10 +28,22 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 def post(url: str, payload: dict[str, object]) -> tuple[int, bytes]:
+    payload = dict(payload)
+    attachment = payload.pop("share_file", None)
+    if isinstance(attachment, str):
+        multipart = httpx.Request(
+            "POST", url, data={"payload_json": json.dumps(payload)},
+            files={"files[0]": ("partner.gilhound-share", attachment.encode(), "text/plain")},
+        )
+        body = multipart.read()
+        content_type = multipart.headers["Content-Type"]
+    else:
+        body = json.dumps(payload).encode()
+        content_type = "application/json"
     request = Request(
         url,
-        data=json.dumps(payload).encode(),
-        headers={"Content-Type": "application/json", "User-Agent": "Gilhound"},
+        data=body,
+        headers={"Content-Type": content_type, "User-Agent": "Gilhound"},
     )
     try:
         with build_opener(NoRedirect()).open(request, timeout=10) as response:
@@ -90,6 +104,19 @@ class Discord:
         })
         embed = discord_embed(sample, settings.home_world, settings.discord_coin_emoji)
         self.send(settings, {"embeds": [embed], "allowed_mentions": {"parse": []}})
+
+    def share(self, settings: UserSettings, code: str) -> None:
+        block = f"```\n{code}\n```"
+        title = "Gilhound partner share"
+        content = f"{title}\n{block}"
+        payload: dict[str, object] = {"allowed_mentions": {"parse": []}}
+        if len(content) <= 2000:
+            payload["content"] = content
+        elif len(block) <= 4096:
+            payload["embeds"] = [{"title": title, "description": block}]
+        else:
+            payload.update(content=title, share_file=code)
+        self.send(settings, payload)
 
     def notify_many(self, settings: UserSettings, hits: list[SnipeHit], history: History) -> int:
         delivered = 0

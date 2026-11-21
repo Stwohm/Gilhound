@@ -26,6 +26,7 @@ from gilhound.models import (
     BridgeStatus,
     ItemRef,
     PartnerShare,
+    PartnerShareDraft,
     PnLSummary,
     Position,
     QuoteRequest,
@@ -43,7 +44,7 @@ from gilhound.models import (
 )
 from gilhound.runtime import Runtime
 from gilhound.runtime.discord import DeliveryError
-from gilhound.runtime.partner import MAX_CODE, decode, encode
+from gilhound.runtime.partner import MAX_CODE, ShareSizeError, current_share, decode, encode
 from gilhound.runtime.profiles import Library, ProfileChange, ProfileList
 from gilhound.runtime.store import ArchiveEntry, ArchiveSummary, Kind
 
@@ -177,11 +178,18 @@ def create_app(
         return runtime.partners.status(runtime.settings.get())
 
     @app.post("/api/partner/share")
-    def partner_share(share: PartnerShare) -> str:
+    def partner_share(share: PartnerShareDraft) -> str:
         try:
-            return encode(share)
+            return encode(current_share(share, runtime.plugins))
+        except ShareSizeError as exc:
+            raise HTTPException(422, str(exc)) from exc
         except ValueError as exc:
-            raise HTTPException(422, "Share exceeds size limit") from exc
+            raise HTTPException(422, "Check share items for duplicate IDs and qualities.") from exc
+
+    @app.post("/api/partner/discord")
+    def post_partner_share(share: PartnerShareDraft) -> bool:
+        runtime.discord.share(runtime.settings.get(), partner_share(share))
+        return True
 
     @app.post("/api/partner/preview")
     def preview_share(request: ShareCode) -> PartnerShare:

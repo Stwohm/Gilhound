@@ -1,10 +1,12 @@
 import io
+import json
 import logging
 import secrets
 import threading
 import time
 import zipfile
 from pathlib import Path
+from unittest.mock import MagicMock
 
 from pydantic import SecretStr
 
@@ -14,6 +16,7 @@ from gilhound.models import ScanPreset, ScanResult, SnipeHit, UserSettings
 from gilhound.runtime import Runtime
 from gilhound.runtime.diagnostics import LOG, WEBHOOK, RedactWebhook, archive
 from gilhound.runtime.discord import Discord
+from gilhound.runtime.partner import decode
 from gilhound.runtime.scheduler import Scheduler
 from gilhound.runtime.store import History
 
@@ -56,6 +59,37 @@ def settings() -> UserSettings:
             "https://" + "discord.com/api/" + "webhooks/1/" + secrets.token_urlsafe()
         ),
     )
+
+
+def test_explicit_partner_post(client, monkeypatch) -> None:
+    config = settings()
+    config.discord_notifier = False
+    config.home_world = "Private world"
+    monkeypatch.setattr("gilhound.runtime.store.SettingsStore.get", lambda self: config)
+    opener = MagicMock()
+    opener.open.return_value.__enter__.return_value.status = 204
+    monkeypatch.setattr("gilhound.runtime.discord.build_opener", lambda *args: opener)
+    response = client.post("/api/partner/discord", json={"sender": "Sample", "items": []})
+    assert response.status_code == 200
+    (request,) = opener.open.call_args.args
+    assert request.full_url == config.webhook_url.get_secret_value()
+    body = json.loads(request.data)
+    title, fence, code, close = body["content"].splitlines()
+    assert (title, fence, close) == ("Gilhound partner share", "```", "```")
+    assert body == {"content": body["content"], "allowed_mentions": {"parse": []}}
+    share = decode(code)
+    assert share.model_dump(exclude={"created_ts"}) == {
+        "version": 2, "sender": "Sample", "items": [], "listings": [], "retainers": [],
+    }
+    # Large shares arrive as a single importable attachment.
+    items = [{"id": i + 1, "hq": False, "note": secrets.token_hex(75)} for i in range(100)]
+    response = client.post("/api/partner/discord", json={"sender": "Sample", "items": items})
+    assert response.status_code == 200
+    (request,) = opener.open.call_args.args
+    assert b'filename="partner.gilhound-share"' in request.data
+    (attachment,) = [line for line in request.data.splitlines() if line.startswith(b"GH2.")]
+    assert len(decode(attachment.decode()).items) == len(items)
+    assert config.webhook_url.get_secret_value().encode() not in request.data
 
 
 def test_delivery_retry_tiers_and_persistent_cooldown(tmp_path: Path) -> None:

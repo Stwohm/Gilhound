@@ -175,6 +175,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/partner/discord": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Post Partner Share */
+        post: operations["post_partner_share_api_partner_discord_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/partner/preview": {
         parameters: {
             query?: never;
@@ -818,15 +835,26 @@ export interface components {
             created_ts: number;
             /** Items */
             items: components["schemas"]["AvoidItem"][];
+            /** Listings */
+            listings?: components["schemas"]["SharedListing"][];
             /** Retainers */
             retainers?: components["schemas"]["PartnerRetainer"][];
             /** Sender */
             sender: string;
             /**
              * Version
-             * @constant
+             * @enum {integer}
              */
-            version: 1;
+            version: 1 | 2;
+        };
+        /** PartnerShareDraft */
+        PartnerShareDraft: {
+            /** Items */
+            items: components["schemas"]["AvoidItem"][];
+            /** Retainers */
+            retainers?: components["schemas"]["PartnerRetainer"][];
+            /** Sender */
+            sender: string;
         };
         /** PnLSummary */
         PnLSummary: {
@@ -1078,7 +1106,7 @@ export interface components {
             /** @description Item and quality variant. */
             item: components["schemas"]["ItemRef"];
             /** Partner */
-            partner?: ("now" | "regular" | "manual") | null;
+            partner?: ("shared" | "now" | "regular" | "manual") | null;
             /** Partner Detail */
             partner_detail?: string | null;
             /**
@@ -1487,7 +1515,7 @@ export interface components {
             /** Next Listing Gap */
             next_listing_gap?: number | null;
             /** Partner */
-            partner?: ("now" | "regular" | "manual") | null;
+            partner?: ("shared" | "now" | "regular" | "manual") | null;
             /** Partner Detail */
             partner_detail?: string | null;
             /** Profit Per Day */
@@ -1535,6 +1563,17 @@ export interface components {
         ShareCode: {
             /** Code */
             code: string;
+        };
+        /** SharedListing */
+        SharedListing: {
+            /** Hq */
+            hq: boolean;
+            /** Id */
+            id: number;
+            /** Ppu */
+            ppu?: number | null;
+            /** Qty */
+            qty: number;
         };
         /** SnipeHit */
         SnipeHit: {
@@ -1636,7 +1675,7 @@ export interface components {
              */
             notified_ts?: number | null;
             /** Partner */
-            partner?: ("now" | "regular" | "manual") | null;
+            partner?: ("shared" | "now" | "regular" | "manual") | null;
             /** Partner Detail */
             partner_detail?: string | null;
             /** Profit Per Day */
@@ -1847,6 +1886,11 @@ export interface components {
             /** Partner Retainers */
             partner_retainers?: components["schemas"]["PartnerRetainer"][];
             /**
+             * Partner Snapshot Hours
+             * @default 48
+             */
+            partner_snapshot_hours: number;
+            /**
              * Partner Window Days
              * @default 14
              */
@@ -1953,6 +1997,11 @@ export interface components {
             partner_regular_days: number;
             /** Partner Retainers */
             partner_retainers?: components["schemas"]["PartnerRetainer"][];
+            /**
+             * Partner Snapshot Hours
+             * @default 48
+             */
+            partner_snapshot_hours: number;
             /**
              * Partner Window Days
              * @default 14
@@ -2558,6 +2607,58 @@ export interface operations {
             };
         };
     };
+    post_partner_share_api_partner_discord_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PartnerShareDraft"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": boolean;
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     preview_share_api_partner_preview_post: {
         parameters: {
             query?: never;
@@ -2619,7 +2720,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["PartnerShare"];
+                "application/json": components["schemas"]["PartnerShareDraft"];
             };
         };
         responses: {
