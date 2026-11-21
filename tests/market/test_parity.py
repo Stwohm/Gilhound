@@ -19,6 +19,9 @@ CASES = [
     (ScanPreset.SNIPE, "snipe"),
 ]
 
+# Legacy compatibility keeps the full-stack travel allocation and wait, spread-based
+# rank and first-listing snipe benchmark. Live scans cap the trade and evaluate
+# listing freshness before the hit limit. The historical goldens are unchanged.
 # The legacy quantity column includes four Twintania units alongside the
 # single Phoenix unit. Keep legacy ranking but report the actual world stock.
 KNOWN_DIFFS = {("Scroll Cabinet", "Phoenix"): (5, 1)}

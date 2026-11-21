@@ -1,6 +1,6 @@
 import hashlib
 import json
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from datetime import UTC, datetime
 from threading import Lock
 from typing import Protocol
@@ -30,15 +30,15 @@ def listing_key(row: ScanRow, listing: Listing) -> str:
     return hashlib.sha256(json.dumps(identity).encode()).hexdigest()
 
 
-def evaluate(
+def qualifying_listings(
     rows: Iterable[ScanRow | tuple[ScanRow, Listing]],
     rule: SnipeRule,
     tiers: list[FreshnessTier],
     now: int,
-) -> list[SnipeHit]:
+) -> Iterator[tuple[ScanRow, str, FreshnessTier, float]]:
     """Evaluate scan output, or pair a deserialised ScanRow with its source Listing."""
     ordered = sorted(tiers, key=lambda tier: tier.max_age_h)
-    hits = []
+    seen: set[str] = set()
     for source in rows:
         if isinstance(source, tuple):
             row, listing = source
@@ -61,10 +61,25 @@ def evaluate(
             or proof.top_buyer_share > rule.max_top_buyer_share
         ):
             continue
+        key = listing_key(row, listing)
+        if key in seen:
+            continue
+        seen.add(key)
+        yield row, key, tier, age
+
+
+def evaluate(
+    rows: Iterable[ScanRow | tuple[ScanRow, Listing]],
+    rule: SnipeRule,
+    tiers: list[FreshnessTier],
+    now: int,
+) -> list[SnipeHit]:
+    hits = []
+    for row, key, tier, age in qualifying_listings(rows, rule, tiers, now):
         data = row.model_dump()
         data["data_age_h"] = age
         hits.append(
-            SnipeHit(**data, tier=tier, first_seen_ts=now, listing_key=listing_key(row, listing))
+            SnipeHit(**data, tier=tier, first_seen_ts=now, listing_key=key)
         )
     return hits
 

@@ -1,4 +1,4 @@
-from gilhound.market.presets import _opportunity
+from gilhound.market.presets import _opportunities
 from gilhound.market.universalis import Snapshot, Universalis
 from gilhound.market.volume import DAY
 from gilhound.models import ItemRef, Listing, Sale, ScanParams
@@ -46,9 +46,9 @@ def test_two_weeks_of_evidence() -> None:
     params = ScanParams(
         home_world="Home", buy_region="Region", seller_tax=0, buyer_tax=0, min_history_sales=2
     )
-    found = _opportunity(ItemRef(id=1, name="Item", hq=False), params, Market(), now, {}, False)
+    found = _opportunities(ItemRef(id=1, name="Item", hq=False), params, Market(), now, {}, False)
     assert found
-    row = found[1]
+    row = found[0][1]
     assert row.units_sold_7d == 14 and row.sales_7d == 2 and row.average_sale_size == 7
     assert (row.min_sale_price, row.home_median_7d, row.max_sale_price) == (100, 110, 120)
     assert row.hq_sale_share == 1 / 3
