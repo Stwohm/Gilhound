@@ -174,9 +174,9 @@ export default function Snipes({ resource }: { resource: ReturnType<typeof useRe
     </Section>
     <Section title="Snipe history" detail="Listings observed during this session">
       {history.length ? <Table label="Snipe history">
-        <thead><tr>{["First seen", "Item", "Buy world", "Buy price", "Tier / buy listing last seen at scan time", "Last notified"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
+        <thead><tr>{["Item", "First seen", "Buy world", "Buy price", "Tier / buy listing last seen at scan time", "Last notified"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
         <tbody>{history.filter(h => visiblePartnerRow(h, hide)).sort((a, b) => b.first_seen_ts - a.first_seen_ts).map((hit) => <tr key={hit.listing_key}>
-          <td>{time(hit.first_seen_ts)}</td><td><PartnerBadge row={hit}/><Item quote={quote(hit)} buyWorld={hit.buy_world} item={hit.item} /></td><td>{hit.buy_world}</td><td>{gil(hit.buy_ppu)}</td>
+          <td><PartnerBadge row={hit}/><Item quote={quote(hit)} buyWorld={hit.buy_world} item={hit.item} /></td><td>{time(hit.first_seen_ts)}</td><td>{hit.buy_world}</td><td>{gil(hit.buy_ppu)}</td>
           <td><Badge tone={ageTone(hit.data_age_h)}>{hit.tier.name} · {age(hit.data_age_h)}</Badge></td>
           <td>{hit.notified_ts == null ? "Not notified" : time(hit.notified_ts)}</td>
         </tr>)}</tbody>
