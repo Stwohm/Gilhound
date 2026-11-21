@@ -1,0 +1,250 @@
+"""Shared market, scan, ledger and settings contracts."""
+
+from enum import StrEnum
+from typing import Annotated
+
+from pydantic import BaseModel, Field, SecretStr, field_serializer
+
+EpochSeconds = Annotated[int, Field(strict=True, ge=0)]
+Fraction = Annotated[float, Field(ge=0, le=1)]
+GilCost = Annotated[int, Field(ge=0)]
+
+
+class World(BaseModel):
+    id: int = Field(gt=0, description="World ID.")
+    name: str = Field(description="World name.")
+    dc: str = Field(description="Data centre name.")
+
+
+class DataCenter(BaseModel):
+    name: str = Field(description="Data centre name.")
+    region: str = Field(description="Market region name.")
+    worlds: list[World] = Field(description="Worlds in the data centre.")
+
+
+class ItemRef(BaseModel):
+    id: int = Field(gt=0, description="Item ID.")
+    name: str = Field(description="Item display name.")
+    hq: bool = Field(description="Whether this is the high-quality variant.")
+
+
+class Listing(BaseModel):
+    world: str = Field(description="World where the item is listed.")
+    ppu: int = Field(gt=0, description="Listed gil per unit before tax.")
+    qty: int = Field(gt=0, description="Units in the listing.")
+    hq: bool = Field(description="Whether the listing is for high-quality units.")
+    retainer_hash: str = Field(description="Anonymised listing retainer identifier.")
+    last_review_ts: EpochSeconds = Field(description="Last review in UTC epoch seconds.")
+    retainer_name: str | None = Field(
+        default=None, exclude=True, repr=False, description="Runtime-only retainer name."
+    )
+
+
+class Sale(BaseModel):
+    ppu: int = Field(gt=0, description="Sale price in gil per unit.")
+    qty: int = Field(gt=0, description="Units sold.")
+    hq: bool = Field(description="Whether the sale was for high-quality units.")
+    ts: EpochSeconds = Field(description="Sale time in UTC epoch seconds.")
+    buyer_hash: str = Field(description="Anonymised buyer identifier.")
+
+
+class VolumeProof(BaseModel):
+    units_per_day: float = Field(ge=0, description="Average daily units sold over seven days.")
+    distinct_buyers_7d: int = Field(ge=0, description="Unique buyers in the past seven days.")
+    last_sale_age_h: float | None = Field(
+        description="Hours since the latest sale, or null if no sale is known."
+    )
+    top_buyer_share: Fraction = Field(description="Share of units bought by the largest buyer.")
+    days_with_sales: int = Field(ge=0, le=7, description="Days with sales in the seven-day window.")
+
+
+class ScanPreset(StrEnum):
+    FLIP = "flip"
+    HIGH_MARGIN = "high_margin"
+    VOLUME = "volume"
+    SNIPE = "snipe"
+
+
+class ScanParams(BaseModel):
+    preset: ScanPreset = Field(default=ScanPreset.FLIP, description="Scan strategy.")
+    home_world: str = Field(description="World where items will be resold.")
+    buy_region: str = Field(description="Market region to search for purchases.")
+    min_ppu: GilCost = Field(default=0, description="Minimum purchase price in gil per unit.")
+    min_profit: GilCost = Field(default=0, description="Minimum net profit in gil per unit.")
+    buyer_tax: Fraction = Field(default=0.05, description="Buyer tax as a fraction of the price.")
+    seller_tax: Fraction = Field(description="Seller tax as a fraction of the price.")
+    travel_cost: dict[str, GilCost] = Field(
+        default_factory=dict, description="Travel cost in gil keyed by data centre name."
+    )
+    sellable_days: float = Field(default=3, gt=0, description="Days of sales used to cap quantity.")
+
+
+class ScanRow(BaseModel):
+    item: ItemRef = Field(description="Item and quality variant.")
+    buy_world: str = Field(description="World where the purchase is available.")
+    buy_dc: str = Field(description="Data centre where the purchase is available.")
+    buy_ppu: int = Field(gt=0, description="Purchase price in gil per unit before tax.")
+    buy_qty_at_price: int = Field(gt=0, description="Units available at the purchase price.")
+    home_median_7d: float = Field(gt=0, description="Home-world seven-day median gil per unit.")
+    home_lowest: int | None = Field(description="Lowest current home-world gil per unit, if known.")
+    sellable_qty: int = Field(ge=0, description="Estimated units sellable within the sales window.")
+    profit_per_unit: float = Field(description="Estimated net gil profit per unit after costs.")
+    total_profit_capped: float = Field(description="Estimated net profit for the sellable units.")
+    est_wait_days: float | None = Field(description="Estimated days to sell, if calculable.")
+    volume_proof: VolumeProof = Field(description="Home-world sales evidence.")
+    data_age_h: float = Field(ge=0, description="Age of the purchase listing data in hours.")
+
+
+class ScanResult(BaseModel):
+    params: ScanParams = Field(description="Parameters applied to the scan.")
+    rows: list[ScanRow] = Field(description="Matching purchase opportunities.")
+    started_ts: EpochSeconds = Field(description="Scan start in UTC epoch seconds.")
+    finished_ts: EpochSeconds = Field(description="Scan completion in UTC epoch seconds.")
+    warnings: list[str] = Field(default_factory=list, description="Non-fatal scan warnings.")
+
+
+class SnipeRule(BaseModel):
+    max_home_median_ratio: Fraction = Field(
+        default=0.5, description="Maximum listing price as a fraction of the home-world median."
+    )
+    min_profit: GilCost = Field(default=5_000, description="Minimum net profit in gil per unit.")
+    min_distinct_buyers_7d: int = Field(
+        default=3, ge=0, description="Minimum seven-day buyer count."
+    )
+    max_last_sale_age_h: float = Field(default=24, gt=0, description="Exclusive sale age limit.")
+    max_top_buyer_share: Fraction = Field(description="Maximum share held by the largest buyer.")
+
+
+class FreshnessTier(BaseModel):
+    name: str = Field(description="Display name for the freshness tier.")
+    max_age_h: float = Field(gt=0, description="Exclusive upper limit on listing age in hours.")
+    send_discord: bool = Field(description="Whether this tier can trigger Discord notifications.")
+
+
+class SnipeHit(ScanRow):
+    tier: FreshnessTier = Field(description="Freshness tier of the purchase listing.")
+    listing_key: str = Field(
+        description="Stable listing identifier for notification deduplication."
+    )
+    first_seen_ts: EpochSeconds = Field(description="First detection in UTC epoch seconds.")
+    notified_ts: EpochSeconds | None = Field(
+        default=None, description="Last notification in UTC epoch seconds, if sent."
+    )
+
+
+class RetainerScanParams(BaseModel):
+    retainer_name: str = Field(min_length=1, description="Retainer name to match at runtime.")
+    world: str | None = Field(default=None, description="Search world. Defaults to the home world.")
+    buy_region: str | None = Field(
+        default=None, description="Comparison region. Defaults to the configured buy region."
+    )
+
+
+class RetainerItemRow(BaseModel):
+    item: ItemRef = Field(description="Item and quality variant.")
+    their_ppu: int = Field(gt=0, description="Retainer's listed gil per unit.")
+    qty: int = Field(gt=0, description="Units in the retainer's listing.")
+    data_age_h: float = Field(ge=0, description="Age of the retainer listing data in hours.")
+    cheapest_world: str | None = Field(description="World of the cheapest regional listing.")
+    cheapest_dc: str | None = Field(description="Data centre of the cheapest regional listing.")
+    cheapest_ppu: int | None = Field(description="Cheapest regional listing price in gil per unit.")
+    cheapest_qty: int | None = Field(description="Units in the cheapest regional listing.")
+    gap_pct: float | None = Field(description="Discount from the retainer price in percent.")
+    profit_per_unit: float | None = Field(
+        description="Net gil per unit from buying regionally and selling at the retainer price."
+    )
+
+
+class RetainerScanResult(BaseModel):
+    params: RetainerScanParams = Field(description="Parameters applied to the retainer scan.")
+    rows: list[RetainerItemRow] = Field(description="Retainer listings and their regional prices.")
+    items_scanned: int = Field(ge=0, description="Number of marketable items checked.")
+    duration_s: float = Field(ge=0, description="Elapsed scan time in seconds.")
+    warnings: list[str] = Field(default_factory=list, description="Non-fatal scan warnings.")
+
+
+class SourceName(StrEnum):
+    CASHFLOW = "cashflow"
+    ALLAGAN_MARKET = "allagan_market"
+    ALLAGAN_TOOLS = "allagan_tools"
+    RESTOCKY = "restocky"
+
+
+class SourceStatus(BaseModel):
+    name: SourceName = Field(description="Plugin data source.")
+    found: bool = Field(description="Whether the source files were found.")
+    recognised: bool = Field(description="Whether the source schema was recognised.")
+    last_update_ts: EpochSeconds | None = Field(
+        default=None, description="Last source update in UTC epoch seconds, if known."
+    )
+    warning: str | None = Field(default=None, description="Non-fatal source warning, if any.")
+
+
+class LedgerEventKind(StrEnum):
+    BUY = "buy"
+    SELL = "sell"
+    LIST = "list"
+    UNLIST = "unlist"
+    TRADE_IN = "trade_in"
+    OPENING = "opening"
+
+
+class LedgerEvent(BaseModel):
+    kind: LedgerEventKind = Field(description="Type of ledger event.")
+    item: ItemRef = Field(description="Item and quality variant affected by the event.")
+    qty: int = Field(gt=0, description="Number of units affected.")
+    ppu: GilCost | None = Field(description="Gil per unit, or null if unknown or inapplicable.")
+    ts: EpochSeconds = Field(description="Event time in UTC epoch seconds.")
+    source: SourceName | None = Field(description="Plugin source, or null for manual entries.")
+
+
+class Position(BaseModel):
+    item: ItemRef = Field(description="Item and quality variant held.")
+    qty_open: int = Field(ge=0, description="Units still held, including listed units.")
+    avg_cost: float | None = Field(description="Average open cost in gil, if known.")
+    cost_known: bool = Field(description="Whether all open units have a known cost basis.")
+    listed_qty: int = Field(ge=0, description="Open units currently listed.")
+    realised_profit: int = Field(description="Net realised gil profit for sales with known cost.")
+
+
+class PnLSummary(BaseModel):
+    realised_profit: int = Field(description="Net realised gil profit for sales with known cost.")
+    sales_proceeds: GilCost = Field(description="Gil proceeds from all recorded sales after tax.")
+    known_cost_of_goods_sold: GilCost = Field(
+        description="FIFO cost for sold units with known cost."
+    )
+    unknown_cost_qty_sold: int = Field(ge=0, description="Sold units with unknown cost basis.")
+
+
+class UserSettings(BaseModel):
+    home_world: str = Field(description="Default world for resale and retainer scans.")
+    buy_region: str = Field(description="Default market region for purchases.")
+    scan_interval_min: int = Field(default=5, gt=0, description="Minutes between snipe scans.")
+    discord_notifier: bool = Field(
+        default=False, description="Whether Discord delivery is enabled."
+    )
+    webhook_url: SecretStr | None = Field(
+        default=None, description="Discord webhook URL. Returned as a fixed mask when supplied."
+    )
+    dedup_cooldown_h: float = Field(
+        default=6, ge=0, description="Hours before a listing can resend."
+    )
+    freshness_tiers: list[FreshnessTier] = Field(
+        default_factory=lambda: [
+            FreshnessTier(name="fresh", max_age_h=1, send_discord=True),
+            FreshnessTier(name="stale", max_age_h=6, send_discord=False),
+        ],
+        description="Freshness thresholds in ascending order of age.",
+    )
+    travel_cost: dict[str, GilCost] = Field(
+        default_factory=dict, description="Travel cost in gil keyed by data centre name."
+    )
+
+    @field_serializer("webhook_url")
+    def mask_webhook_url(self, value: SecretStr | None) -> str | None:
+        return "**********" if value else None
+
+
+class AppInfo(BaseModel):
+    version: str = Field(description="Installed Gilhound version.")
+    update_available: bool = Field(description="Whether a newer release is available.")

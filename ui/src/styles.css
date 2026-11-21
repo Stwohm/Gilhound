@@ -1,0 +1,51 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color: #1b2530;
+  background: #f5f7fa;
+}
+
+body {
+  margin: 0;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem 2rem;
+  padding: 1rem clamp(1rem, 5vw, 3rem);
+  background: #142534;
+  color: #fff;
+}
+
+.brand {
+  font-weight: 700;
+}
+
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+nav a {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.25rem;
+  color: #dce7ed;
+  text-decoration: none;
+}
+
+nav a:hover,
+nav a[aria-current="page"] {
+  background: #284354;
+  color: #fff;
+}
+
+nav a:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+main {
+  padding: 1rem clamp(1rem, 5vw, 3rem);
+}

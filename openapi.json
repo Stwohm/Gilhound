@@ -1,0 +1,1740 @@
+{
+  "components": {
+    "schemas": {
+      "ApiError": {
+        "properties": {
+          "detail": {
+            "description": "Explanation of the request failure.",
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "ApiError",
+        "type": "object"
+      },
+      "AppInfo": {
+        "properties": {
+          "update_available": {
+            "description": "Whether a newer release is available.",
+            "title": "Update Available",
+            "type": "boolean"
+          },
+          "version": {
+            "description": "Installed Gilhound version.",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "update_available"
+        ],
+        "title": "AppInfo",
+        "type": "object"
+      },
+      "FreshnessTier": {
+        "properties": {
+          "max_age_h": {
+            "description": "Exclusive upper limit on listing age in hours.",
+            "exclusiveMinimum": 0.0,
+            "title": "Max Age H",
+            "type": "number"
+          },
+          "name": {
+            "description": "Display name for the freshness tier.",
+            "title": "Name",
+            "type": "string"
+          },
+          "send_discord": {
+            "description": "Whether this tier can trigger Discord notifications.",
+            "title": "Send Discord",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "max_age_h",
+          "send_discord"
+        ],
+        "title": "FreshnessTier",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "ItemRef": {
+        "properties": {
+          "hq": {
+            "description": "Whether this is the high-quality variant.",
+            "title": "Hq",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Item ID.",
+            "exclusiveMinimum": 0.0,
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "description": "Item display name.",
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "hq"
+        ],
+        "title": "ItemRef",
+        "type": "object"
+      },
+      "PnLSummary": {
+        "properties": {
+          "known_cost_of_goods_sold": {
+            "description": "FIFO cost for sold units with known cost.",
+            "minimum": 0.0,
+            "title": "Known Cost Of Goods Sold",
+            "type": "integer"
+          },
+          "realised_profit": {
+            "description": "Net realised gil profit for sales with known cost.",
+            "title": "Realised Profit",
+            "type": "integer"
+          },
+          "sales_proceeds": {
+            "description": "Gil proceeds from all recorded sales after tax.",
+            "minimum": 0.0,
+            "title": "Sales Proceeds",
+            "type": "integer"
+          },
+          "unknown_cost_qty_sold": {
+            "description": "Sold units with unknown cost basis.",
+            "minimum": 0.0,
+            "title": "Unknown Cost Qty Sold",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "realised_profit",
+          "sales_proceeds",
+          "known_cost_of_goods_sold",
+          "unknown_cost_qty_sold"
+        ],
+        "title": "PnLSummary",
+        "type": "object"
+      },
+      "Position": {
+        "properties": {
+          "avg_cost": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Average open cost in gil, if known.",
+            "title": "Avg Cost"
+          },
+          "cost_known": {
+            "description": "Whether all open units have a known cost basis.",
+            "title": "Cost Known",
+            "type": "boolean"
+          },
+          "item": {
+            "$ref": "#/components/schemas/ItemRef",
+            "description": "Item and quality variant held."
+          },
+          "listed_qty": {
+            "description": "Open units currently listed.",
+            "minimum": 0.0,
+            "title": "Listed Qty",
+            "type": "integer"
+          },
+          "qty_open": {
+            "description": "Units still held, including listed units.",
+            "minimum": 0.0,
+            "title": "Qty Open",
+            "type": "integer"
+          },
+          "realised_profit": {
+            "description": "Net realised gil profit for sales with known cost.",
+            "title": "Realised Profit",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "item",
+          "qty_open",
+          "avg_cost",
+          "cost_known",
+          "listed_qty",
+          "realised_profit"
+        ],
+        "title": "Position",
+        "type": "object"
+      },
+      "RetainerItemRow": {
+        "properties": {
+          "cheapest_dc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Data centre of the cheapest regional listing.",
+            "title": "Cheapest Dc"
+          },
+          "cheapest_ppu": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Cheapest regional listing price in gil per unit.",
+            "title": "Cheapest Ppu"
+          },
+          "cheapest_qty": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Units in the cheapest regional listing.",
+            "title": "Cheapest Qty"
+          },
+          "cheapest_world": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "World of the cheapest regional listing.",
+            "title": "Cheapest World"
+          },
+          "data_age_h": {
+            "description": "Age of the retainer listing data in hours.",
+            "minimum": 0.0,
+            "title": "Data Age H",
+            "type": "number"
+          },
+          "gap_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Discount from the retainer price in percent.",
+            "title": "Gap Pct"
+          },
+          "item": {
+            "$ref": "#/components/schemas/ItemRef",
+            "description": "Item and quality variant."
+          },
+          "profit_per_unit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Net gil per unit from buying regionally and selling at the retainer price.",
+            "title": "Profit Per Unit"
+          },
+          "qty": {
+            "description": "Units in the retainer's listing.",
+            "exclusiveMinimum": 0.0,
+            "title": "Qty",
+            "type": "integer"
+          },
+          "their_ppu": {
+            "description": "Retainer's listed gil per unit.",
+            "exclusiveMinimum": 0.0,
+            "title": "Their Ppu",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "item",
+          "their_ppu",
+          "qty",
+          "data_age_h",
+          "cheapest_world",
+          "cheapest_dc",
+          "cheapest_ppu",
+          "cheapest_qty",
+          "gap_pct",
+          "profit_per_unit"
+        ],
+        "title": "RetainerItemRow",
+        "type": "object"
+      },
+      "RetainerScanParams": {
+        "properties": {
+          "buy_region": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Comparison region. Defaults to the configured buy region.",
+            "title": "Buy Region"
+          },
+          "retainer_name": {
+            "description": "Retainer name to match at runtime.",
+            "minLength": 1,
+            "title": "Retainer Name",
+            "type": "string"
+          },
+          "world": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Search world. Defaults to the home world.",
+            "title": "World"
+          }
+        },
+        "required": [
+          "retainer_name"
+        ],
+        "title": "RetainerScanParams",
+        "type": "object"
+      },
+      "RetainerScanResult": {
+        "properties": {
+          "duration_s": {
+            "description": "Elapsed scan time in seconds.",
+            "minimum": 0.0,
+            "title": "Duration S",
+            "type": "number"
+          },
+          "items_scanned": {
+            "description": "Number of marketable items checked.",
+            "minimum": 0.0,
+            "title": "Items Scanned",
+            "type": "integer"
+          },
+          "params": {
+            "$ref": "#/components/schemas/RetainerScanParams",
+            "description": "Parameters applied to the retainer scan."
+          },
+          "rows": {
+            "description": "Retainer listings and their regional prices.",
+            "items": {
+              "$ref": "#/components/schemas/RetainerItemRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "warnings": {
+            "description": "Non-fatal scan warnings.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "params",
+          "rows",
+          "items_scanned",
+          "duration_s"
+        ],
+        "title": "RetainerScanResult",
+        "type": "object"
+      },
+      "ScanParams": {
+        "properties": {
+          "buy_region": {
+            "description": "Market region to search for purchases.",
+            "title": "Buy Region",
+            "type": "string"
+          },
+          "buyer_tax": {
+            "default": 0.05,
+            "description": "Buyer tax as a fraction of the price.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Buyer Tax",
+            "type": "number"
+          },
+          "home_world": {
+            "description": "World where items will be resold.",
+            "title": "Home World",
+            "type": "string"
+          },
+          "min_ppu": {
+            "default": 0,
+            "description": "Minimum purchase price in gil per unit.",
+            "minimum": 0.0,
+            "title": "Min Ppu",
+            "type": "integer"
+          },
+          "min_profit": {
+            "default": 0,
+            "description": "Minimum net profit in gil per unit.",
+            "minimum": 0.0,
+            "title": "Min Profit",
+            "type": "integer"
+          },
+          "preset": {
+            "$ref": "#/components/schemas/ScanPreset",
+            "default": "flip",
+            "description": "Scan strategy."
+          },
+          "sellable_days": {
+            "default": 3,
+            "description": "Days of sales used to cap quantity.",
+            "exclusiveMinimum": 0.0,
+            "title": "Sellable Days",
+            "type": "number"
+          },
+          "seller_tax": {
+            "description": "Seller tax as a fraction of the price.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Seller Tax",
+            "type": "number"
+          },
+          "travel_cost": {
+            "additionalProperties": {
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "description": "Travel cost in gil keyed by data centre name.",
+            "title": "Travel Cost",
+            "type": "object"
+          }
+        },
+        "required": [
+          "home_world",
+          "buy_region",
+          "seller_tax"
+        ],
+        "title": "ScanParams",
+        "type": "object"
+      },
+      "ScanPreset": {
+        "enum": [
+          "flip",
+          "high_margin",
+          "volume",
+          "snipe"
+        ],
+        "title": "ScanPreset",
+        "type": "string"
+      },
+      "ScanResult": {
+        "properties": {
+          "finished_ts": {
+            "description": "Scan completion in UTC epoch seconds.",
+            "minimum": 0.0,
+            "title": "Finished Ts",
+            "type": "integer"
+          },
+          "params": {
+            "$ref": "#/components/schemas/ScanParams",
+            "description": "Parameters applied to the scan."
+          },
+          "rows": {
+            "description": "Matching purchase opportunities.",
+            "items": {
+              "$ref": "#/components/schemas/ScanRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "started_ts": {
+            "description": "Scan start in UTC epoch seconds.",
+            "minimum": 0.0,
+            "title": "Started Ts",
+            "type": "integer"
+          },
+          "warnings": {
+            "description": "Non-fatal scan warnings.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "params",
+          "rows",
+          "started_ts",
+          "finished_ts"
+        ],
+        "title": "ScanResult",
+        "type": "object"
+      },
+      "ScanRow": {
+        "properties": {
+          "buy_dc": {
+            "description": "Data centre where the purchase is available.",
+            "title": "Buy Dc",
+            "type": "string"
+          },
+          "buy_ppu": {
+            "description": "Purchase price in gil per unit before tax.",
+            "exclusiveMinimum": 0.0,
+            "title": "Buy Ppu",
+            "type": "integer"
+          },
+          "buy_qty_at_price": {
+            "description": "Units available at the purchase price.",
+            "exclusiveMinimum": 0.0,
+            "title": "Buy Qty At Price",
+            "type": "integer"
+          },
+          "buy_world": {
+            "description": "World where the purchase is available.",
+            "title": "Buy World",
+            "type": "string"
+          },
+          "data_age_h": {
+            "description": "Age of the purchase listing data in hours.",
+            "minimum": 0.0,
+            "title": "Data Age H",
+            "type": "number"
+          },
+          "est_wait_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Estimated days to sell, if calculable.",
+            "title": "Est Wait Days"
+          },
+          "home_lowest": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Lowest current home-world gil per unit, if known.",
+            "title": "Home Lowest"
+          },
+          "home_median_7d": {
+            "description": "Home-world seven-day median gil per unit.",
+            "exclusiveMinimum": 0.0,
+            "title": "Home Median 7D",
+            "type": "number"
+          },
+          "item": {
+            "$ref": "#/components/schemas/ItemRef",
+            "description": "Item and quality variant."
+          },
+          "profit_per_unit": {
+            "description": "Estimated net gil profit per unit after costs.",
+            "title": "Profit Per Unit",
+            "type": "number"
+          },
+          "sellable_qty": {
+            "description": "Estimated units sellable within the sales window.",
+            "minimum": 0.0,
+            "title": "Sellable Qty",
+            "type": "integer"
+          },
+          "total_profit_capped": {
+            "description": "Estimated net profit for the sellable units.",
+            "title": "Total Profit Capped",
+            "type": "number"
+          },
+          "volume_proof": {
+            "$ref": "#/components/schemas/VolumeProof",
+            "description": "Home-world sales evidence."
+          }
+        },
+        "required": [
+          "item",
+          "buy_world",
+          "buy_dc",
+          "buy_ppu",
+          "buy_qty_at_price",
+          "home_median_7d",
+          "home_lowest",
+          "sellable_qty",
+          "profit_per_unit",
+          "total_profit_capped",
+          "est_wait_days",
+          "volume_proof",
+          "data_age_h"
+        ],
+        "title": "ScanRow",
+        "type": "object"
+      },
+      "SnipeHit": {
+        "properties": {
+          "buy_dc": {
+            "description": "Data centre where the purchase is available.",
+            "title": "Buy Dc",
+            "type": "string"
+          },
+          "buy_ppu": {
+            "description": "Purchase price in gil per unit before tax.",
+            "exclusiveMinimum": 0.0,
+            "title": "Buy Ppu",
+            "type": "integer"
+          },
+          "buy_qty_at_price": {
+            "description": "Units available at the purchase price.",
+            "exclusiveMinimum": 0.0,
+            "title": "Buy Qty At Price",
+            "type": "integer"
+          },
+          "buy_world": {
+            "description": "World where the purchase is available.",
+            "title": "Buy World",
+            "type": "string"
+          },
+          "data_age_h": {
+            "description": "Age of the purchase listing data in hours.",
+            "minimum": 0.0,
+            "title": "Data Age H",
+            "type": "number"
+          },
+          "est_wait_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Estimated days to sell, if calculable.",
+            "title": "Est Wait Days"
+          },
+          "first_seen_ts": {
+            "description": "First detection in UTC epoch seconds.",
+            "minimum": 0.0,
+            "title": "First Seen Ts",
+            "type": "integer"
+          },
+          "home_lowest": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Lowest current home-world gil per unit, if known.",
+            "title": "Home Lowest"
+          },
+          "home_median_7d": {
+            "description": "Home-world seven-day median gil per unit.",
+            "exclusiveMinimum": 0.0,
+            "title": "Home Median 7D",
+            "type": "number"
+          },
+          "item": {
+            "$ref": "#/components/schemas/ItemRef",
+            "description": "Item and quality variant."
+          },
+          "listing_key": {
+            "description": "Stable listing identifier for notification deduplication.",
+            "title": "Listing Key",
+            "type": "string"
+          },
+          "notified_ts": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Last notification in UTC epoch seconds, if sent.",
+            "title": "Notified Ts"
+          },
+          "profit_per_unit": {
+            "description": "Estimated net gil profit per unit after costs.",
+            "title": "Profit Per Unit",
+            "type": "number"
+          },
+          "sellable_qty": {
+            "description": "Estimated units sellable within the sales window.",
+            "minimum": 0.0,
+            "title": "Sellable Qty",
+            "type": "integer"
+          },
+          "tier": {
+            "$ref": "#/components/schemas/FreshnessTier",
+            "description": "Freshness tier of the purchase listing."
+          },
+          "total_profit_capped": {
+            "description": "Estimated net profit for the sellable units.",
+            "title": "Total Profit Capped",
+            "type": "number"
+          },
+          "volume_proof": {
+            "$ref": "#/components/schemas/VolumeProof",
+            "description": "Home-world sales evidence."
+          }
+        },
+        "required": [
+          "item",
+          "buy_world",
+          "buy_dc",
+          "buy_ppu",
+          "buy_qty_at_price",
+          "home_median_7d",
+          "home_lowest",
+          "sellable_qty",
+          "profit_per_unit",
+          "total_profit_capped",
+          "est_wait_days",
+          "volume_proof",
+          "data_age_h",
+          "tier",
+          "listing_key",
+          "first_seen_ts"
+        ],
+        "title": "SnipeHit",
+        "type": "object"
+      },
+      "SourceName": {
+        "enum": [
+          "cashflow",
+          "allagan_market",
+          "allagan_tools",
+          "restocky"
+        ],
+        "title": "SourceName",
+        "type": "string"
+      },
+      "SourceStatus": {
+        "properties": {
+          "found": {
+            "description": "Whether the source files were found.",
+            "title": "Found",
+            "type": "boolean"
+          },
+          "last_update_ts": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Last source update in UTC epoch seconds, if known.",
+            "title": "Last Update Ts"
+          },
+          "name": {
+            "$ref": "#/components/schemas/SourceName",
+            "description": "Plugin data source."
+          },
+          "recognised": {
+            "description": "Whether the source schema was recognised.",
+            "title": "Recognised",
+            "type": "boolean"
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Non-fatal source warning, if any.",
+            "title": "Warning"
+          }
+        },
+        "required": [
+          "name",
+          "found",
+          "recognised"
+        ],
+        "title": "SourceStatus",
+        "type": "object"
+      },
+      "UserSettings-Input": {
+        "properties": {
+          "buy_region": {
+            "description": "Default market region for purchases.",
+            "title": "Buy Region",
+            "type": "string"
+          },
+          "dedup_cooldown_h": {
+            "default": 6,
+            "description": "Hours before a listing can resend.",
+            "minimum": 0.0,
+            "title": "Dedup Cooldown H",
+            "type": "number"
+          },
+          "discord_notifier": {
+            "default": false,
+            "description": "Whether Discord delivery is enabled.",
+            "title": "Discord Notifier",
+            "type": "boolean"
+          },
+          "freshness_tiers": {
+            "description": "Freshness thresholds in ascending order of age.",
+            "items": {
+              "$ref": "#/components/schemas/FreshnessTier"
+            },
+            "title": "Freshness Tiers",
+            "type": "array"
+          },
+          "home_world": {
+            "description": "Default world for resale and retainer scans.",
+            "title": "Home World",
+            "type": "string"
+          },
+          "scan_interval_min": {
+            "default": 5,
+            "description": "Minutes between snipe scans.",
+            "exclusiveMinimum": 0.0,
+            "title": "Scan Interval Min",
+            "type": "integer"
+          },
+          "travel_cost": {
+            "additionalProperties": {
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "description": "Travel cost in gil keyed by data centre name.",
+            "title": "Travel Cost",
+            "type": "object"
+          },
+          "webhook_url": {
+            "anyOf": [
+              {
+                "format": "password",
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Discord webhook URL. Returned as a fixed mask when supplied.",
+            "title": "Webhook Url"
+          }
+        },
+        "required": [
+          "home_world",
+          "buy_region"
+        ],
+        "title": "UserSettings",
+        "type": "object"
+      },
+      "UserSettings-Output": {
+        "properties": {
+          "buy_region": {
+            "description": "Default market region for purchases.",
+            "title": "Buy Region",
+            "type": "string"
+          },
+          "dedup_cooldown_h": {
+            "default": 6,
+            "description": "Hours before a listing can resend.",
+            "minimum": 0.0,
+            "title": "Dedup Cooldown H",
+            "type": "number"
+          },
+          "discord_notifier": {
+            "default": false,
+            "description": "Whether Discord delivery is enabled.",
+            "title": "Discord Notifier",
+            "type": "boolean"
+          },
+          "freshness_tiers": {
+            "description": "Freshness thresholds in ascending order of age.",
+            "items": {
+              "$ref": "#/components/schemas/FreshnessTier"
+            },
+            "title": "Freshness Tiers",
+            "type": "array"
+          },
+          "home_world": {
+            "description": "Default world for resale and retainer scans.",
+            "title": "Home World",
+            "type": "string"
+          },
+          "scan_interval_min": {
+            "default": 5,
+            "description": "Minutes between snipe scans.",
+            "exclusiveMinimum": 0.0,
+            "title": "Scan Interval Min",
+            "type": "integer"
+          },
+          "travel_cost": {
+            "additionalProperties": {
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "description": "Travel cost in gil keyed by data centre name.",
+            "title": "Travel Cost",
+            "type": "object"
+          },
+          "webhook_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Discord webhook URL. Returned as a fixed mask when supplied.",
+            "title": "Webhook Url"
+          }
+        },
+        "required": [
+          "home_world",
+          "buy_region"
+        ],
+        "title": "UserSettings",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "VolumeProof": {
+        "properties": {
+          "days_with_sales": {
+            "description": "Days with sales in the seven-day window.",
+            "maximum": 7.0,
+            "minimum": 0.0,
+            "title": "Days With Sales",
+            "type": "integer"
+          },
+          "distinct_buyers_7d": {
+            "description": "Unique buyers in the past seven days.",
+            "minimum": 0.0,
+            "title": "Distinct Buyers 7D",
+            "type": "integer"
+          },
+          "last_sale_age_h": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Hours since the latest sale, or null if no sale is known.",
+            "title": "Last Sale Age H"
+          },
+          "top_buyer_share": {
+            "description": "Share of units bought by the largest buyer.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Top Buyer Share",
+            "type": "number"
+          },
+          "units_per_day": {
+            "description": "Average daily units sold over seven days.",
+            "minimum": 0.0,
+            "title": "Units Per Day",
+            "type": "number"
+          }
+        },
+        "required": [
+          "units_per_day",
+          "distinct_buyers_7d",
+          "last_sale_age_h",
+          "top_buyer_share",
+          "days_with_sales"
+        ],
+        "title": "VolumeProof",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "SessionToken": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "title": "Gilhound API",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/api/diagnostics/export": {
+      "post": {
+        "operationId": "export_diagnostics_api_diagnostics_export_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Redacted diagnostics ZIP archive"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not implemented"
+          }
+        },
+        "summary": "Export Diagnostics"
+      }
+    },
+    "/api/info": {
+      "get": {
+        "operationId": "get_info_api_info_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not implemented"
+          }
+        },
+        "summary": "Get Info"
+      }
+    },
+    "/api/pnl": {
+      "get": {
+        "operationId": "get_pnl_api_pnl_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PnLSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not implemented"
+          }
+        },
+        "summary": "Get Pnl"
+      }
+    },
+    "/api/positions": {
+      "get": {
+        "operationId": "get_positions_api_positions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Position"
+                  },
+                  "title": "Response Get Positions Api Positions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not implemented"
+          }
+        },
+        "summary": "Get Positions"
+      }
+    },
+    "/api/retainer-scan": {
+      "post": {
+        "operationId": "run_retainer_scan_api_retainer_scan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetainerScanParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RetainerScanResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not implemented"
+          }
+        },
+        "summary": "Run Retainer Scan"
+      }
+    },
+    "/api/scan": {
+      "post": {
+        "operationId": "run_scan_api_scan_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScanParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScanResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not implemented"
+          }
+        },
+        "summary": "Run Scan"
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "operationId": "get_settings_api_settings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSettings-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not implemented"
+          }
+        },
+        "summary": "Get Settings"
+      },
+      "put": {
+        "operationId": "put_settings_api_settings_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserSettings-Input"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSettings-Output"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not implemented"
+          }
+        },
+        "summary": "Put Settings"
+      }
+    },
+    "/api/snipes": {
+      "get": {
+        "operationId": "get_snipes_api_snipes_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SnipeHit"
+                  },
+                  "title": "Response Get Snipes Api Snipes Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not implemented"
+          }
+        },
+        "summary": "Get Snipes"
+      }
+    },
+    "/api/snipes/run": {
+      "post": {
+        "operationId": "run_snipes_api_snipes_run_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SnipeHit"
+                  },
+                  "title": "Response Run Snipes Api Snipes Run Post",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not implemented"
+          }
+        },
+        "summary": "Run Snipes"
+      }
+    },
+    "/api/sources": {
+      "get": {
+        "operationId": "get_sources_api_sources_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SourceStatus"
+                  },
+                  "title": "Response Get Sources Api Sources Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "501": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Not implemented"
+          }
+        },
+        "summary": "Get Sources"
+      }
+    }
+  },
+  "security": [
+    {
+      "SessionToken": []
+    }
+  ]
+}
