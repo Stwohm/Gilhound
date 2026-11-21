@@ -21,3 +21,4 @@ local-data/
 *.sqlite-wal
 *.sqlite-shm
 .env
+.claude/
