@@ -52,12 +52,25 @@ def test_unknown_manual_and_personal(tmp_path: Path) -> None:
     assert personal.positions == []
 
 
+def test_conflicting_sale_proceeds_consume_both_lots() -> None:
+    item = item_ref(1000, True)
+    ledger = calculate([
+        event(S.CASHFLOW, K.BUY, item, 4, 1, 48),
+        event(S.CASHFLOW, K.SELL, item, 2, 10, 100),
+        event(S.RESTOCKY, K.SELL, item, 2, 11, 1000),
+    ])
+    assert ledger.summary.sales_proceeds == 1100
+    assert ledger.summary.known_cost_of_goods_sold == 48
+    assert ledger.positions[0].qty_open == 0
+
+
 def test_one_to_one_cross_source_sale() -> None:
     item = item_ref(1000, True)
     rows = [
         event(s, K.SELL, item, 2, ts, total)
         for s, ts, total in [
             (S.ALLAGAN_MARKET, 400, 205),
+            (S.ALLAGAN_MARKET, 400, 203),
             (S.CASHFLOW, 100, 202),
             (S.CASHFLOW, 100, 201),
             (S.RESTOCKY, 100, 202),
@@ -65,8 +78,17 @@ def test_one_to_one_cross_source_sale() -> None:
         ]
     ]
     result = calculate(rows)
-    assert len(result.events) == 3
-    assert result.summary.sales_proceeds == 603
+    assert len(result.events) == 4
+    assert result.summary.sales_proceeds == 808
+
+
+def test_exact_net_stacks_with_same_unit_price_are_distinct() -> None:
+    item = item_ref(1000, True)
+    ledger = calculate([
+        event(S.CASHFLOW, K.SELL, item, 3, 10, 100),
+        event(S.RESTOCKY, K.SELL, item, 3, 11, 101),
+    ])
+    assert ledger.summary.sales_proceeds == 201
 
 
 def test_snapshot_overlap_and_remaining_cost() -> None:

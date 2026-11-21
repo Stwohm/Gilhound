@@ -208,7 +208,20 @@ class History:
         limit: int | None = None,
         offset: int = 0,
     ) -> list[ArchiveSummary]:
-        query = "SELECT id,kind,profile,started_ts,duration_s,row_count FROM archive WHERE 1"
+        rows, _ = self.entry_page(kind, profile, since, until, search, limit, offset)
+        return rows
+
+    def entry_page(
+        self,
+        kind: Kind | None = None,
+        profile: str | None = None,
+        since: int | None = None,
+        until: int | None = None,
+        search: str = "",
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> tuple[list[ArchiveSummary], int]:
+        query = " FROM archive WHERE 1"
         args = []
         for clause, value in (
             ("kind=?", kind),
@@ -223,14 +236,19 @@ class History:
             query += """ AND EXISTS (SELECT 1 FROM json_each(body,'$.rows')
                      WHERE instr(lower(json_extract(value,'$.item.name')),lower(?))>0)"""
             args.append(search)
-        query += " ORDER BY started_ts DESC,id DESC LIMIT ? OFFSET ?"
+        page = ("SELECT id,kind,profile,started_ts,duration_s,row_count" + query
+                + " ORDER BY started_ts DESC,id DESC LIMIT ? OFFSET ?")
         with self.connection() as db:
             self._prune(db)
             db.row_factory = sqlite3.Row
-            return [
+            rows = [
                 ArchiveSummary(**row)
-                for row in db.execute(query, [*args, limit if limit is not None else -1, offset])
+                for row in db.execute(page, [*args, limit if limit is not None else -1, offset])
             ]
+            if limit is None and offset == 0:
+                return rows, len(rows)
+            total = db.execute("SELECT count(*)" + query, args).fetchone()[0]
+            return rows, total
 
     def entry(self, key: int) -> ArchiveEntry:
         with self.connection() as db:

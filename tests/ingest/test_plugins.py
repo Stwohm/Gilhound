@@ -28,6 +28,19 @@ def test_fixture_readers() -> None:
     assert isinstance(rest.records.price_history[0]["utc_time"], int)
 
 
+def test_restocky_broken_mirror_preserves_json(tmp_path: Path) -> None:
+    path = ROOT / "Restocky" / "listings.json"
+    (tmp_path / path.name).write_bytes(path.read_bytes())
+    original = restocky.read(tmp_path)
+    (tmp_path / "listings.csv").write_text("invalid header\n")
+    source = restocky.read(tmp_path)
+    assert source.status.recognised
+    assert "listings.csv" in source.status.warning
+    assert source.records.events == original.records.events
+    assert source.records.listings == original.records.listings
+    assert source.records.listings_mtime == original.records.listings_mtime
+
+
 def test_restocky_csv_mirror(tmp_path: Path) -> None:
     path = ROOT / "Restocky" / "listings.csv"
     (tmp_path / path.name).write_bytes(path.read_bytes())
