@@ -34,10 +34,16 @@ def test_local_integration(tmp_path: Path, token: str, monkeypatch: pytest.Monke
     monkeypatch.setattr(runtime, "run_snipes", list)
     monkeypatch.setattr(runtime.discord, "test", sent.append)
     (tmp_path / "index.html").write_text("<html><head></head></html>")
+    icons = ("favicon.ico", "favicon.png", "apple-touch-icon.png")
+    for name in icons:
+        (tmp_path / name).write_bytes(name.encode())
     app = create_app(token, runtime, dist=tmp_path, schedule=False)
     with TestClient(app, base_url="http://localhost") as client:
         assert client.get("/", headers={"Host": "foreign.invalid"}).status_code == 400
         assert token in client.get("/").text
+        for name in icons:
+            assert client.get(f"/{name}").content == name.encode()
+            assert client.get(f"/{name}", headers={"Host": "foreign.invalid"}).status_code == 400
         assert client.get("/api/settings").status_code == 401
         client.headers.update({"Authorization": f"Bearer {token}"})
         assert client.get("/api/info").json()["version"] == __version__

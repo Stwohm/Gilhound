@@ -1,5 +1,6 @@
 $ErrorActionPreference = 'Stop'
-# The extracted launcher owns installation and shortcut creation for both entry points.
+# Both install entry points create Start menu and desktop shortcuts through the
+# launcher, using the installed Gilhound.exe as their icon source.
 $launcher = Join-Path $PSScriptRoot 'Gilhound.exe'
 $process = Start-Process -FilePath $launcher -WorkingDirectory $PSScriptRoot -PassThru
 $process.WaitForExit()

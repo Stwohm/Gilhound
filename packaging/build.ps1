@@ -22,6 +22,7 @@ try {
     } finally { Pop-Location }
 
     $work = Join-Path $repo ('build/' + [guid]::NewGuid())
+    $icon = Join-Path $repo 'assets/gilhound.ico'
     $stage = Join-Path $work 'bundle'
     New-Item -ItemType Directory -Path $stage -Force | Out-Null
     $env:GILHOUND_BUILD_STUB = if ($Stub) { '1' } else { '0' }
@@ -30,7 +31,8 @@ try {
     Move-Item -LiteralPath "$work/gilhound-app" -Destination "$stage/app-$version"
     New-Item -ItemType File -Path "$stage/app-$version/READY" | Out-Null
     Run $python @('-m','PyInstaller','--onefile','--noconsole','--name','Gilhound',
-        '--paths',$repo,'--specpath',$work,'--workpath',"$work/cache",'--distpath',$stage,
+        '--icon',$icon,'--paths',$repo,'--specpath',$work,
+        '--workpath',"$work/cache",'--distpath',$stage,
         'launcher/launcher.py')
     Copy-Item -LiteralPath "$PSScriptRoot/install.ps1" -Destination $stage
     $output = if ($Stub) { 'dist/stub' } else { 'dist' }

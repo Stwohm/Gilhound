@@ -91,6 +91,7 @@ $shell = New-Object -ComObject WScript.Shell
 foreach ($name in 'Programs','Desktop') {
     $link = $shell.CreateShortcut((Join-Path $shell.SpecialFolders.Item($name) 'Gilhound.lnk'))
     $link.TargetPath = Join-Path $env:GILHOUND_SHORTCUT_ROOT 'Gilhound.exe'
+    $link.IconLocation = "$($link.TargetPath),0"
     $link.WorkingDirectory = $env:GILHOUND_SHORTCUT_ROOT
     $link.Save()
 }

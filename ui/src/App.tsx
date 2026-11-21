@@ -1,4 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
+import brandIcon from "../../assets/icon-256.png";
 import { api, mockMode } from "./api/client";
 import { Badge, Notice, defaults, errorMessage, useResource } from "./common";
 import Scan from "./screens/Scan";
@@ -93,7 +94,10 @@ export default function App() {
       document.getElementById("main")?.focus();
     }}>Skip to content</a>
     <aside className="sidebar">
-      <a className="brand" href="#scan"><span className="brand-mark" aria-hidden="true"><i /></span><span>Gilhound</span></a>
+      <a className="brand" href="#scan">
+        <img className="brand-mark" src={brandIcon} alt="" width={33} height={33} />
+        <span>Gilhound</span>
+      </a>
       <nav aria-label="Main navigation">
         {pages.map((link) => <a key={link.id} href={`#${link.id}`} aria-current={link === page ? "page" : undefined}>
           <span className={`nav-icon ${link.icon}`} aria-hidden="true" />{link.title}

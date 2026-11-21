@@ -71,7 +71,11 @@ def main(argv: Sequence[str] | None = None) -> int:
                     raise RuntimeError("Could not start the local API.")
                 time.sleep(0.025)
             webview.create_window("Gilhound", f"http://127.0.0.1:{port}/", width=1200, height=800)
-            webview.start(gui="edgechromium" if sys.platform == "win32" else None)
+            icon = Path(__file__).resolve().parents[1] / "assets" / "gilhound.ico"
+            webview.start(
+                gui="edgechromium" if sys.platform == "win32" else None,
+                icon=str(icon) if icon.is_file() else None,
+            )
         finally:
             server.should_exit = True
             worker.join()

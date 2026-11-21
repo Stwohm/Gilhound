@@ -70,15 +70,7 @@ button, a, summary, input[type="checkbox"] { -webkit-tap-highlight-color: transp
   width: fit-content; color: #f1f8fb; text-decoration: none;
   font-size: 1.36rem; font-weight: 750; letter-spacing: -.045em;
 }
-.brand-mark {
-  width: 33px; height: 33px; display: grid; place-items: center;
-  background: #243d46; border: 1px solid #4d716e; border-radius: 10px;
-}
-.brand-mark i {
-  width: 15px; height: 15px; border: 1px solid var(--rail-key);
-  transform: rotate(45deg); display: grid; place-items: center;
-}
-.brand-mark i::after { content: ""; width: 5px; height: 5px; background: var(--rail-key); }
+.brand-mark { flex: none; }
 
 nav { display: grid; gap: 5px; margin-top: 36px; }
 nav a {

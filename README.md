@@ -1,5 +1,7 @@
 # Gilhound
 
+<img src="assets/icon-256.png" width="96" height="96" alt="Gilhound app icon">
+
 FFXIV market-board flipping assistant for Windows: flip scans, periodic snipe
 scan with Discord notifications, and position tracking from plugin data
 (CashFlow, AllaganMarket, Allagan Tools, Restocky).

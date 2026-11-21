@@ -10,7 +10,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -33,6 +33,7 @@ from gilhound.runtime import Runtime
 from gilhound.runtime.discord import DeliveryError
 
 LOCAL_HOST = re.compile(r"(?:localhost|127\.0\.0\.1)(?::([0-9]{1,5}))?", re.ASCII | re.I)
+UI_ICONS = ("/favicon.ico", "/favicon.png", "/apple-touch-icon.png")
 
 
 class ApiError(BaseModel):
@@ -94,7 +95,8 @@ def create_app(
         if not host or (host[1] is not None and not 1 <= int(host[1]) <= 65535):
             return JSONResponse({"detail": "Invalid Host header"}, status_code=400)
 
-        if serve_ui and (request.url.path == "/" or request.url.path.startswith("/assets/")):
+        path = request.url.path
+        if serve_ui and (path == "/" or path in UI_ICONS or path.startswith("/assets/")):
             return await call_next(request)
         auth = request.headers.getlist("authorization")
         scheme, _, credentials = auth[0].partition(" ") if len(auth) == 1 else ("", "", "")
@@ -224,6 +226,15 @@ def create_app(
                     "Referrer-Policy": "no-referrer",
                 },
             )
+
+        def ui_icon(request: Request) -> FileResponse:
+            icon = dist / request.url.path[1:]
+            if not icon.is_file():
+                raise HTTPException(404, "Icon file not found.")
+            return FileResponse(icon)
+
+        for path in UI_ICONS:
+            app.add_api_route(path, ui_icon, methods=["GET", "HEAD"], include_in_schema=False)
 
         if (dist / "assets").is_dir():
             app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
