@@ -1,0 +1,90 @@
+"""Entry points for transaction replay and reconciliation against current snapshots."""
+
+from collections import defaultdict
+from collections.abc import Iterable
+
+from gilhound.ingest.common import Source, Stock, event
+from gilhound.models import ItemRef, LedgerEventKind, SourceName
+
+from .adjustments import Acquisition, ItemAdjustment, ManualAdjustments
+from .fifo import ItemKey, Ledger, calculate, merge_events
+
+__all__ = [
+    "Acquisition",
+    "ItemAdjustment",
+    "Ledger",
+    "ManualAdjustments",
+    "build_ledger",
+    "calculate",
+    "merge_events",
+]
+
+
+def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | None = None) -> Ledger:
+    """Replay history then reconcile current stock as a lower bound on holdings.
+
+    Use one complete listing snapshot (newest file mtime, AllaganMarket first
+    on ties). Inventory excludes the market container before adding listings.
+    Remaining Restocky purchases overlap historical lots; only uncovered units
+    create new lots. Snapshots cannot supply a historical cost for past sales.
+    """
+    inputs = [s for s in sources if s.status.recognised]
+    history = [e for s in inputs for e in s.records.events]
+    replay = calculate(history, adjustments)
+    existing = {(p.item.id, p.item.hq): p.qty_open for p in replay.positions}
+    ts = max([0, *(e.ts for e in replay.events), *(s.status.last_update_ts or 0 for s in inputs)])
+    listings = [s for s in inputs if s.records.listings is not None]
+    rank = {SourceName.ALLAGAN_MARKET: 2, SourceName.ALLAGAN_TOOLS: 1}
+    latest = max(
+        listings,
+        key=lambda s: (s.records.listings_mtime or 0, rank.get(s.status.name, 0)),
+        default=None,
+    )
+    inventory: dict[ItemKey, int] = defaultdict(int)
+    listed: dict[ItemKey, int] = defaultdict(int)
+    costs: dict[ItemKey, list[Stock]] = defaultdict(list)
+    items: dict[ItemKey, ItemRef] = {}
+    for source in inputs:
+        for stock in source.records.inventory or []:
+            if stock.container != 12002:
+                key = stock.item.id, stock.item.hq
+                inventory[key] += stock.qty
+                items[key] = stock.item
+        for stock in source.records.remaining_costs:
+            key = stock.item.id, stock.item.hq
+            costs[key].append(stock)
+            items[key] = stock.item
+    if latest:
+        for stock in latest.records.listings:
+            key = stock.item.id, stock.item.hq
+            listed[key] += stock.qty
+            items[key] = stock.item
+    for key, item in items.items():
+        held = existing.get(key, 0)
+        # Prefer the newest remaining lots when older units already have a basis.
+        overlap = held
+        for stock in sorted(costs[key], key=lambda s: s.ts):
+            covered = min(overlap, stock.qty)
+            overlap -= covered
+            more = stock.qty - covered
+            if more:
+                history.append(
+                    event(
+                        SourceName.RESTOCKY,
+                        LedgerEventKind.OPENING,
+                        item,
+                        more,
+                        ts,
+                        more * stock.ppu,
+                    )
+                )
+                held += more
+        missing = inventory[key] + listed[key] - held
+        if missing > 0:
+            source_name = SourceName.ALLAGAN_TOOLS if inventory[key] else latest.status.name
+            history.append(event(source_name, LedgerEventKind.OPENING, item, missing, ts, None))
+        if listed[key]:
+            history.append(
+                event(latest.status.name, LedgerEventKind.LIST, item, listed[key], ts, None)
+            )
+    return calculate(history, adjustments)
