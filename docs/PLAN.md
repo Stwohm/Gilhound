@@ -4,7 +4,7 @@ Desktop app for FFXIV market-board flipping: scan for flips, run a periodic
 snipe scan with Discord notifications, track positions from plugin data.
 Used by humans (UI) and by AI agents (CLI with compact JSON).
 
-Status: **F0 done, F1 next** (2026-11-21).
+Status: **v0.1.1 released, F0–F3 done** (2026-11-21). F4 (friend install) pending.
 
 ## Decisions
 
@@ -126,3 +126,12 @@ Each Codex phase ends with: changed files, test result, 5-line summary.
 
 F1-A, F1-B, F1-C run in parallel in separate git worktrees. F1 agents must not
 edit shared files (see AGENTS.md); they request changes instead.
+
+## Release checklist
+1. Bump `__version__` in `gilhound/__init__.py`.
+2. `python -m gilhound.api.export_openapi` and `npm --prefix ui run gen:types`
+   (the OpenAPI document carries the version; CI fails otherwise).
+3. Full `pytest`, `ruff check .`, `npm --prefix ui run build`.
+4. Commit, push, `git tag vX.Y.Z`, `git push origin vX.Y.Z` → the Windows
+   release workflow builds and publishes the zip + `SHA256SUMS.txt`.
+5. Installed clients see the update banner within ~1 h (or on restart).
