@@ -8,7 +8,18 @@ from typing import Any
 
 from gilhound.models import LedgerEventKind, SourceName
 
-from .common import Records, Source, Stock, csv_rows, event, item_ref, read_source, require, uint
+from .common import (
+    READ_ERRORS,
+    Records,
+    Source,
+    Stock,
+    csv_rows,
+    event,
+    item_ref,
+    read_source,
+    require,
+    uint,
+)
 
 HEADERS = {
     "listings.csv": (
@@ -120,13 +131,17 @@ def listings(records: Records, rows: Iterator[dict[str, Any]]) -> None:
 
 def parse(paths: dict[str, Path]) -> Records:
     records = Records()
-    if "listings.csv" in paths:
-        listings(records, table(paths["listings.csv"]))
-        records.listings_mtime = int(paths["listings.csv"].stat().st_mtime)
     if "listings.json" in paths:
-        records = Records()
         listings(records, map(json_listing, objects(paths["listings.json"])))
         records.listings_mtime = int(paths["listings.json"].stat().st_mtime)
+        if "listings.csv" in paths:
+            try:
+                listings(Records(), table(paths["listings.csv"]))
+            except READ_ERRORS:
+                records.warning = "Restocky listings.csv mirror could not be read"
+    elif "listings.csv" in paths:
+        listings(records, table(paths["listings.csv"]))
+        records.listings_mtime = int(paths["listings.csv"].stat().st_mtime)
     if "cost-ledger.json" in paths:
         for row in objects(paths["cost-ledger.json"]):
             item = item_ref(uint(row["ItemId"]), flag(row["IsHq"]))

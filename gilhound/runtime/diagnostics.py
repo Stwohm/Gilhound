@@ -51,7 +51,20 @@ def start_logging(root: Path) -> RotatingFileHandler:
 
 
 def archive(root: Path, settings: UserSettings, sources: list[SourceStatus]) -> bytes:
-    data = settings.model_dump(exclude={"webhook_url"})
+    data = settings.model_dump(include={
+        "home_world": True,
+        "buy_region": True,
+        "history_days": True,
+        "auto_snipe_enabled": True,
+        "scan_interval_min": True,
+        "discord_notifier": True,
+        "dedup_cooldown_h": True,
+        "snipe_rule": {
+            "max_home_median_ratio", "min_profit", "min_distinct_buyers_7d",
+            "max_last_sale_age_h", "max_top_buyer_share",
+        },
+        "freshness_tiers": {"__all__": {"name", "max_age_h", "send_discord"}},
+    })
     # Labels are user-editable. Preserve numeric settings and known public defaults.
     for key, names in (("home_world", {"Cerberus"}), ("buy_region", {"Europe", "Chaos", "Light"})):
         if data[key] not in names:

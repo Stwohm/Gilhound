@@ -73,6 +73,12 @@ class Ledger:
     warnings: list[str] = field(default_factory=list)
 
 
+def stack_total(row: LedgerEvent) -> int | None:
+    if isinstance(row, Transaction) and row.stack_gil is not None:
+        return row.stack_gil
+    return row.ppu * row.qty if row.ppu is not None else None
+
+
 def merge_events(events: Iterable[LedgerEvent]) -> list[LedgerEvent]:
     """Match one sale per source per item/HQ/qty within 300s of the preferred sale.
 
@@ -80,7 +86,8 @@ def merge_events(events: Iterable[LedgerEvent]) -> list[LedgerEvent]:
     Keep same-source repeats. For ambiguous candidates use the nearest timestamp.
     """
     priority = {SourceName.CASHFLOW: 0, SourceName.RESTOCKY: 1, SourceName.ALLAGAN_MARKET: 2}
-    groups: dict[tuple[int, bool, int, int], list[tuple[int, set[SourceName]]]] = defaultdict(list)
+    type Candidate = tuple[int, int, set[SourceName]]
+    groups: dict[tuple[int, bool, int, int], list[Candidate]] = defaultdict(list)
     kept = []
     for index, row in sorted(
         enumerate(events), key=lambda pair: (priority.get(pair[1].source, 3), pair[1].ts)
@@ -88,17 +95,24 @@ def merge_events(events: Iterable[LedgerEvent]) -> list[LedgerEvent]:
         if row.kind == LedgerEventKind.SELL and row.source is not None:
             key = row.item.id, row.item.hq, row.qty
             bucket = row.ts // 300
+            total = stack_total(row)
+            if total is None:
+                raise ValueError("Sale proceeds required")
+            # Exact net stacks must agree. AllaganMarket estimates tax from gross,
+            # so its net can differ by one gil at the rounding boundary.
+            tolerance = 1 if row.source == SourceName.ALLAGAN_MARKET else 0
             nearby = (
                 (ts, sources)
                 for interval in range(bucket - 1, bucket + 2)
-                for ts, sources in groups.get((*key, interval), ())
+                for ts, proceeds, sources in groups.get((*key, interval), ())
                 if row.source not in sources and abs(row.ts - ts) <= 300
+                and abs(total - proceeds) <= tolerance
             )
             match = min(nearby, key=lambda pair: abs(row.ts - pair[0]), default=None)
             if match is not None:
                 match[1].add(row.source)
                 continue
-            groups[*key, bucket].append((row.ts, {row.source}))
+            groups[*key, bucket].append((row.ts, total, {row.source}))
         kept.append((row.ts, index, row))
     return [row for _, _, row in sorted(kept)]
 
@@ -142,9 +156,7 @@ class Holding:
 
     def apply(self, row: LedgerEvent, adjustment: ItemAdjustment | None) -> None:
         override = adjustment.unknown_unit_cost if adjustment else None
-        total = row.stack_gil if isinstance(row, Transaction) else None
-        if total is None and row.ppu is not None:
-            total = row.ppu * row.qty
+        total = stack_total(row)
         if row.kind in (LedgerEventKind.BUY, LedgerEventKind.OPENING, LedgerEventKind.TRADE_IN):
             self.acquire(row.qty, total, override, row.kind == LedgerEventKind.BUY)
         elif row.kind == LedgerEventKind.LIST:

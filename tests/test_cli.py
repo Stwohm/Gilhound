@@ -1,4 +1,5 @@
 import json
+import time
 from collections.abc import Callable
 from pathlib import Path
 
@@ -8,9 +9,57 @@ from gilhound import cli
 from gilhound.market.http import HttpClient, RateLimiter
 from gilhound.market.presets import run_scan
 from gilhound.market.universalis import Universalis
-from gilhound.models import Position
+from gilhound.models import Position, ScanPreset, ScanResult
 from gilhound.runtime import Runtime
 from gilhound.sources.fixtures import install
+
+
+def test_startup_failure_returns_json(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    root = tmp_path / "Gilhound"
+    root.mkdir()
+    (root / "settings.json").write_text("malformed")
+    assert cli.main(["sources"]) != 0
+    assert json.loads(capsys.readouterr().out) == {"command": "sources", "error": "ValueError"}
+
+
+@pytest.mark.parametrize("top", [0, 1])
+def test_history_total_before_top(
+    top: int, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    runtime = Runtime()
+    now = int(time.time())
+    try:
+        for preset in (ScanPreset.FLIP, ScanPreset.SNIPE, ScanPreset.VOLUME):
+            runtime.history.save_scan(ScanResult(
+                params=runtime.params(preset), rows=[], started_ts=now, finished_ts=now
+            ))
+    finally:
+        runtime.close()
+    assert cli.main(["history", "--kind", "scan", "--top", str(top), "--json"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["total"] == 2
+    assert len(result["rows"]) == top
+
+
+@pytest.mark.parametrize("command", ["serve", "app"])
+def test_desktop_startup_errors_return_json(
+    command: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from gilhound import desktop
+
+    def failed_server(port: int) -> None:
+        raise SystemExit(3)
+
+    monkeypatch.setattr(desktop, "serve", failed_server)
+    monkeypatch.setattr(desktop, "main", lambda _: 1)
+    assert cli.main([command]) != 0
+    error = json.loads(capsys.readouterr().out)
+    expected = "SystemExit" if command == "serve" else "RuntimeError"
+    assert error == {"command": command, "error": expected}
 
 
 @pytest.mark.parametrize(

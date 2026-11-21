@@ -10,6 +10,8 @@ from pydantic import Field
 
 from gilhound.models import ItemRef, LedgerEvent, LedgerEventKind, SourceName, SourceStatus
 
+READ_ERRORS = (OSError, sqlite3.Error, ValueError, TypeError, KeyError, OverflowError, csv.Error)
+
 
 class Transaction(LedgerEvent):
     """ppu is the integer unit amount. stack_gil preserves tax and division remainders."""
@@ -40,6 +42,7 @@ class Records:
     characters: dict[int, tuple[str, int]] = field(default_factory=dict)
     competitors: list[dict] = field(default_factory=list)
     price_history: list[dict] = field(default_factory=list)
+    warning: str | None = None
 
 
 @dataclass
@@ -99,7 +102,8 @@ def read_source(
         status.last_update_ts = int(max(p.stat().st_mtime for p in paths.values()))
         records = parser(paths)
         status.recognised = True
+        status.warning = records.warning
         return Source(status, records)
-    except (OSError, sqlite3.Error, ValueError, TypeError, KeyError, OverflowError, csv.Error):
+    except READ_ERRORS:
         status.warning = f"{label} format not recognised"
         return Source(status, Records())

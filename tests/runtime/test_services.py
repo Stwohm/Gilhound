@@ -96,6 +96,7 @@ def test_delivery_retry_tiers_and_persistent_cooldown(tmp_path: Path) -> None:
 def test_redaction_and_diagnostics(tmp_path: Path) -> None:
     runtime = Runtime(tmp_path, tmp_path / "plugins")
     config = settings()
+    config.discord_coin_emoji = "private label"
     url = config.webhook_url.get_secret_value()
     try:
         for test_url in (url, url.replace("discord.", "discordapp.")):

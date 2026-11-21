@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 from collections.abc import Sequence
+from contextlib import closing
 from typing import Any
 
 from gilhound.models import RetainerScanParams, ScanPreset
@@ -38,6 +39,7 @@ def project(row: dict, fields: list[str]) -> dict:
 def report(runtime: Runtime, args: argparse.Namespace) -> dict:
     fields = [s.strip() for s in args.fields.split(",") if s.strip()]
     result = {"command": args.command}
+    total = None
     if args.command == "scan":
         if args.profile:
             profiles = runtime.profiles.list("scan", runtime.settings.get())
@@ -60,7 +62,7 @@ def report(runtime: Runtime, args: argparse.Namespace) -> dict:
     elif args.command == "history":
         if args.action == "show":
             return runtime.history.entry(args.id).model_dump()
-        rows = runtime.history.entries(kind=args.kind, limit=args.top)
+        rows, total = runtime.history.entry_page(kind=args.kind, limit=args.top)
     elif args.command == "profiles":
         profiles = runtime.profiles.list(args.library, runtime.settings.get())
         if args.describe:
@@ -100,7 +102,7 @@ def report(runtime: Runtime, args: argparse.Namespace) -> dict:
         )
     return {
         **result,
-        "total": len(rows),
+        "total": len(rows) if total is None else total,
         "rows": [project(r.model_dump(), fields) for r in visible],
     }
 
@@ -136,25 +138,26 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands.add_parser("serve").add_argument("--port", type=int, default=8765)
     commands.add_parser("app")
     args = parser.parse_args(argv)
-    if args.command in {"serve", "app"}:
-        from gilhound import desktop
-
-        if args.command == "app":
-            return desktop.main([])
-        desktop.serve(args.port)
-        return 0
-    if args.top < 0:
+    if getattr(args, "top", 0) < 0:
         parser.error("--top must be nonnegative")
-    runtime = Runtime()
     try:
-        result = report(runtime, args)
+        if args.command in {"serve", "app"}:
+            from gilhound import desktop
+
+            if args.command == "serve":
+                desktop.serve(args.port)
+            elif desktop.main([]):
+                raise RuntimeError("Desktop startup failed")
+            return 0
+        with closing(Runtime()) as runtime:
+            result = report(runtime, args)
         if args.command != "history" or args.action != "show":
             result = rounded(result)
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
+        if isinstance(exc, SystemExit) and exc.code in (None, 0):
+            return 0
         print(json.dumps({"command": args.command, "error": type(exc).__name__}))
         return 1
-    finally:
-        runtime.close()
     if args.table:
         rows = result.get("rows", [result])
         if rows:
