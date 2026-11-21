@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Node
+node_modules/
+ui/dist/
+
+# Local / private
+.secrets-patterns.local
+.agent/
+*.local.json
+local-data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+.env
