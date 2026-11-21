@@ -831,6 +831,11 @@ export interface components {
              */
             profit_per_unit: number | null;
             /**
+             * Profit Qty
+             * @description Units bought in the cheapest stack sharing one trip cost.
+             */
+            profit_qty?: number | null;
+            /**
              * Qty
              * @description Units in the retainer's listing.
              */

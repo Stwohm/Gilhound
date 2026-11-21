@@ -262,3 +262,29 @@ def test_embed_and_batch_snapshots(tmp_path: Path) -> None:
             assert all(len(field["name"]) <= 256 for field in embed["fields"])
     sender.test(config)
     assert messages[-1]["embeds"][0]["title"].startswith("Test")
+
+def test_scheduler_interrupts_market_retry(monkeypatch, tmp_path) -> None:
+    from urllib import request
+
+    from gilhound.market.http import HttpClient
+
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    entered = threading.Event()
+    calls = []
+
+    def unavailable(*args, **kwargs):
+        calls.append(None)
+        entered.set()
+        raise TimeoutError
+
+    monkeypatch.setattr(request, "urlopen", unavailable)
+    scheduler = Scheduler(lambda: 0.01, lambda: HttpClient().request("https://example.invalid"))
+    scheduler.start()
+    try:
+        assert entered.wait(2)
+    finally:
+        start = time.monotonic()
+        scheduler.stop()
+    assert time.monotonic() - start < 1
+    assert not scheduler.thread.is_alive()
+    assert len(calls) == 1

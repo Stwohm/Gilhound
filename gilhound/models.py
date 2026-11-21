@@ -273,6 +273,9 @@ class RetainerItemRow(BaseModel):
     cheapest_world: str | None = Field(description="World of the cheapest regional listing.")
     cheapest_dc: str | None = Field(description="Data centre of the cheapest regional listing.")
     cheapest_ppu: int | None = Field(description="Cheapest regional listing price in gil per unit.")
+    profit_qty: int | None = Field(
+        default=None, gt=0, description="Units bought in the cheapest stack sharing one trip cost."
+    )
     cheapest_qty: int | None = Field(description="Units in the cheapest regional listing.")
     gap_pct: float | None = Field(description="Discount from the retainer price in percent.")
     profit_per_unit: float | None = Field(

@@ -3,7 +3,7 @@
 import json
 import time
 from collections.abc import Iterable
-from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from http.client import HTTPException
 from itertools import batched
 from pathlib import Path
@@ -14,6 +14,7 @@ from urllib.parse import urlencode
 
 from gilhound.market.http import HttpClient
 from gilhound.market.universalis import Universalis
+from gilhound.market.workers import Workers, result_or_cancel
 from gilhound.models import ItemRef
 
 SHEET = "https://v2.xivapi.com/api/sheet/Item"
@@ -54,7 +55,7 @@ class ItemCatalog:
             self.refresh_at = 0.0
         self.market_lock = Lock()
         self.lock = Lock()
-        self.worker = ThreadPoolExecutor(max_workers=1)
+        self.worker = Workers(1)
         self.pending: set[int] = set()
 
     def decorate_icons(self, items: list[ItemRef]) -> None:
@@ -78,7 +79,7 @@ class ItemCatalog:
             item.icon_url = self.icons.get(item.id)
 
     def close(self) -> None:
-        self.worker.shutdown(cancel_futures=True)
+        self.worker.close()
 
     def marketable(self) -> set[int]:
         with self.market_lock:
@@ -125,21 +126,22 @@ class ItemCatalog:
 
     def refresh(self, ids: set[int]) -> None:
         try:
-            with self.lock:
-                missing = sorted(ids - self.names.keys())
-            for group in batched(missing, 100):
-                found = self.fetch(group)
-                if found:
-                    with self.lock:
-                        self.names.update(found)
-                        snapshot = dict(self.names)
-                    save_cache(self.path, snapshot)
-        except UNAVAILABLE:
-            pass  # Keep unresolved IDs eligible for the next refresh.
-        try:
-            self.marketable()
-        except UNAVAILABLE:
-            pass
+            try:
+                with self.lock:
+                    missing = sorted(ids - self.names.keys())
+                for group in batched(missing, 100):
+                    found = self.fetch(group)
+                    if found:
+                        with self.lock:
+                            self.names.update(found)
+                            snapshot = dict(self.names)
+                        save_cache(self.path, snapshot)
+            except UNAVAILABLE:
+                pass  # Keep unresolved IDs eligible for the next refresh.
+            try:
+                self.marketable()
+            except UNAVAILABLE:
+                pass
         finally:
             with self.lock:
                 self.pending.difference_update(ids)
@@ -156,11 +158,11 @@ class ItemCatalog:
             needed -= self.pending
             if needed:
                 self.pending.update(needed)
-                self.worker.submit(self.refresh, needed)
+                self.worker.submit(partial(self.refresh, needed))
             # A barrier also waits for an earlier background lookup of the same IDs.
             barrier = self.worker.submit(lambda: None) if wait else None
         if barrier:
-            barrier.result()
+            result_or_cancel(barrier)
         with self.lock:
             for item in refs:
                 fallback = f"Item {item.id}" if item.name == str(item.id) else item.name

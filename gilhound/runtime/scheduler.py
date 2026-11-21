@@ -3,12 +3,16 @@
 import threading
 import time
 from collections.abc import Callable
+from concurrent.futures import CancelledError
+
+from gilhound.market.workers import stop_events
 
 from .diagnostics import LOG
 
 
 class Scheduler:
     def __init__(self, interval: Callable[[], float | None], task: Callable[[], object]) -> None:
+        self.cancel = threading.Event()
         self.interval = interval
         self.task = task
         self.condition = threading.Condition()
@@ -19,8 +23,9 @@ class Scheduler:
 
     def start(self) -> None:
         with self.condition:
-            if not self.stopped:
+            if not self.stopped or (self.thread and self.thread.is_alive()):
                 return
+            self.cancel = threading.Event()
             self.stopped = False
             self.delay = self.interval()
             self.next_run = None if self.delay is None else time.time() + self.delay
@@ -37,6 +42,7 @@ class Scheduler:
             self.condition.notify_all()
 
     def _run(self) -> None:
+        stop_events.set((self.cancel,))
         while True:
             with self.condition:
                 if self.stopped:
@@ -48,6 +54,8 @@ class Scheduler:
                 self.next_run = None
             try:
                 self.task()
+            except CancelledError:
+                return
             except Exception:
                 LOG.warning("Snipe scan failed")
             with self.condition:
@@ -56,8 +64,9 @@ class Scheduler:
 
     def stop(self) -> None:
         with self.condition:
+            self.cancel.set()
             self.stopped = True
             self.next_run = None
             self.condition.notify_all()
         if self.thread:
-            self.thread.join()
+            self.thread.join(timeout=0.5)

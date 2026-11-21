@@ -30,3 +30,14 @@ def test_retainer_replay() -> None:
         assert row.data_age_h >= 0
         assert row.gap_pct == pytest.approx(100 * (1 - row.cheapest_ppu / row.their_ppu))
         assert row.profit_per_unit == pytest.approx(row.their_ppu * 0.95 - row.cheapest_ppu * 1.05)
+
+def test_retainer_trip_uses_cheapest_stack() -> None:
+    params = RetainerScanParams.model_validate_json((FIXTURE / "target.json").read_bytes())
+    costs = {"Light": 1200, "Chaos": 300}
+    with install("replay", FIXTURE) as session:
+        rows = run_retainer_scan(params, clock=session.now, travel_cost=costs).rows
+    assert rows
+    for row in rows:
+        assert row.profit_qty == row.cheapest_qty
+        gross = row.their_ppu * 0.95 - row.cheapest_ppu * 1.05
+        assert row.profit_per_unit == pytest.approx(gross - costs[row.cheapest_dc] / row.profit_qty)

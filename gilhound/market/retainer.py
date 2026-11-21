@@ -1,9 +1,10 @@
 from collections.abc import Callable, Iterable, Mapping
 from itertools import batched
 
-from gilhound.market.http import HttpClient, parallel
+from gilhound.market.http import HttpClient
 from gilhound.market.profit import profit_per_unit
 from gilhound.market.universalis import Snapshot, Universalis
+from gilhound.market.workers import parallel
 from gilhound.models import (
     ItemRef,
     Listing,
@@ -30,10 +31,12 @@ def run_retainer_scan(
     progress: Callable[[int, int], None] | None = None,
     home_world: str = "Cerberus",
     buy_region: str = "Europe",
+    travel_cost: Mapping[str, int] | None = None,
     marketable: Callable[[], Iterable[int]] | None = None,
     item_names: Mapping[int, str] | None = None,
     http: HttpClient | None = None,
 ) -> RetainerScanResult:
+    costs = travel_cost or {}
     start = clock()
     api = Universalis(http or HttpClient())
     world, region = params.world or home_world, params.buy_region or buy_region
@@ -82,8 +85,10 @@ def run_retainer_scan(
                         cheapest_ppu=cheap.ppu if cheap else None,
                         cheapest_qty=cheap.qty if cheap else None,
                         gap_pct=100 * (own.ppu - cheap.ppu) / own.ppu if cheap else None,
+                        profit_qty=cheap.qty if cheap else None,
                         profit_per_unit=profit_per_unit(
-                            own.ppu, cheap.ppu, seller_tax=0.05, buyer_tax=0.05
+                            own.ppu, cheap.ppu, seller_tax=0.05, buyer_tax=0.05,
+                            travel_cost=costs.get(dcs.get(cheap.world, ""), 0), qty=cheap.qty,
                         )
                         if cheap
                         else None,

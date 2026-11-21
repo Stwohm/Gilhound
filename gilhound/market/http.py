@@ -5,12 +5,18 @@ import time
 import urllib.error
 import urllib.request
 from collections import OrderedDict
-from collections.abc import Callable, Iterable, Iterator
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
+from email.utils import parsedate_to_datetime
 from http.client import HTTPException
 from importlib.metadata import version
-from threading import BoundedSemaphore, Lock
+from threading import Lock
 from typing import Any
+from urllib.parse import urlsplit
+
+from gilhound.market.budget import HostBudget
+from gilhound.market.workers import checkpoint, wait
+from gilhound.market.workers import parallel as parallel
 
 USER_AGENT = f"gilhound/{version('gilhound')}"
 
@@ -21,7 +27,7 @@ class RateLimiter:
         rate: int = 25,
         *,
         clock: Callable[[], float] = time.monotonic,
-        sleep: Callable[[float], None] = time.sleep,
+        sleep: Callable[[float], None] = wait,
     ) -> None:
         self.interval = 1 / rate
         self.clock = clock
@@ -36,14 +42,26 @@ class RateLimiter:
                 self.sleep(delay)
             self.next_start = self.clock() + self.interval
 
+    @contextmanager
+    def connection(self) -> Iterator[None]:
+        self.acquire()
+        yield
 
-_LIMITER = RateLimiter()
-_CONNECTIONS = BoundedSemaphore(8)
+    def cooldown(self, seconds: float) -> None:
+        with self.lock:
+            self.next_start = max(self.next_start, self.clock() + seconds)
 
 
-def parallel[T, R](function: Callable[[T], R], values: Iterable[T]) -> Iterator[R]:
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        yield from pool.map(function, values)
+def retry_after(header: str | None, fallback: float) -> float:
+    if header:
+        try:
+            value = header.strip()
+            if value.isascii() and value.isdigit():
+                return float(int(value))
+            return max(0, parsedate_to_datetime(value).timestamp() - time.time())
+        except (ValueError, TypeError, OverflowError):
+            pass
+    return fallback
 
 
 class HttpClient:
@@ -52,10 +70,10 @@ class HttpClient:
         ttl: float = 60,
         *,
         clock: Callable[[], float] = time.monotonic,
-        limiter: RateLimiter = _LIMITER,
-        timeout: float = 120,
+        limiter: RateLimiter | None = None,
+        timeout: float = 15,
         attempts: int = 4,
-        sleep: Callable[[float], None] = time.sleep,
+        sleep: Callable[[float], None] = wait,
     ) -> None:
         self.timeout = timeout
         self.attempts = attempts
@@ -67,6 +85,7 @@ class HttpClient:
         self.lock = Lock()
 
     def request(self, url: str, body: dict[str, Any] | None = None) -> Any:
+        checkpoint()
         if body is None:
             with self.lock:
                 cached = self.cache.get(url)
@@ -77,12 +96,22 @@ class HttpClient:
             data=None if body is None else json.dumps(body).encode(),
             headers={"User-Agent": USER_AGENT, "Content-Type": "application/json"},
         )
+        budget = self.limiter or HostBudget(urlsplit(url).hostname or "")
         for attempt in range(self.attempts):
+            checkpoint()
+            delay = min(30, 2 * (attempt + 1))
             try:
-                with _CONNECTIONS:
-                    self.limiter.acquire()
-                    with urllib.request.urlopen(req, timeout=self.timeout) as response:
-                        payload = json.load(response)
+                with budget.connection():
+                    checkpoint()
+                    try:
+                        with urllib.request.urlopen(req, timeout=self.timeout) as response:
+                            payload = json.load(response)
+                    except urllib.error.HTTPError as exc:
+                        if exc.code == 429:
+                            budget.cooldown(retry_after(exc.headers.get("Retry-After"), delay))
+                        exc.close()
+                        raise
+                    checkpoint()
                 break
             except (OSError, HTTPException, json.JSONDecodeError) as exc:
                 if (
@@ -91,7 +120,8 @@ class HttpClient:
                     and exc.code < 500
                 ) or attempt + 1 == self.attempts:
                     raise
-                self.sleep(2 * (attempt + 1))
+                if not isinstance(exc, urllib.error.HTTPError) or exc.code != 429:
+                    self.sleep(delay)
         if body is None and self.ttl > 0:
             with self.lock:
                 self.cache[url] = (self.clock() + self.ttl, payload)

@@ -814,6 +814,19 @@
             "description": "Net gil per unit from buying regionally and selling at the retainer price.",
             "title": "Profit Per Unit"
           },
+          "profit_qty": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Units bought in the cheapest stack sharing one trip cost.",
+            "title": "Profit Qty"
+          },
           "qty": {
             "description": "Units in the retainer's listing.",
             "exclusiveMinimum": 0.0,
