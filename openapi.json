@@ -77,6 +77,114 @@
         "title": "AppInfo",
         "type": "object"
       },
+      "ArchiveEntry": {
+        "properties": {
+          "description": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Description",
+            "type": "array"
+          },
+          "duration_s": {
+            "title": "Duration S",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/Kind"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScanResult"
+              },
+              {
+                "$ref": "#/components/schemas/RetainerScanResult"
+              }
+            ],
+            "title": "Result"
+          },
+          "row_count": {
+            "title": "Row Count",
+            "type": "integer"
+          },
+          "started_ts": {
+            "title": "Started Ts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "profile",
+          "started_ts",
+          "duration_s",
+          "row_count",
+          "description",
+          "result"
+        ],
+        "title": "ArchiveEntry",
+        "type": "object"
+      },
+      "ArchiveSummary": {
+        "properties": {
+          "duration_s": {
+            "title": "Duration S",
+            "type": "number"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/Kind"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profile"
+          },
+          "row_count": {
+            "title": "Row Count",
+            "type": "integer"
+          },
+          "started_ts": {
+            "title": "Started Ts",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "profile",
+          "started_ts",
+          "duration_s",
+          "row_count"
+        ],
+        "title": "ArchiveSummary",
+        "type": "object"
+      },
       "CandidateWindow": {
         "properties": {
           "hours_ago": {
@@ -267,6 +375,14 @@
         ],
         "title": "Job",
         "type": "object"
+      },
+      "Kind": {
+        "enum": [
+          "scan",
+          "snipe",
+          "retainer"
+        ],
+        "type": "string"
       },
       "PnLSummary": {
         "properties": {
@@ -772,7 +888,7 @@
           },
           "history_entries": {
             "default": 80,
-            "description": "Seven-day sales to fetch from history.",
+            "description": "Maximum sales to fetch across fourteen days from history.",
             "minimum": 1.0,
             "title": "History Entries",
             "type": "integer"
@@ -1023,7 +1139,14 @@
           "rows": {
             "description": "Matching purchase opportunities.",
             "items": {
-              "$ref": "#/components/schemas/ScanRow"
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SnipeHit"
+                },
+                {
+                  "$ref": "#/components/schemas/ScanRow"
+                }
+              ]
             },
             "title": "Rows",
             "type": "array"
@@ -1054,6 +1177,17 @@
       },
       "ScanRow": {
         "properties": {
+          "average_sale_size": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Sale Size"
+          },
           "buy_dc": {
             "description": "Data centre where the purchase is available.",
             "title": "Buy Dc",
@@ -1076,11 +1210,58 @@
             "title": "Buy World",
             "type": "string"
           },
+          "capital_needed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capital Needed"
+          },
+          "daily_units_14d": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Units 14D"
+          },
           "data_age_h": {
             "description": "Age of the purchase listing data in hours.",
             "minimum": 0.0,
             "title": "Data Age H",
             "type": "number"
+          },
+          "days_to_sell": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days To Sell"
+          },
+          "distinct_sellers": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distinct Sellers"
           },
           "est_wait_days": {
             "anyOf": [
@@ -1093,6 +1274,17 @@
             ],
             "description": "Estimated days to sell, if calculable.",
             "title": "Est Wait Days"
+          },
+          "home_listing_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Listing Count"
           },
           "home_lowest": {
             "anyOf": [
@@ -1112,14 +1304,135 @@
             "title": "Home Median 7D",
             "type": "number"
           },
+          "hq_sale_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hq Sale Share"
+          },
           "item": {
             "$ref": "#/components/schemas/ItemRef",
             "description": "Item and quality variant."
+          },
+          "max_sale_price": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Sale Price"
+          },
+          "min_sale_price": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Sale Price"
+          },
+          "nearby_listings": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nearby Listings"
+          },
+          "nearby_units": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nearby Units"
+          },
+          "next_listing_gap": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Listing Gap"
+          },
+          "profit_per_day": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profit Per Day"
           },
           "profit_per_unit": {
             "description": "Estimated net gil profit per unit after costs.",
             "title": "Profit Per Unit",
             "type": "number"
+          },
+          "rival_stock": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rival Stock"
+          },
+          "roi_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Roi Pct"
+          },
+          "sales_7d": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sales 7D"
+          },
+          "second_buy_price": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Second Buy Price"
           },
           "sellable_qty": {
             "description": "Estimated units sellable within the sales window.",
@@ -1131,6 +1444,39 @@
             "description": "Estimated net profit for the sellable units.",
             "title": "Total Profit Capped",
             "type": "number"
+          },
+          "trend_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trend Pct"
+          },
+          "units_below_sell": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Units Below Sell"
+          },
+          "units_sold_7d": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Units Sold 7D"
           },
           "volume_proof": {
             "$ref": "#/components/schemas/VolumeProof",
@@ -1157,6 +1503,17 @@
       },
       "SnipeHit": {
         "properties": {
+          "average_sale_size": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Sale Size"
+          },
           "buy_dc": {
             "description": "Data centre where the purchase is available.",
             "title": "Buy Dc",
@@ -1179,11 +1536,58 @@
             "title": "Buy World",
             "type": "string"
           },
+          "capital_needed": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capital Needed"
+          },
+          "daily_units_14d": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Daily Units 14D"
+          },
           "data_age_h": {
             "description": "Age of the purchase listing data in hours.",
             "minimum": 0.0,
             "title": "Data Age H",
             "type": "number"
+          },
+          "days_to_sell": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days To Sell"
+          },
+          "distinct_sellers": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distinct Sellers"
           },
           "est_wait_days": {
             "anyOf": [
@@ -1203,6 +1607,17 @@
             "title": "First Seen Ts",
             "type": "integer"
           },
+          "home_listing_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Listing Count"
+          },
           "home_lowest": {
             "anyOf": [
               {
@@ -1221,6 +1636,17 @@
             "title": "Home Median 7D",
             "type": "number"
           },
+          "hq_sale_share": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Hq Sale Share"
+          },
           "item": {
             "$ref": "#/components/schemas/ItemRef",
             "description": "Item and quality variant."
@@ -1229,6 +1655,61 @@
             "description": "Stable listing identifier for notification deduplication.",
             "title": "Listing Key",
             "type": "string"
+          },
+          "max_sale_price": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Sale Price"
+          },
+          "min_sale_price": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Sale Price"
+          },
+          "nearby_listings": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nearby Listings"
+          },
+          "nearby_units": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Nearby Units"
+          },
+          "next_listing_gap": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Listing Gap"
           },
           "notified_ts": {
             "anyOf": [
@@ -1243,10 +1724,65 @@
             "description": "Last notification in UTC epoch seconds, if sent.",
             "title": "Notified Ts"
           },
+          "profit_per_day": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profit Per Day"
+          },
           "profit_per_unit": {
             "description": "Estimated net gil profit per unit after costs.",
             "title": "Profit Per Unit",
             "type": "number"
+          },
+          "rival_stock": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rival Stock"
+          },
+          "roi_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Roi Pct"
+          },
+          "sales_7d": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sales 7D"
+          },
+          "second_buy_price": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Second Buy Price"
           },
           "sellable_qty": {
             "description": "Estimated units sellable within the sales window.",
@@ -1262,6 +1798,39 @@
             "description": "Estimated net profit for the sellable units.",
             "title": "Total Profit Capped",
             "type": "number"
+          },
+          "trend_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trend Pct"
+          },
+          "units_below_sell": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Units Below Sell"
+          },
+          "units_sold_7d": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Units Sold 7D"
           },
           "volume_proof": {
             "$ref": "#/components/schemas/VolumeProof",
@@ -1482,6 +2051,25 @@
             "title": "Freshness Tiers",
             "type": "array"
           },
+          "go_button_enabled": {
+            "default": true,
+            "title": "Go Button Enabled",
+            "type": "boolean"
+          },
+          "go_delay_ms": {
+            "default": 120,
+            "maximum": 2000.0,
+            "minimum": 20.0,
+            "title": "Go Delay Ms",
+            "type": "integer"
+          },
+          "history_days": {
+            "default": 90,
+            "maximum": 3650.0,
+            "minimum": 1.0,
+            "title": "History Days",
+            "type": "integer"
+          },
           "home_world": {
             "description": "Default world for resale and retainer scans.",
             "title": "Home World",
@@ -1568,6 +2156,25 @@
             },
             "title": "Freshness Tiers",
             "type": "array"
+          },
+          "go_button_enabled": {
+            "default": true,
+            "title": "Go Button Enabled",
+            "type": "boolean"
+          },
+          "go_delay_ms": {
+            "default": 120,
+            "maximum": 2000.0,
+            "minimum": 20.0,
+            "title": "Go Delay Ms",
+            "type": "integer"
+          },
+          "history_days": {
+            "default": 90,
+            "maximum": 3650.0,
+            "minimum": 1.0,
+            "title": "History Days",
+            "type": "integer"
           },
           "home_world": {
             "description": "Default world for resale and retainer scans.",
@@ -1765,6 +2372,354 @@
         "summary": "Export Diagnostics"
       }
     },
+    "/api/go": {
+      "post": {
+        "operationId": "go_api_go_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "world",
+            "required": true,
+            "schema": {
+              "title": "World",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Go Api Go Post",
+                  "type": "boolean"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Go"
+      }
+    },
+    "/api/history": {
+      "get": {
+        "operationId": "history_api_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Kind"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Kind"
+            }
+          },
+          {
+            "in": "query",
+            "name": "profile",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Profile"
+            }
+          },
+          {
+            "in": "query",
+            "name": "since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Since"
+            }
+          },
+          {
+            "in": "query",
+            "name": "until",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Until"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "default": "",
+              "title": "Search",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 101,
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ArchiveSummary"
+                  },
+                  "title": "Response History Api History Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "History"
+      }
+    },
+    "/api/history/{key}": {
+      "delete": {
+        "operationId": "delete_entry_api_history__key__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Entry"
+      },
+      "get": {
+        "operationId": "history_entry_api_history__key__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "title": "Key",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveEntry"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "History Entry"
+      }
+    },
     "/api/info": {
       "get": {
         "operationId": "get_info_api_info_get",
@@ -1813,6 +2768,24 @@
     "/api/jobs/retainer": {
       "post": {
         "operationId": "submit_retainer_api_jobs_retainer_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "profile",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Profile"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1878,6 +2851,24 @@
     "/api/jobs/scan": {
       "post": {
         "operationId": "submit_scan_api_jobs_scan_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "profile",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Profile"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -2483,6 +3474,122 @@
           }
         },
         "summary": "Change Profile"
+      }
+    },
+    "/api/retainer-profiles": {
+      "get": {
+        "operationId": "retainer_profiles_api_retainer_profiles_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/RetainerScanParams"
+                  },
+                  "title": "Response Retainer Profiles Api Retainer Profiles Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Retainer Profiles"
+      },
+      "post": {
+        "operationId": "save_retainer_profile_api_retainer_profiles_post",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetainerScanParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Save Retainer Profile"
       }
     },
     "/api/retainer-scan": {

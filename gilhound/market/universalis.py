@@ -126,9 +126,10 @@ class Universalis:
         return results
 
     def history(
-        self, location: str, item: int, *, min_price: bool = False, entries: int = 80
+        self, location: str, item: int, *, min_price: bool = False, entries: int = 80,
+        within: int = 1209600,
     ) -> list[Sale]:
         path = f"{BASE}/history/{quote(location, safe='')}/{item}"
-        url = f"{path}?entriesToReturn={entries}&entriesWithin=604800"
+        url = f"{path}?entriesToReturn={entries}&entriesWithin={within}"
         raw = self.http.request(url + ("&minSalePrice=0" if min_price else ""))
         return [sale(row) for row in raw.get("entries", [])]

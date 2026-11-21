@@ -15,6 +15,7 @@ const pause = (ms = 150) => new Promise<void>((resolve) => window.setTimeout(res
 const costs = new Map<string, number>();
 
 let settings: Settings = {
+  go_button_enabled: true, go_delay_ms: 120, history_days: 90,
   snipe_rule: { max_home_median_ratio: 0.5, max_last_sale_age_h: 24, max_top_buyer_share: 0.5,
     min_distinct_buyers_7d: 3, min_profit: 5000 },
   home_world: "Cerberus",
@@ -78,7 +79,14 @@ function marketRows(params: Pick<ScanParams, "buyer_tax" | "seller_tax" | "sella
       buy_world: entry.world, buy_dc: entry.dc, buy_ppu: entry.price, buy_qty_at_price: entry.qty,
       home_median_7d: entry.median, home_lowest: index % 4 === 3 ? null : entry.median + 2400,
       sellable_qty: sellable, profit_per_unit: profit, total_profit_capped: sellable * profit,
-      est_wait_days: sellable / entry.velocity,
+      est_wait_days: sellable / entry.velocity, days_to_sell: sellable / entry.velocity,
+      roi_pct: 100 * profit / (entry.price * (1 + (params.buyer_tax ?? 0.05))),
+      capital_needed: sellable * entry.price * (1 + (params.buyer_tax ?? 0.05)),
+      profit_per_day: profit * Math.min(entry.velocity,sellable),
+      rival_stock: index * 2, distinct_sellers: index + 1, home_listing_count: index + 2,
+      units_sold_7d: Math.round(entry.velocity*7), sales_7d: entry.buyers,
+      daily_units_14d: Array.from({length:14},(_,i)=>Math.round(entry.velocity*(0.5+(i+index)%5/4))),
+      trend_pct: 10-index*4,
       volume_proof: {
         units_per_day: entry.velocity, distinct_buyers_7d: entry.buyers, last_sale_age_h: entry.sale,
         top_buyer_share: 0.23, days_with_sales: Math.min(7, entry.buyers),
@@ -122,7 +130,28 @@ let hits = snipeHits();
 let lastRun = now();
 let nextRun = lastRun + 300;
 
+type Entry = components["schemas"]["ArchiveEntry"];
+const archive = new Map<number,Entry>();
+const retainers: Record<string,components["schemas"]["RetainerScanParams"]> = Object.create(null);
+let nextId=1;
+function record(result: Entry["result"], profile?:string) {
+  const id=nextId++;
+  const retainer="items_scanned" in result;
+  const started_ts=retainer?now()-1:result.started_ts;
+  archive.set(id,{id,kind:retainer?"retainer":result.params.preset==="snipe"?"snipe":"scan",profile:profile??null,
+    started_ts,duration_s:retainer?result.duration_s:result.finished_ts-started_ts,row_count:result.rows.length,
+    result,description:[]});
+}
 export const mockApi: Api = {
+  async go(){return false;},
+  async history(q){return [...archive.values()].reverse().filter(e=>
+    (!q.has("kind") || e.kind===q.get("kind")) && (!q.has("profile") || e.profile===q.get("profile"))
+    && (!q.has("since") || e.started_ts>=Number(q.get("since"))) && (!q.has("until") || e.started_ts<Number(q.get("until")))
+    && (!q.has("search") || e.result.rows.some(r=>r.item.name.toLowerCase().includes(q.get("search")!.toLowerCase())))).slice(Number(q.get("offset")),Number(q.get("offset"))+Number(q.get("limit")??101));},
+  async entry(id){const e=archive.get(id);if(!e)throw Error("Entry not found.");return e;},
+  async deleteEntry(id){archive.delete(id);},
+  async retainerProfiles(){return {...retainers};},
+  async saveRetainerProfile(name,params){if(retainers[name])throw Error("Choose a unique name.");retainers[name]=params;},
   async getProfiles(library) { return mockCatalog(library); },
   async changeProfile(library, { action, name, new_name, profile }) {
     const state = catalogs[library];
@@ -146,12 +175,13 @@ export const mockApi: Api = {
       if (item) hidden.set(key, item);
     }
   },
-  async scan(params) {
+  async scan(params,profile) {
     const started_ts = now();
     await pause(800);
-    return { params, rows: scanRows(params), started_ts, finished_ts: now() };
+    const result = { params, rows: scanRows(params), started_ts, finished_ts: now() };
+    record(result,profile); return result;
   },
-  async retainerScan(params) {
+  async retainerScan(params,profile) {
     await pause(1000);
     const region = params.buy_region ?? settings.buy_region;
     const pricedListings = marketRows({
@@ -159,7 +189,7 @@ export const mockApi: Api = {
     });
     const regionKey = region.trim().toLowerCase();
     const regional = pricedListings.filter((row) => regionKey === "europe" || regionKey === row.buy_dc.toLowerCase());
-    return {
+    const result = {
       params, items_scanned: 16900, duration_s: 1,
       rows: params.retainer_name.trim().toLowerCase() === demoRetainer.toLowerCase() && (params.world ?? settings.home_world) === "Cerberus"
         ? pricedListings.slice(0, 4).map((row, index) => {
@@ -173,11 +203,14 @@ export const mockApi: Api = {
           };
         }) : [],
     };
+    record(result,profile); return result;
   },
   async getSnipeStatus() {
     if (settings.auto_snipe_enabled && now() >= nextRun) {
       hits = snipeHits();
       lastRun = now();
+      record({params: catalogs.snipes.profiles[catalogs.snipes.active].params, rows: hits,
+        started_ts: lastRun, finished_ts: now()}, catalogs.snipes.active);
       nextRun = lastRun + (settings.scan_interval_min ?? 5) * 60;
     }
     return { running: false, next_run_ts: settings.auto_snipe_enabled ? nextRun : null,
@@ -196,6 +229,7 @@ export const mockApi: Api = {
       ...hit, first_seen_ts: previous.get(hit.listing_key)?.first_seen_ts ?? hit.first_seen_ts,
       notified_ts: previous.get(hit.listing_key)?.notified_ts ?? hit.notified_ts,
     }));
+    record({params:catalogs.snipes.profiles[catalogs.snipes.active].params,rows:hits,started_ts:lastRun,finished_ts:now()},catalogs.snipes.active);
     return hits;
   },
   async getSources() {

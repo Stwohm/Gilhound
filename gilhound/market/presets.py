@@ -7,7 +7,7 @@ from gilhound.market.profit import profit_per_unit, sellable_qty, wait_days
 from gilhound.market.saddlebag import candidates
 from gilhound.market.snipe import MarketRow
 from gilhound.market.universalis import Universalis
-from gilhound.market.volume import recent, volume_proof
+from gilhound.market.volume import DAY, recent, volume_proof
 from gilhound.models import ItemRef, ScanParams, ScanPreset, ScanResult
 
 # The legacy scripts shipped this map and made no metadata requests.
@@ -43,14 +43,16 @@ def _opportunity(
     ).get(item.id)
     if not home or not region:
         return None
-    sales = (
+    history = (
         home.sales
-        if flip
+        if flip and legacy
         else api.history(
-            params.home_world, item.id, min_price=not snipe, entries=params.history_entries
+            params.home_world, item.id, min_price=not snipe, entries=params.history_entries,
+            within=604800 if legacy else 1209600,
         )
     )
-    sales = recent([s for s in sales if s.hq == item.hq], now)
+    quality_history = [s for s in history if s.hq == item.hq]
+    sales = recent(quality_history, now)
     cheap = [r for r in region.listings if r.world.casefold() != params.home_world.casefold()]
     if not cheap or len(sales) < params.min_history_sales:
         return None
@@ -106,7 +108,32 @@ def _opportunity(
     ):
         return None
     rival = sum(r.qty for r in home.listings if r.ppu <= med)
+    daily = [0] * 14
+    previous = []
+    for sale in quality_history:
+        day = int((now - sale.ts) // DAY)
+        if 0 <= day < 14:
+            daily[13 - day] += sale.qty
+            if day >= 7:
+                previous.append(sale.ppu)
+    mixed = recent(history, now)
+    nearby = [r for r in region.listings if r.ppu * 100 <= first.ppu * 110]
+    unit_cost = first.ppu * (1 + params.buyer_tax)
+    units = sum(s.qty for s in sales)
     row = MarketRow(
+        units_sold_7d=units, sales_7d=len(sales), average_sale_size=units / len(sales),
+        min_sale_price=min(s.ppu for s in sales), max_sale_price=max(s.ppu for s in sales),
+        hq_sale_share=sum(s.hq for s in mixed) / len(mixed),
+        home_listing_count=len(home.listings),
+        distinct_sellers=len({r.retainer_hash for r in home.listings} - {""}),
+        rival_stock=rival, units_below_sell=sum(r.qty for r in home.listings if r.ppu < sell),
+        nearby_listings=len(nearby), nearby_units=sum(r.qty for r in nearby),
+        second_buy_price=cheap[1].ppu if len(cheap) > 1 else None,
+        next_listing_gap=cheap[1].ppu - first.ppu if len(cheap) > 1 else None,
+        roi_pct=gain / unit_cost * 100, capital_needed=capped * unit_cost,
+        profit_per_day=gain * min(proof.units_per_day, capped),
+        days_to_sell=capped / proof.units_per_day, daily_units_14d=daily,
+        trend_pct=100 * (med / median(previous) - 1) if previous else None,
         listing=first,
         item=item,
         buy_world=first.world,

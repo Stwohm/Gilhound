@@ -2,6 +2,7 @@ import io
 import logging
 import secrets
 import threading
+import time
 import zipfile
 from pathlib import Path
 
@@ -132,14 +133,15 @@ def test_settings_and_history(tmp_path: Path) -> None:
         assert runtime.save_settings(plain).webhook_url == config.webhook_url
         plain.webhook_url = None
         assert runtime.save_settings(plain).webhook_url is None
-        runtime.history.limit = 2
-        for i in range(3):
+        now = int(time.time())
+        stamps = [now - 91 * 86400, now - 1, now]
+        for i in stamps:
             runtime.history.save_scan(
                 ScanResult(
                     params=runtime.params(ScanPreset.FLIP), rows=[], started_ts=i, finished_ts=i
                 )
             )
-        assert [r.finished_ts for r in runtime.history.scans()] == [2, 1]
+        assert [r.started_ts for r in runtime.history.entries()] == stamps[:0:-1]
     finally:
         runtime.close()
 

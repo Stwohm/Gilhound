@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -23,7 +24,9 @@ CASES = [
 KNOWN_DIFFS = {("Scroll Cabinet", "Phoenix"): (5, 1)}
 
 
-def replay(preset: ScanPreset, script: str, *, compat: bool) -> ScanResult:
+def replay(
+    preset: ScanPreset, script: str, *, compat: bool, extended: Callable = lambda p: p
+) -> ScanResult:
     http = HttpClient(limiter=RateLimiter(clock=lambda: 0, sleep=lambda _: None))
     if not compat:
         # Prime the same client's metadata cache from its separate recording.
@@ -36,7 +39,7 @@ def replay(preset: ScanPreset, script: str, *, compat: bool) -> ScanResult:
         seller_tax=0.05,
         **({"buyer_tax": 0} if compat else {}),
     )
-    with install("replay", MARKET / script) as session:
+    with install("replay", extended(MARKET / script)) as session:
         result = run_scan(params, clock=session.now, legacy_compat=compat, http=http)
         assert session.used == session.index["requests"].keys()
         assert not session.unanswered
@@ -65,8 +68,8 @@ def test_legacy_parity(preset: ScanPreset, script: str) -> None:
     ] == expected
 
 
-def test_default_both_taxes() -> None:
-    result = replay(ScanPreset.FLIP, "flip_scan", compat=False)
+def test_default_both_taxes(extended_replay: Callable) -> None:
+    result = replay(ScanPreset.FLIP, "flip_scan", compat=False, extended=extended_replay)
     assert result.rows
     for row in result.rows:
         assert row.profit_per_unit == pytest.approx(row.home_median_7d * 0.95 - row.buy_ppu * 1.05)
@@ -76,8 +79,8 @@ def test_default_both_taxes() -> None:
         assert row.buy_qty_at_price == correct
 
 
-def test_live_snipe_candidates_reach_rule_evaluation() -> None:
-    result = replay(ScanPreset.SNIPE, "snipe", compat=False)
+def test_live_snipe_candidates_reach_rule_evaluation(extended_replay: Callable) -> None:
+    result = replay(ScanPreset.SNIPE, "snipe", compat=False, extended=extended_replay)
     hits = evaluate(
         result.rows,
         SnipeRule(max_top_buyer_share=1),

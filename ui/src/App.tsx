@@ -3,6 +3,8 @@ import brandIcon from "../../assets/icon-256.png";
 import { api, mockMode } from "./api/client";
 import { useUpdates } from "./api/useUpdates";
 import { Badge, Notice, defaults, errorMessage, useResource } from "./common";
+import { TravelProvider } from "./Travel";
+import History from "./screens/History";
 import Scan from "./screens/Scan";
 import Snipes from "./screens/Snipes";
 import Retainer from "./screens/Retainer";
@@ -11,6 +13,7 @@ import SettingsScreen from "./screens/Settings";
 
 const pages = [
   { id: "scan", title: "Scan", icon: "scan" },
+  { id: "history", title: "History", icon: "chart" },
   { id: "snipes", title: "Snipes", icon: "bolt" },
   { id: "retainer", title: "Retainer", icon: "bag" },
   { id: "positions", title: "Positions", icon: "chart" },
@@ -68,13 +71,14 @@ export default function App() {
   const preferences = settings.data ?? defaults;
   const screens = {
     scan: null,
+    history: <History />,
     snipes: <Snipes resource={settings} />,
     retainer: null,
     positions: <Positions />,
     settings: <SettingsScreen resource={settings} updates={updates} />,
   };
 
-  return <div className="app">
+  return <TravelProvider home={preferences.home_world} enabled={preferences.go_button_enabled ?? true}><div className="app">
     <a href="#main" className="skip-link" onClick={(event) => {
       event.preventDefault();
       document.getElementById("main")?.focus();
@@ -106,5 +110,5 @@ export default function App() {
       <div className="retained-screen" hidden={page.id !== "retainer"}><Retainer settings={preferences} /></div>
       {screens[page.id]}
     </main>
-  </div>;
+  </div></TravelProvider>;
 }

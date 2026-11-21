@@ -4,13 +4,42 @@ import json
 import os
 import sqlite3
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import closing, contextmanager
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from threading import RLock
+from typing import Literal
 
-from gilhound.models import ScanResult, SnipeHit, SnipeStatus, UserSettings
+from pydantic import BaseModel
+
+from gilhound.models import (
+    RetainerScanParams,
+    RetainerScanResult,
+    ScanParams,
+    ScanResult,
+    SnipeHit,
+    SnipeStatus,
+    UserSettings,
+)
+
+from .profiles import Profile, describe
+
+type Kind = Literal["scan", "snipe", "retainer"]
+
+
+class ArchiveSummary(BaseModel):
+    id: int
+    kind: Kind
+    profile: str | None
+    started_ts: int
+    duration_s: float
+    row_count: int
+
+
+class ArchiveEntry(ArchiveSummary):
+    description: list[str]
+    result: ScanResult | RetainerScanResult
 
 
 def data_dir() -> Path:
@@ -58,9 +87,9 @@ class SettingsStore:
 
 
 class History:
-    def __init__(self, path: Path, limit: int = 20) -> None:
+    def __init__(self, path: Path, retention: Callable[[], int] = lambda: 90) -> None:
         self.path = path
-        self.limit = limit
+        self.retention = retention
         path.parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as db:
             db.executescript("""
@@ -71,6 +100,27 @@ class History:
                     key TEXT PRIMARY KEY, body TEXT NOT NULL, first_seen INTEGER NOT NULL,
                     last_seen INTEGER NOT NULL, notified INTEGER, lease_until REAL);
             """)
+
+            db.execute("""CREATE TABLE IF NOT EXISTS archive (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT, profile TEXT, started_ts INTEGER,
+                duration_s REAL, row_count INTEGER, body TEXT NOT NULL)""")
+            db.execute("CREATE INDEX IF NOT EXISTS archive_time ON archive(started_ts)")
+            db.execute("""CREATE TABLE IF NOT EXISTS retainer_profiles (
+                name TEXT PRIMARY KEY COLLATE NOCASE, params TEXT NOT NULL)""")
+            db.execute("BEGIN IMMEDIATE")
+            db.execute("""INSERT INTO archive(kind,started_ts,duration_s,row_count,body)
+                SELECT CASE json_extract(body,'$.params.preset') WHEN 'snipe' THEN 'snipe'
+                    ELSE 'scan' END, json_extract(body,'$.started_ts'),
+                    json_extract(body,'$.finished_ts')-json_extract(body,'$.started_ts'),
+                    json_array_length(body,'$.rows'),body FROM scans ORDER BY id""")
+            db.execute("DELETE FROM scans")
+            self._prune(db)
+
+    def _prune(self, db: sqlite3.Connection) -> None:
+        db.execute(
+            "DELETE FROM archive WHERE started_ts < ?",
+            (int(time.time()) - self.retention() * 86400,),
+        )
 
     @contextmanager
     def connection(self) -> Iterator[sqlite3.Connection]:
@@ -88,20 +138,138 @@ class History:
                 "INSERT OR REPLACE INTO last_snipe_run VALUES (1,?)", (status.model_dump_json(),)
             )
 
-    def save_scan(self, result: ScanResult) -> None:
-        with self.connection() as db:
-            db.execute("INSERT INTO scans(body) VALUES (?)", (result.model_dump_json(),))
-            db.execute(
-                "DELETE FROM scans WHERE id NOT IN (SELECT id FROM scans ORDER BY id DESC LIMIT ?)",
-                (self.limit,),
-            )
+    @contextmanager
+    def attempt(
+        self, params: ScanParams | RetainerScanParams, profile: str | None
+    ) -> Iterator[int]:
+        started = int(time.time())
+        try:
+            yield started
+        except Exception as exc:
+            finished = int(time.time())
+            warnings = [f"Scan failed ({type(exc).__name__})."]
+            if isinstance(params, RetainerScanParams):
+                result = RetainerScanResult(
+                    params=params,
+                    rows=[],
+                    items_scanned=0,
+                    duration_s=max(0, finished - started),
+                    warnings=warnings,
+                )
+            else:
+                result = ScanResult(
+                    params=params,
+                    rows=[],
+                    started_ts=started,
+                    finished_ts=finished,
+                    warnings=warnings,
+                )
+            self.save_scan(result, profile, started=started)
+            raise
 
-    def scans(self) -> list[ScanResult]:
+    def save_scan(
+        self,
+        result: ScanResult | RetainerScanResult,
+        profile: str | None = None,
+        *,
+        started: int | None = None,
+    ) -> None:
+        if isinstance(result, ScanResult):
+            kind = "snipe" if result.params.preset == "snipe" else "scan"
+            started = result.started_ts
+            duration = result.finished_ts - started
+        else:
+            kind = "retainer"
+            duration = result.duration_s
+            if started is None:
+                started = int(time.time() - duration)
         with self.connection() as db:
+            db.execute(
+                """INSERT INTO archive(kind,profile,started_ts,duration_s,row_count,body)
+                          VALUES (?,?,?,?,?,?)""",
+                (
+                    kind,
+                    profile,
+                    started,
+                    duration,
+                    len(result.rows),
+                    result.model_dump_json(serialize_as_any=True),
+                ),
+            )
+            self._prune(db)
+
+    def entries(
+        self,
+        kind: Kind | None = None,
+        profile: str | None = None,
+        since: int | None = None,
+        until: int | None = None,
+        search: str = "",
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[ArchiveSummary]:
+        query = "SELECT id,kind,profile,started_ts,duration_s,row_count FROM archive WHERE 1"
+        args = []
+        for clause, value in (
+            ("kind=?", kind),
+            ("profile=?", profile),
+            ("started_ts>=?", since),
+            ("started_ts<?", until),
+        ):
+            if value is not None:
+                query += " AND " + clause
+                args.append(value)
+        if search:
+            query += """ AND EXISTS (SELECT 1 FROM json_each(body,'$.rows')
+                     WHERE instr(lower(json_extract(value,'$.item.name')),lower(?))>0)"""
+            args.append(search)
+        query += " ORDER BY started_ts DESC,id DESC LIMIT ? OFFSET ?"
+        with self.connection() as db:
+            self._prune(db)
+            db.row_factory = sqlite3.Row
             return [
-                ScanResult.model_validate_json(body)
-                for (body,) in db.execute("SELECT body FROM scans ORDER BY id DESC")
+                ArchiveSummary(**row)
+                for row in db.execute(query, [*args, limit if limit is not None else -1, offset])
             ]
+
+    def entry(self, key: int) -> ArchiveEntry:
+        with self.connection() as db:
+            self._prune(db)
+            db.row_factory = sqlite3.Row
+            row = db.execute("SELECT * FROM archive WHERE id=?", (key,)).fetchone()
+        if row is None:
+            raise KeyError(key)
+        if row["kind"] == "retainer":
+            result = RetainerScanResult.model_validate_json(row["body"])
+            p = result.params
+            description = [f"Compare {p.retainer_name} on {p.world} with {p.buy_region}."]
+        else:
+            result = ScanResult.model_validate_json(row["body"])
+            description = describe(Profile(params=result.params))
+        return ArchiveEntry(**row, result=result, description=description)
+
+    def retainer_profiles(self) -> dict[str, RetainerScanParams]:
+        with self.connection() as db:
+            return {
+                name: RetainerScanParams.model_validate_json(params)
+                for name, params in db.execute("SELECT name,params FROM retainer_profiles")
+            }
+
+    def save_retainer_profile(self, name: str, params: RetainerScanParams) -> None:
+        if not name.strip() or len(name) > 80:
+            raise ValueError("Choose a profile name up to 80 characters.")
+        with self.connection() as db:
+            try:
+                db.execute(
+                    "INSERT INTO retainer_profiles VALUES (?,?)",
+                    (name.strip(), params.model_dump_json()),
+                )
+            except sqlite3.IntegrityError as exc:
+                raise ValueError("Choose a unique profile name.") from exc
+
+    def delete(self, key: int) -> bool:
+        with self.connection() as db:
+            return bool(db.execute("DELETE FROM archive WHERE id=?", (key,)).rowcount)
 
     def record_hits(self, hits: list[SnipeHit]) -> None:
         """Replace the current feed atomically while preserving earlier sightings."""

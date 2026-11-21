@@ -152,7 +152,7 @@ export default function Snipes({ resource }: { resource: ReturnType<typeof useRe
       {!!hits?.length && <Table label="Live snipe listings">
         <thead><tr>{["Item", "Buy world / DC", "Buy price", "Qty at price", "Home median", "Profit / unit", "Tier / data age", "Discord"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
         <tbody>{hits.map((hit) => <tr key={hit.listing_key}>
-          <td><Item item={hit.item} /></td><td>{hit.buy_world} <small>{hit.buy_dc}</small></td>
+          <td><Item buyWorld={hit.buy_world} item={hit.item} /></td><td>{hit.buy_world} <small>{hit.buy_dc}</small></td>
           <td>{gil(hit.buy_ppu)}</td><td>{gil(hit.buy_qty_at_price)}</td><td>{gil(hit.home_median_7d)}</td>
           <td><strong className={hit.profit_per_unit >= 0 ? "profit" : "loss"}>{gil(hit.profit_per_unit)}</strong></td>
           <td><Badge tone={ageTone(hit.data_age_h)}>{hit.tier.name} · {age(hit.data_age_h)}</Badge></td>
@@ -164,7 +164,7 @@ export default function Snipes({ resource }: { resource: ReturnType<typeof useRe
       {history.length ? <Table label="Snipe history">
         <thead><tr>{["First seen", "Item", "Buy world", "Buy price", "Tier / data age", "Last notified"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
         <tbody>{[...history].sort((a, b) => b.first_seen_ts - a.first_seen_ts).map((hit) => <tr key={hit.listing_key}>
-          <td>{time(hit.first_seen_ts)}</td><td><Item item={hit.item} /></td><td>{hit.buy_world}</td><td>{gil(hit.buy_ppu)}</td>
+          <td>{time(hit.first_seen_ts)}</td><td><Item buyWorld={hit.buy_world} item={hit.item} /></td><td>{hit.buy_world}</td><td>{gil(hit.buy_ppu)}</td>
           <td><Badge tone={ageTone(hit.data_age_h)}>{hit.tier.name} · {age(hit.data_age_h)}</Badge></td>
           <td>{hit.notified_ts == null ? "Not notified" : time(hit.notified_ts)}</td>
         </tr>)}</tbody>
