@@ -8,7 +8,7 @@ from hmac import compare_digest
 from pathlib import Path
 from typing import Any, Literal
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -34,6 +34,8 @@ from gilhound.models import (
 from gilhound.runtime import Runtime
 from gilhound.runtime.discord import DeliveryError
 from gilhound.runtime.profiles import Library, ProfileChange, ProfileList
+from gilhound.runtime.store import ArchiveEntry, ArchiveSummary, Kind
+from gilhound.runtime.travel import Travel
 
 LOCAL_HOST = re.compile(r"(?:localhost|127\.0\.0\.1)(?::([0-9]{1,5}))?", re.ASCII | re.I)
 UI_ICONS = ("/favicon.ico", "/favicon.png", "/apple-touch-icon.png")
@@ -83,6 +85,7 @@ def create_app(
             updates.close()
             runtime.close()
 
+    travel = Travel()
     jobs = Jobs()
     updates = Updates()
     app = FastAPI(
@@ -174,6 +177,50 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
 
+    @app.post("/api/go")
+    def go(world: str) -> bool:
+        settings = runtime.settings.get()
+        if not settings.go_button_enabled:
+            raise HTTPException(403, "Go is disabled.")
+        try:
+            return travel.go(world, settings.go_delay_ms)
+        except BlockingIOError as exc:
+            raise HTTPException(429, str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+    @app.get("/api/retainer-profiles")
+    def retainer_profiles() -> dict[str, RetainerScanParams]:
+        return runtime.history.retainer_profiles()
+
+    @app.post("/api/retainer-profiles", status_code=204)
+    def save_retainer_profile(name: str, params: RetainerScanParams) -> Response:
+        try:
+            runtime.history.save_retainer_profile(name, params)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        return Response(status_code=204)
+
+    @app.get("/api/history")
+    def history(kind: Kind | None = None, profile: str | None = None,
+                since: int | None = None, until: int | None = None,
+                search: str = "", limit: int = Query(101, ge=1, le=500),
+                offset: int = Query(0, ge=0)) -> list[ArchiveSummary]:
+        return runtime.history.entries(kind, profile, since, until, search, limit, offset)
+
+    @app.get("/api/history/{key}")
+    def history_entry(key: int) -> ArchiveEntry:
+        try:
+            return runtime.history.entry(key)
+        except KeyError as exc:
+            raise HTTPException(404, "Archive entry not found.") from exc
+
+    @app.delete("/api/history/{key}", status_code=204)
+    def delete_entry(key: int) -> Response:
+        if not runtime.history.delete(key):
+            raise HTTPException(404, "Archive entry not found.")
+        return Response(status_code=204)
+
     @app.post("/api/scan")
     def run_scan(params: ScanParams) -> ScanResult:
         return runtime.scan(params)
@@ -250,12 +297,12 @@ def create_app(
         return Response(status_code=204)
 
     @app.post("/api/jobs/scan", status_code=202)
-    def submit_scan(params: ScanParams) -> Job:
-        return jobs.submit(lambda _: runtime.scan(params))
+    def submit_scan(params: ScanParams, profile: str | None = None) -> Job:
+        return jobs.submit(lambda _: runtime.scan(params, profile))
 
     @app.post("/api/jobs/retainer", status_code=202)
-    def submit_retainer(params: RetainerScanParams) -> Job:
-        return jobs.submit(lambda progress: runtime.retainer(params, progress))
+    def submit_retainer(params: RetainerScanParams, profile: str | None = None) -> Job:
+        return jobs.submit(lambda progress: runtime.retainer(params, progress, profile))
 
     @app.post("/api/jobs/snipes", status_code=202)
     def submit_snipes() -> Job:

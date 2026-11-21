@@ -21,6 +21,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/go": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Go */
+        post: operations["go_api_go_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** History */
+        get: operations["history_api_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/history/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** History Entry */
+        get: operations["history_entry_api_history__key__get"];
+        put?: never;
+        post?: never;
+        /** Delete Entry */
+        delete: operations["delete_entry_api_history__key__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/info": {
         parameters: {
             query?: never;
@@ -203,6 +255,24 @@ export interface paths {
         put?: never;
         /** Change Profile */
         post: operations["change_profile_api_profiles__library__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/retainer-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Retainer Profiles */
+        get: operations["retainer_profiles_api_retainer_profiles_get"];
+        put?: never;
+        /** Save Retainer Profile */
+        post: operations["save_retainer_profile_api_retainer_profiles_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -426,6 +496,38 @@ export interface components {
              */
             version: string;
         };
+        /** ArchiveEntry */
+        ArchiveEntry: {
+            /** Description */
+            description: string[];
+            /** Duration S */
+            duration_s: number;
+            /** Id */
+            id: number;
+            kind: components["schemas"]["Kind"];
+            /** Profile */
+            profile: string | null;
+            /** Result */
+            result: components["schemas"]["ScanResult"] | components["schemas"]["RetainerScanResult"];
+            /** Row Count */
+            row_count: number;
+            /** Started Ts */
+            started_ts: number;
+        };
+        /** ArchiveSummary */
+        ArchiveSummary: {
+            /** Duration S */
+            duration_s: number;
+            /** Id */
+            id: number;
+            kind: components["schemas"]["Kind"];
+            /** Profile */
+            profile: string | null;
+            /** Row Count */
+            row_count: number;
+            /** Started Ts */
+            started_ts: number;
+        };
         /** CandidateWindow */
         CandidateWindow: {
             /**
@@ -525,6 +627,8 @@ export interface components {
             /** Total */
             total?: number | null;
         };
+        /** @enum {string} */
+        Kind: "scan" | "snipe" | "retainer";
         /** PnLSummary */
         PnLSummary: {
             /**
@@ -761,7 +865,7 @@ export interface components {
             freshness_tiers?: components["schemas"]["FreshnessTier"][] | null;
             /**
              * History Entries
-             * @description Seven-day sales to fetch from history.
+             * @description Maximum sales to fetch across fourteen days from history.
              * @default 80
              */
             history_entries: number;
@@ -932,7 +1036,7 @@ export interface components {
              * Rows
              * @description Matching purchase opportunities.
              */
-            rows: components["schemas"]["ScanRow"][];
+            rows: (components["schemas"]["SnipeHit"] | components["schemas"]["ScanRow"])[];
             /**
              * Started Ts
              * @description Scan start in UTC epoch seconds.
@@ -946,6 +1050,8 @@ export interface components {
         };
         /** ScanRow */
         ScanRow: {
+            /** Average Sale Size */
+            average_sale_size?: number | null;
             /**
              * Buy Dc
              * @description Data centre where the purchase is available.
@@ -966,16 +1072,26 @@ export interface components {
              * @description World where the purchase is available.
              */
             buy_world: string;
+            /** Capital Needed */
+            capital_needed?: number | null;
+            /** Daily Units 14D */
+            daily_units_14d?: number[] | null;
             /**
              * Data Age H
              * @description Age of the purchase listing data in hours.
              */
             data_age_h: number;
+            /** Days To Sell */
+            days_to_sell?: number | null;
+            /** Distinct Sellers */
+            distinct_sellers?: number | null;
             /**
              * Est Wait Days
              * @description Estimated days to sell, if calculable.
              */
             est_wait_days: number | null;
+            /** Home Listing Count */
+            home_listing_count?: number | null;
             /**
              * Home Lowest
              * @description Lowest current home-world gil per unit, if known.
@@ -986,13 +1102,35 @@ export interface components {
              * @description Home-world seven-day median gil per unit.
              */
             home_median_7d: number;
+            /** Hq Sale Share */
+            hq_sale_share?: number | null;
             /** @description Item and quality variant. */
             item: components["schemas"]["ItemRef"];
+            /** Max Sale Price */
+            max_sale_price?: number | null;
+            /** Min Sale Price */
+            min_sale_price?: number | null;
+            /** Nearby Listings */
+            nearby_listings?: number | null;
+            /** Nearby Units */
+            nearby_units?: number | null;
+            /** Next Listing Gap */
+            next_listing_gap?: number | null;
+            /** Profit Per Day */
+            profit_per_day?: number | null;
             /**
              * Profit Per Unit
              * @description Estimated net gil profit per unit after costs.
              */
             profit_per_unit: number;
+            /** Rival Stock */
+            rival_stock?: number | null;
+            /** Roi Pct */
+            roi_pct?: number | null;
+            /** Sales 7D */
+            sales_7d?: number | null;
+            /** Second Buy Price */
+            second_buy_price?: number | null;
             /**
              * Sellable Qty
              * @description Estimated units sellable within the sales window.
@@ -1003,11 +1141,19 @@ export interface components {
              * @description Estimated net profit for the sellable units.
              */
             total_profit_capped: number;
+            /** Trend Pct */
+            trend_pct?: number | null;
+            /** Units Below Sell */
+            units_below_sell?: number | null;
+            /** Units Sold 7D */
+            units_sold_7d?: number | null;
             /** @description Home-world sales evidence. */
             volume_proof: components["schemas"]["VolumeProof"];
         };
         /** SnipeHit */
         SnipeHit: {
+            /** Average Sale Size */
+            average_sale_size?: number | null;
             /**
              * Buy Dc
              * @description Data centre where the purchase is available.
@@ -1028,11 +1174,19 @@ export interface components {
              * @description World where the purchase is available.
              */
             buy_world: string;
+            /** Capital Needed */
+            capital_needed?: number | null;
+            /** Daily Units 14D */
+            daily_units_14d?: number[] | null;
             /**
              * Data Age H
              * @description Age of the purchase listing data in hours.
              */
             data_age_h: number;
+            /** Days To Sell */
+            days_to_sell?: number | null;
+            /** Distinct Sellers */
+            distinct_sellers?: number | null;
             /**
              * Est Wait Days
              * @description Estimated days to sell, if calculable.
@@ -1043,6 +1197,8 @@ export interface components {
              * @description First detection in UTC epoch seconds.
              */
             first_seen_ts: number;
+            /** Home Listing Count */
+            home_listing_count?: number | null;
             /**
              * Home Lowest
              * @description Lowest current home-world gil per unit, if known.
@@ -1053,6 +1209,8 @@ export interface components {
              * @description Home-world seven-day median gil per unit.
              */
             home_median_7d: number;
+            /** Hq Sale Share */
+            hq_sale_share?: number | null;
             /** @description Item and quality variant. */
             item: components["schemas"]["ItemRef"];
             /**
@@ -1060,16 +1218,36 @@ export interface components {
              * @description Stable listing identifier for notification deduplication.
              */
             listing_key: string;
+            /** Max Sale Price */
+            max_sale_price?: number | null;
+            /** Min Sale Price */
+            min_sale_price?: number | null;
+            /** Nearby Listings */
+            nearby_listings?: number | null;
+            /** Nearby Units */
+            nearby_units?: number | null;
+            /** Next Listing Gap */
+            next_listing_gap?: number | null;
             /**
              * Notified Ts
              * @description Last notification in UTC epoch seconds, if sent.
              */
             notified_ts?: number | null;
+            /** Profit Per Day */
+            profit_per_day?: number | null;
             /**
              * Profit Per Unit
              * @description Estimated net gil profit per unit after costs.
              */
             profit_per_unit: number;
+            /** Rival Stock */
+            rival_stock?: number | null;
+            /** Roi Pct */
+            roi_pct?: number | null;
+            /** Sales 7D */
+            sales_7d?: number | null;
+            /** Second Buy Price */
+            second_buy_price?: number | null;
             /**
              * Sellable Qty
              * @description Estimated units sellable within the sales window.
@@ -1082,6 +1260,12 @@ export interface components {
              * @description Estimated net profit for the sellable units.
              */
             total_profit_capped: number;
+            /** Trend Pct */
+            trend_pct?: number | null;
+            /** Units Below Sell */
+            units_below_sell?: number | null;
+            /** Units Sold 7D */
+            units_sold_7d?: number | null;
             /** @description Home-world sales evidence. */
             volume_proof: components["schemas"]["VolumeProof"];
         };
@@ -1210,6 +1394,21 @@ export interface components {
              */
             freshness_tiers?: components["schemas"]["FreshnessTier"][];
             /**
+             * Go Button Enabled
+             * @default true
+             */
+            go_button_enabled: boolean;
+            /**
+             * Go Delay Ms
+             * @default 120
+             */
+            go_delay_ms: number;
+            /**
+             * History Days
+             * @default 90
+             */
+            history_days: number;
+            /**
              * Home World
              * @description Default world for resale and retainer scans.
              */
@@ -1268,6 +1467,21 @@ export interface components {
              * @description Freshness thresholds in ascending order of age.
              */
             freshness_tiers?: components["schemas"]["FreshnessTier"][];
+            /**
+             * Go Button Enabled
+             * @default true
+             */
+            go_button_enabled: boolean;
+            /**
+             * Go Delay Ms
+             * @default 120
+             */
+            go_delay_ms: number;
+            /**
+             * History Days
+             * @default 90
+             */
+            history_days: number;
             /**
              * Home World
              * @description Default world for resale and retainer scans.
@@ -1382,6 +1596,210 @@ export interface operations {
             };
         };
     };
+    go_api_go_post: {
+        parameters: {
+            query: {
+                world: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": boolean;
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    history_api_history_get: {
+        parameters: {
+            query?: {
+                kind?: components["schemas"]["Kind"] | null;
+                profile?: string | null;
+                since?: number | null;
+                until?: number | null;
+                search?: string;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveSummary"][];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    history_entry_api_history__key__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveEntry"];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_entry_api_history__key__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_info_api_info_get: {
         parameters: {
             query?: never;
@@ -1423,7 +1841,9 @@ export interface operations {
     };
     submit_retainer_api_jobs_retainer_post: {
         parameters: {
-            query?: never;
+            query?: {
+                profile?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1475,7 +1895,9 @@ export interface operations {
     };
     submit_scan_api_jobs_scan_post: {
         parameters: {
-            query?: never;
+            query?: {
+                profile?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1915,6 +2337,99 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ProfileList"];
                 };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    retainer_profiles_api_retainer_profiles_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: components["schemas"]["RetainerScanParams"];
+                    };
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    save_retainer_profile_api_retainer_profiles_post: {
+        parameters: {
+            query: {
+                name: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RetainerScanParams"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Invalid Host header */
             400: {

@@ -135,3 +135,11 @@ edit shared files (see AGENTS.md); they request changes instead.
 4. Commit, push, `git tag vX.Y.Z`, `git push origin vX.Y.Z` → the Windows
    release workflow builds and publishes the zip + `SHA256SUMS.txt`.
 5. Installed clients see the update banner within ~1 h (or on restart).
+
+### Scan archive and market evidence
+
+History stores manual, CLI, retainer and scheduled scans in the local user database for 90 days by default. Change retention in Settings. Snipe entries keep the effective alert rules, tiers, warnings and full matching hits, including runs with zero hits. Failed scans retain a warning and their settings. The underlying candidate pool and individual buyer or seller records are omitted. Older saved scans migrate with their original timestamps and available parameters. Missing historical metrics appear as a dash.
+
+Market evidence uses the profile's listing and history entry limits. Weekly statistics and the previous-week comparison use the returned sales within fourteen days, grouped by item quality, except HQ share which counts HQ transactions among both qualities. Each sparkline bucket covers 24 hours ending at scan start. Rival stock counts home units at or below the weekly median. ROI and capital include purchase tax. Days to sell covers the capped quantity at observed velocity; estimated wait also accounts for competing stock.
+
+Use `gilhound history --kind snipe --top 10 --json` to list recent runs and `gilhound history show ID` to inspect a snapshot.

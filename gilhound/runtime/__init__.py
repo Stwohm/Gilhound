@@ -40,7 +40,7 @@ class Runtime:
         self.items = ItemCatalog(self.root)
         self.adjustment_lock = Lock()
         self.settings = SettingsStore(self.root / "settings.json")
-        self.history = History(self.root / "gilhound.db")
+        self.history = History(self.root / "gilhound.db", lambda: self.settings.get().history_days)
         self.discord = Discord()
         self.scan_lock = Lock()
         self.scheduler = Scheduler(self.snipe_interval, self.run_snipes)
@@ -80,50 +80,60 @@ class Runtime:
             travel_cost=settings.travel_cost,
         )
 
-    def scan(self, params: ScanParams) -> ScanResult:
+    def scan(self, params: ScanParams, profile: str | None = None) -> ScanResult:
         if params.preset == ScanPreset.SNIPE:
             with self.scan_lock:
-                result, _ = self._snipe_scan(params, self.settings.get())
+                result, _ = self._snipe_scan(params, self.settings.get(), profile)
                 return result
-        result = run_scan(params, clock=time.time)
-        self.items.decorate(
-            (r.item for r in result.rows), params.home_world, wait=True
-        )
-        self.history.save_scan(result)
+        with self.history.attempt(params, profile):
+            result = run_scan(params, clock=time.time)
+            self.items.decorate(
+                (r.item for r in result.rows), params.home_world, wait=True
+            )
+        self.history.save_scan(result, profile)
         LOG.info("Scan completed")
         return result
 
     def retainer(
-        self, params: RetainerScanParams, progress: Callable[[int, int], None] | None = None
+        self, params: RetainerScanParams, progress: Callable[[int, int], None] | None = None,
+        profile: str | None = None,
     ) -> RetainerScanResult:
         settings = self.settings.get()
-        result = run_retainer_scan(
-            params,
-            clock=time.time,
-            progress=progress,
-            marketable=self.items.marketable,
-            home_world=settings.home_world,
-            buy_region=settings.buy_region,
-        )
+        params = params.model_copy(update={"world": params.world or settings.home_world,
+                                           "buy_region": params.buy_region or settings.buy_region})
+        with self.history.attempt(params, profile) as started:
+            result = run_retainer_scan(
+                params,
+                clock=time.time,
+                progress=progress,
+                marketable=self.items.marketable,
+                home_world=settings.home_world,
+                buy_region=settings.buy_region,
+            )
 
-        self.items.decorate((r.item for r in result.rows), settings.home_world, wait=True)
+            self.items.decorate((r.item for r in result.rows), settings.home_world, wait=True)
+        self.history.save_scan(result, profile, started=started)
         return result
 
     def _snipe_scan(
-        self, params: ScanParams, settings: UserSettings
+        self, params: ScanParams, settings: UserSettings, profile: str | None = None
     ) -> tuple[ScanResult, list[SnipeHit]]:
-        result = run_scan(params, clock=time.time)
-        hits = evaluate(
-            result.rows,
-            params.snipe_rule or settings.snipe_rule,
-            params.freshness_tiers
-            if params.freshness_tiers is not None
-            else settings.freshness_tiers,
-            result.finished_ts,
-        )
-        self.items.decorate((r.item for r in hits), params.home_world, wait=True)
-        result.rows = list(hits)
-        self.history.save_scan(result)
+        params = params.model_copy(update={
+            "snipe_rule": params.snipe_rule or settings.snipe_rule,
+            "freshness_tiers": settings.freshness_tiers if params.freshness_tiers is None
+            else params.freshness_tiers,
+        })
+        with self.history.attempt(params, profile):
+            result = run_scan(params, clock=time.time)
+            hits = evaluate(
+                result.rows,
+                params.snipe_rule,
+                params.freshness_tiers,
+                result.finished_ts,
+            )
+            self.items.decorate((r.item for r in hits), params.home_world, wait=True)
+            result.rows = list(hits)
+        self.history.save_scan(result, profile)
         LOG.info("Scan completed")
         return result, hits
 
@@ -132,7 +142,7 @@ class Runtime:
             settings = self.settings.get()
             profiles = self.profiles.list("snipes", settings)
             active = profiles.profiles[profiles.active]
-            _, hits = self._snipe_scan(active.params, settings)
+            _, hits = self._snipe_scan(active.params, settings, profiles.active)
             self.history.record_hits(hits)
             current = self.history.hits(current=True)
             config = self.settings.get().model_copy(update={"home_world": active.params.home_world})

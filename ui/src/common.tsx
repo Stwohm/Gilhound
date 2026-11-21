@@ -1,3 +1,4 @@
+import { TravelButtons } from "./Travel";
 import { useEffect, useState } from "react";
 import type { InputHTMLAttributes, ReactNode } from "react";
 import type { components } from "./api/types";
@@ -5,6 +6,7 @@ import type { components } from "./api/types";
 export type Schema<K extends keyof components["schemas"]> = components["schemas"][K];
 export type Settings = Schema<"UserSettings-Output">;
 export const defaults: Settings = {
+  go_button_enabled: true, go_delay_ms: 120, history_days: 90,
   home_world: "Cerberus",
   buy_region: "Europe",
   scan_interval_min: 5,
@@ -88,7 +90,7 @@ export function Badge({ children, tone = "muted" }: { children: ReactNode; tone?
   return <span className={`badge ${tone}`}>{children}</span>;
 }
 
-export function Item({ item, showQuality = true }: { item: Schema<"ItemRef">; showQuality?: boolean }) {
+export function Item({ item, showQuality = true, buyWorld }: { buyWorld?: string | null; item: Schema<"ItemRef">; showQuality?: boolean }) {
   const world = item.universalis_url && new URL(item.universalis_url).searchParams.get("server");
   const links = [
     { url: item.universalis_url, label: `Open on Universalis (${world})`, badge: "U" },
@@ -100,7 +102,7 @@ export function Item({ item, showQuality = true }: { item: Schema<"ItemRef">; sh
         <rect x="1" y="1" width="16" height="16" rx="3" fill="none" stroke="currentColor" />
         <text x="9" y="13" textAnchor="middle" fill="currentColor" fontSize="12">{badge}</text>
       </svg>
-    </a>)}{showQuality && <Badge tone={item.hq ? "gold" : "muted"}>{item.hq ? "HQ" : "NQ"}</Badge>}</span>;
+    </a>)}<TravelButtons world={buyWorld} />{showQuality && <Badge tone={item.hq ? "gold" : "muted"}>{item.hq ? "HQ" : "NQ"}</Badge>}</span>;
 }
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {

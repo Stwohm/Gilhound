@@ -118,7 +118,7 @@ class ScanParams(BaseModel):
     max_sale_age_h: float | None = Field(default=None, gt=0, description="Latest sale age limit.")
     max_top_buyer_share: Fraction = Field(default=1, description="Largest allowed buyer fraction.")
     history_entries: int = Field(
-        default=80, ge=1, description="Seven-day sales to fetch from history."
+        default=80, ge=1, description="Maximum sales to fetch across fourteen days from history."
     )
     undercut_gil: GilCost = Field(
         default=1, description="Gil below lowest home listing for snipes."
@@ -179,6 +179,26 @@ class ScanParams(BaseModel):
 
 
 class ScanRow(BaseModel):
+    units_sold_7d: int | None = None
+    sales_7d: int | None = None
+    average_sale_size: float | None = None
+    min_sale_price: int | None = None
+    max_sale_price: int | None = None
+    hq_sale_share: float | None = None
+    home_listing_count: int | None = None
+    distinct_sellers: int | None = None
+    rival_stock: int | None = None
+    units_below_sell: int | None = None
+    nearby_listings: int | None = None
+    nearby_units: int | None = None
+    second_buy_price: int | None = None
+    next_listing_gap: int | None = None
+    roi_pct: float | None = None
+    capital_needed: float | None = None
+    profit_per_day: float | None = None
+    days_to_sell: float | None = None
+    trend_pct: float | None = None
+    daily_units_14d: list[int] | None = None
     item: ItemRef = Field(description="Item and quality variant.")
     buy_world: str = Field(description="World where the purchase is available.")
     buy_dc: str = Field(description="Data centre where the purchase is available.")
@@ -196,7 +216,7 @@ class ScanRow(BaseModel):
 
 class ScanResult(BaseModel):
     params: ScanParams = Field(description="Parameters applied to the scan.")
-    rows: list[ScanRow] = Field(description="Matching purchase opportunities.")
+    rows: list["SnipeHit | ScanRow"] = Field(description="Matching purchase opportunities.")
     started_ts: EpochSeconds = Field(description="Scan start in UTC epoch seconds.")
     finished_ts: EpochSeconds = Field(description="Scan completion in UTC epoch seconds.")
     warnings: list[str] = Field(default_factory=list, description="Non-fatal scan warnings.")
@@ -311,6 +331,9 @@ class PnLSummary(BaseModel):
 
 
 class UserSettings(BaseModel):
+    history_days: int = Field(default=90, ge=1, le=3650)
+    go_button_enabled: bool = True
+    go_delay_ms: int = Field(default=120, ge=20, le=2000)
     snipe_rule: SnipeRule = Field(default_factory=SnipeRule)
     home_world: str = Field(description="Default world for resale and retainer scans.")
     buy_region: str = Field(description="Default market region for purchases.")

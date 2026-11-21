@@ -27,7 +27,8 @@ def test_local_integration(tmp_path: Path, token: str, monkeypatch: pytest.Monke
     ready, release = Event(), Event()
 
     def retainer(
-        params: RetainerScanParams, progress: Callable[[int, int], None] | None = None
+        params: RetainerScanParams, progress: Callable[[int, int], None] | None = None,
+        profile: str | None = None,
     ) -> RetainerScanResult:
         if progress:
             progress(3, 8)
@@ -149,7 +150,7 @@ def test_live_snipe_controls(tmp_path: Path, token: str, monkeypatch: pytest.Mon
     runtime = Runtime(tmp_path)
     entered, release = Event(), Event()
 
-    def scan(params: ScanParams, settings: object) -> tuple[ScanResult, list]:
+    def scan(params: ScanParams, settings: object, profile: str) -> tuple[ScanResult, list]:
         entered.set()
         assert release.wait(3)
         return ScanResult(params=params, rows=[], started_ts=1, finished_ts=2), []

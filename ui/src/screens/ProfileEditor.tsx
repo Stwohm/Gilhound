@@ -10,7 +10,7 @@ type Profile = Schema<"Profile">;
 type Change = Schema<"ProfileChange">;
 type Window = Schema<"CandidateWindow">;
 type Rule = Schema<"SnipeRule">;
-type Props = { library: Library; running?: boolean; onRun?: (params: Params) => Promise<void> };
+type Props = { library: Library; running?: boolean; onRun?: (params: Params, name: string) => Promise<void> };
 
 function Amount({ label, value, set, min = 0, max, decimal, optional }: {
   label: string; value: number | null | undefined; set: (n: number | null) => void;
@@ -96,7 +96,7 @@ function Editor({ library, running, onRun, catalog, name, select, updated }: Pro
           throw new Error("Each tier needs a unique name and age.");
       }
       setBusy(true);
-      if (action === "run") { await onRun?.(profile!.params); return; }
+      if (action === "run") { await onRun?.(profile!.params, name); return; }
       const next = await api.changeProfile(library, { action, profile,
         name: action === "create" ? newName.trim() : target, new_name: newName.trim() });
       updated(next, action === "delete" ? next.active : ["create", "rename"].includes(action) ? newName.trim() : target);

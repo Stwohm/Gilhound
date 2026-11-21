@@ -16,8 +16,14 @@ export interface Api {
   changeProfile(library: Library, change: Schema["ProfileChange"]): Promise<Schema["ProfileList"]>;
   getHidden(): Promise<Schema["ItemRef"][]>;
   setPersonal(change: Schema["PositionPersonal"]): Promise<void>;
-  scan(params: JsonBody<"run_scan_api_scan_post">): Promise<JsonResult<"run_scan_api_scan_post">>;
-  retainerScan(params: JsonBody<"run_retainer_scan_api_retainer_scan_post">): Promise<JsonResult<"run_retainer_scan_api_retainer_scan_post">>;
+  go(world: string): Promise<boolean>;
+  history(query: URLSearchParams): Promise<Schema["ArchiveSummary"][]>;
+  entry(id: number): Promise<Schema["ArchiveEntry"]>;
+  deleteEntry(id: number): Promise<void>;
+  scan(params: JsonBody<"run_scan_api_scan_post">, profile?: string): Promise<JsonResult<"run_scan_api_scan_post">>;
+  retainerProfiles(): Promise<Record<string, Schema["RetainerScanParams"]>>;
+  saveRetainerProfile(name: string, params: Schema["RetainerScanParams"]): Promise<void>;
+  retainerScan(params: JsonBody<"run_retainer_scan_api_retainer_scan_post">, profile?: string): Promise<JsonResult<"run_retainer_scan_api_retainer_scan_post">>;
   getSnipeStatus(): Promise<JsonResult<"get_snipe_status_api_snipes_status_get">>;
   getSnipes(): Promise<JsonResult<"get_snipes_api_snipes_get">>;
   runSnipes(): Promise<JsonResult<"run_snipes_api_snipes_run_post">>;
@@ -103,8 +109,14 @@ const realApi: Api = {
   changeProfile: (library, change) => json("/api/profiles/" + library, "POST", change),
   getHidden: () => json("/api/positions/hidden"),
   setPersonal: async change => { await request("/api/positions/personal", "PUT", change); },
-  scan: (params) => job("/api/jobs/scan", params),
-  retainerScan: (params) => job("/api/jobs/retainer", params),
+  go: world => json("/api/go?world=" + encodeURIComponent(world), "POST"),
+  history: query => json("/api/history?" + query),
+  entry: id => json("/api/history/" + id),
+  deleteEntry: async id => { await request("/api/history/" + id, "DELETE"); },
+  scan: (params, profile) => job("/api/jobs/scan" + (profile ? "?profile=" + encodeURIComponent(profile) : ""), params),
+  retainerProfiles: () => json("/api/retainer-profiles"),
+  saveRetainerProfile: async (name, params) => { await request("/api/retainer-profiles?name=" + encodeURIComponent(name), "POST", params); },
+  retainerScan: (params, profile) => job("/api/jobs/retainer" + (profile ? "?profile=" + encodeURIComponent(profile) : ""), params),
   getSnipeStatus: () => json("/api/snipes/status"),
   getSnipes: () => json("/api/snipes"),
   runSnipes: () => job("/api/jobs/snipes"),

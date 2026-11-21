@@ -1,4 +1,5 @@
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -51,6 +52,7 @@ def test_json_rows(
 
 
 def test_scan_replay(
+    extended_replay: Callable,
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     market = Path(__file__).parent / "fixtures" / "market"
@@ -58,7 +60,7 @@ def test_scan_replay(
     with install("replay", market / "retainer"):
         Universalis(http).data_centers()
     monkeypatch.setenv("APPDATA", str(tmp_path))
-    with install("replay", market / "hiscan_vol") as replay:
+    with install("replay", extended_replay(market / "hiscan_vol")) as replay:
         monkeypatch.setattr(
             "gilhound.runtime.run_scan",
             lambda params, **_: run_scan(params, clock=replay.now, http=http),
@@ -72,3 +74,17 @@ def test_scan_replay(
     assert len(raw.splitlines()) == 1 and result["command"] == "scan"
     assert len(result["rows"]) == min(20, result["total"]) > 0
     assert all(row.keys() == {"item.id", "buy_ppu"} for row in result["rows"])
+    # Keep archive reads at the replay timestamp, independent of today's retention cutoff.
+    with install("replay", market / "hiscan_vol"):
+        assert cli.main(["history", "--kind", "scan", "--top", "1", "--json"]) == 0
+        (summary,) = json.loads(capsys.readouterr().out)["rows"]
+        assert summary["profile"] == "Volume" and summary["row_count"] == result["total"]
+        assert cli.main(["history", "show", str(summary["id"])]) == 0
+        entry = json.loads(capsys.readouterr().out)
+        assert entry["result"]["params"]["preset"] == "volume" and entry["description"]
+        runtime = Runtime()
+        try:
+            item_name = entry["result"]["rows"][0]["item"]["name"]
+            assert runtime.history.entries(search=item_name.lower())[0].id == summary["id"]
+        finally:
+            runtime.close()

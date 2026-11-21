@@ -8,6 +8,7 @@ from typing import Any
 
 from gilhound.models import RetainerScanParams, ScanPreset
 from gilhound.runtime import Runtime
+from gilhound.runtime.profiles import BUILTINS
 
 
 def rounded(value: Any) -> Any:
@@ -43,13 +44,23 @@ def report(runtime: Runtime, args: argparse.Namespace) -> dict:
             params = profiles.profiles[args.profile].params
         else:
             params = runtime.params(ScanPreset(args.preset.replace("-", "_")))
-        scan = runtime.scan(params)
+        profile = args.profile or next(
+            name for name, preset in BUILTINS.items() if preset == params.preset
+        )
+        scan = runtime.scan(params, profile)
+        if not fields:
+            fields = ["item.name", "item.hq", "buy_world", "buy_ppu", "sellable_qty",
+                      "profit_per_unit", "total_profit_capped"]
         rows = scan.rows
         result.update(
             started_ts=scan.started_ts,
             finished_ts=scan.finished_ts,
             warning_count=len(scan.warnings),
         )
+    elif args.command == "history":
+        if args.action == "show":
+            return runtime.history.entry(args.id).model_dump()
+        rows = runtime.history.entries(kind=args.kind, limit=args.top)
     elif args.command == "profiles":
         profiles = runtime.profiles.list(args.library, runtime.settings.get())
         if args.describe:
@@ -110,6 +121,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     profiles.add_argument("--describe", metavar="NAME")
     profiles.add_argument("--library", choices=["scan", "snipes"], default="scan")
     strategy.add_argument("--preset", choices=[*ScanPreset, "high-margin"], default="flip")
+    history = commands.add_parser("history", parents=[common])
+    history.add_argument("--kind", choices=["scan", "snipe", "retainer"])
+    show = history.add_subparsers(dest="action").add_parser("show")
+    show.add_argument("id", type=int)
+    show.add_argument("--json", action="store_true")
     retainer = commands.add_parser("retainer", parents=[common])
     retainer.add_argument("name")
     retainer.add_argument("--world")
@@ -131,7 +147,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.error("--top must be nonnegative")
     runtime = Runtime()
     try:
-        result = rounded(report(runtime, args))
+        result = report(runtime, args)
+        if args.command != "history" or args.action != "show":
+            result = rounded(result)
     except Exception as exc:
         print(json.dumps({"command": args.command, "error": type(exc).__name__}))
         return 1

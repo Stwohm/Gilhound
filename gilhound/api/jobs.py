@@ -1,4 +1,4 @@
-"""Bounded in-memory market jobs. Retainer queries expire with the job."""
+"""Bounded in-memory progress and results for asynchronous market jobs."""
 
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
