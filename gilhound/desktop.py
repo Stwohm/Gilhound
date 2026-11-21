@@ -11,7 +11,8 @@ import struct
 import sys
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
+from contextlib import ExitStack
 from pathlib import Path
 
 import uvicorn
@@ -20,7 +21,7 @@ from gilhound import __version__
 from gilhound.api.app import create_app
 from gilhound.runtime.diagnostics import LOG
 from gilhound.updater import instance
-from gilhound.updater._layout import acknowledge_startup, install_root
+from gilhound.updater._layout import acknowledge_startup, install_root, lock
 
 
 def webview2_available(library: Path) -> bool:
@@ -73,20 +74,30 @@ def main(argv: Sequence[str] | None = None) -> int:
     if sys.platform == "win32" and getattr(sys, "frozen", False):
         root = install_root()
         root.mkdir(parents=True, exist_ok=True)
-        with instance.show_event(root) as (handle, first):
-            if not first and not args.launcher_pid:
-                instance.request_show(root, handle)
-                return 0
-            pid = root / "window.pid"
-            pid.write_text(str(os.getpid()))
+        with ExitStack() as ownership, instance.show_event(root) as handle:
+            with lock(root / "window.lock"):
+                if pid := instance.window_pid(root):
+                    instance.request_show(pid, handle)
+                    return 0
+                ownership.enter_context(instance.owner_mutex(root))
+                pidfile = root / "window.pid"
+                pidfile.write_text(str(os.getpid()), encoding="ascii")
+                ownership.callback(pidfile.unlink, missing_ok=True)
+
+            def release_window() -> None:
+                with lock(root / "window.lock"):
+                    ownership.close()
+
             try:
-                return _window(args, handle)
+                return _window(args, handle, release_window)
             finally:
-                pid.unlink(missing_ok=True)
+                release_window()
     return _window(args)
 
 
-def _window(args: argparse.Namespace, event: int = 0) -> int:
+def _window(
+    args: argparse.Namespace, event: int = 0, release_window: Callable[[], None] | None = None,
+) -> int:
     import webview
 
     if sys.platform == "win32" and not webview2_available(Path(webview.__file__).parent / "lib"):
@@ -122,6 +133,13 @@ def _window(args: argparse.Namespace, event: int = 0) -> int:
                 "Gilhound", f"http://127.0.0.1:{port}/", width=1200, height=800
             )
             if event:
+                def on_closing() -> None:
+                    closing.set()
+                    if release_window:
+                        release_window()
+
+                window.events.closing += on_closing
+
                 def listen() -> None:
                     while not window.events.shown.wait(0.2):
                         if closing.is_set():

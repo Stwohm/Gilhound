@@ -1,6 +1,8 @@
 import hashlib
 import importlib.util
 import json
+import logging
+import os
 import shutil
 import subprocess
 import sys
@@ -90,6 +92,28 @@ def test_semver() -> None:
                 "1.2.0", "1.10.0", "2.0.0"]
     assert sorted(reversed(versions), key=precedence) == versions
     assert precedence("1.0.0+foo") == precedence("1.0.0+bar")
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="checks Windows process identity")
+@pytest.mark.parametrize("dead", [True, False], ids=["dead-pid", "reused-unrelated-pid"])
+def test_stale_window_pid_starts_app(
+    layout: Path, dead: bool, caplog: pytest.LogCaptureFixture,
+) -> None:
+    from gilhound.updater.instance import show_event
+
+    pid = os.getpid()
+    if dead:
+        with subprocess.Popen([sys.executable, "-c", "pass"]) as child:
+            pid = child.pid
+        assert child.returncode == 0
+    pidfile = layout / "window.pid"
+    pidfile.write_text(str(pid))
+    with show_event(layout), caplog.at_level(logging.INFO):
+        assert launcher.launch(layout) == 0
+    assert not pidfile.exists()
+    assert (layout / "started").read_text().splitlines() == ["app-0.1.0"]
+    assert caplog.messages.count("stale instance file removed") == 1
+    assert caplog.messages.count("Starting app-0.1.0") == 1
 
 
 @pytest.mark.parametrize("version", ["../0.1.1", "1.2", "01.2.3", "1.2.3-01"])
@@ -373,7 +397,7 @@ def test_clean_live_and_crashed_leases(layout: Path) -> None:
     assert not unused.exists() and not list(layout.glob("lease-*.lock"))
 
 
-@pytest.mark.skipif(sys.platform != "win32", reason="requires the Windows instance event")
+@pytest.mark.skipif(sys.platform != "win32", reason="requires the Windows instance protocol")
 def test_download_and_restart_from_api(
     layout: Path, feed: Path, client: TestClient, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -381,7 +405,6 @@ def test_download_and_restart_from_api(
 
     from gilhound.api import updates
     from gilhound.updater._layout import version_lease
-    from gilhound.updater.instance import show_event
 
     # Stand in only for the two frozen executable entry points; both use the
     # production launcher protocol, including a separate restart process.
@@ -393,9 +416,15 @@ def test_download_and_restart_from_api(
         archive.writestr(f"app-{info.version}/Gilhound.exe", f"""
 import runpy, sys, subprocess
 from pathlib import Path
+from gilhound.updater import instance
 entry = runpy.run_path({str(script)!r})
 spawn = subprocess.Popen
 subprocess.Popen = lambda args, **kw: spawn([sys.executable, *args], **kw)
+def stand_in_image(pid):
+    assert pid == {os.getpid()}
+    Path("restart-waiting").touch()
+    return Path.cwd() / "app-0.2.1" / {EXE!r}
+instance._image = stand_in_image
 sys.exit(entry['launch'](Path.cwd()))
 """)
     digest = hashlib.sha256((feed / info.filename).read_bytes()).hexdigest()
@@ -413,13 +442,21 @@ sys.exit(entry['launch'](Path.cwd()))
         return child
 
     monkeypatch.setattr(subprocess, "Popen", restart)
-    with show_event(layout), version_lease(layout, "0.2.1"), lock(layout / "use-0.2.1.lock"):
+    pidfile = layout / "window.pid"
+    pidfile.write_text(str(os.getpid()))
+    with version_lease(layout, "0.2.1"), lock(layout / "use-0.2.1.lock"):
         assert client.post("/api/update/check").json()["latest_version"] == info.version
         job = client.post("/api/update/apply")
         assert job.status_code == 202
         assert exiting.wait(5)
+        deadline = time.monotonic() + 5
+        while not (layout / "restart-waiting").exists() and time.monotonic() < deadline:
+            time.sleep(0.025)
+        assert (layout / "restart-waiting").exists()
         assert (layout / "pending.txt").read_text() == info.version
         assert len(restarts) == 1 and restarts[0].poll() is None
+    with lock(layout / "window.lock"):
+        pidfile.unlink()
     assert restarts[0].wait(10) == 0
     assert (layout / "started").read_text().splitlines() == [f"app-{info.version}"]
     assert (layout / "current.txt").read_text() == info.version

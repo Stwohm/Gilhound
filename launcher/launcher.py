@@ -26,7 +26,7 @@ from gilhound.updater._layout import (
     version_lease,
     write_pointer,
 )
-from gilhound.updater.instance import request_show, show_event
+from gilhound.updater.instance import request_show, show_event, window_pid
 from gilhound.updater.motw import unblock
 
 
@@ -120,20 +120,18 @@ def _bundles(root: Path) -> list[str]:
 
 def launch(root: Path) -> int:
     restart = os.environ.get("GILHOUND_RESTART_VERSION")
-    while True:
-        with show_event(root) as (event, first):
-            if first:
-                return _supervise(root)
-            if not restart or _read_pointer(root, "pending.txt") != restart:
-                request_show(root, event)
-                return 0
-        # The old app and supervisor are releasing their event after the restart request.
-        time.sleep(0.05)
-
-
-def _supervise(root: Path) -> int:
     with ExitStack() as leases:
         with lock(root / "install.lock"):
+            while True:
+                with lock(root / "window.lock"):
+                    pid = window_pid(root)
+                    if pid is None:
+                        break
+                    if not restart or _read_pointer(root, "pending.txt") != restart:
+                        with show_event(root) as event:
+                            request_show(pid, event)
+                        return 0
+                time.sleep(0.05)
             versions = _bundles(root)
             current = _read_pointer(root, "current.txt")
             pending = _read_pointer(root, "pending.txt")
@@ -186,6 +184,13 @@ def _supervise(root: Path) -> int:
             if app is None:
                 leases.enter_context(version_lease(root, current))
                 app = _start(root, current)
+                # Serialize simultaneous shortcut clicks until the desktop publishes its PID.
+                if getattr(sys, "frozen", False):
+                    deadline = time.monotonic() + 60
+                    while not (root / "window.pid").exists() and app.poll() is None:
+                        if time.monotonic() >= deadline:
+                            break
+                        time.sleep(0.05)
             retired = _clean(root, {current, previous})
         if rollback and getattr(sys, "frozen", False):
             threading.Thread(

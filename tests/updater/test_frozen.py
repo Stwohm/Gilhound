@@ -112,6 +112,7 @@ def test_frozen_second_launch_restores_window(tmp_path: Path) -> None:
     from ctypes import wintypes
 
     from gilhound import __version__
+    from gilhound.updater.instance import show_event
 
     bundle = REPO / f"dist/Gilhound-{__version__}-win64.zip"
     if not bundle.exists():
@@ -145,18 +146,25 @@ def test_frozen_second_launch_restores_window(tmp_path: Path) -> None:
         return True
 
     args = [root / "Gilhound.exe"]
-    first = subprocess.Popen(args, env=env, cwd=root)
-    try:
-        deadline = time.monotonic() + 60
+    pidfile = root / "window.pid"
+
+    def wait_for_window(supervisor: subprocess.Popen, timeout: float) -> int:
+        nonlocal pid
+        windows.clear()
+        deadline = time.monotonic() + timeout
         while not windows and time.monotonic() < deadline:
-            assert first.poll() is None
-            pidfile = root / "window.pid"
+            assert supervisor.poll() is None
             if pidfile.exists() and (value := pidfile.read_text()).isdigit():
                 pid = int(value)
                 user.EnumWindows(collect, 0)
             time.sleep(0.05)
         assert windows, (root / "launcher.log").read_text()
-        hwnd = windows[0]
+        return windows[0]
+
+    first = subprocess.Popen(args, env=env, cwd=root)
+    launches = [first]
+    try:
+        hwnd = wait_for_window(first, 60)
         user.ShowWindow(hwnd, 6)  # SW_MINIMIZE
         assert user.IsIconic(hwnd)
         leases = list(root.glob("lease-*.lock"))
@@ -174,9 +182,27 @@ def test_frozen_second_launch_restores_window(tmp_path: Path) -> None:
         assert int(pidfile.read_text()) == pid and first.poll() is None
         assert list(root.glob("lease-*.lock")) == leases
         assert (root / "launcher.log").read_text().count(f"Starting app-{__version__}") == 1
-        user.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
-        assert first.wait(15) == 0
+        assert f"focused existing pid {pid}" in (root / "launcher.log").read_text()
+        old_pid = pid
+        # Reproduce a lingering show handle even if the first supervisor exits quickly.
+        with show_event(root):
+            assert user.PostMessageW(hwnd, 0x0010, 0, 0)  # WM_CLOSE
+            deadline = time.monotonic() + 5
+            while user.IsWindow(hwnd) and time.monotonic() < deadline:
+                time.sleep(0.025)
+            assert not user.IsWindow(hwnd) and not pidfile.exists()
+            reopened = subprocess.Popen(args, env=env, cwd=root)
+            launches.append(reopened)
+            hwnd = wait_for_window(reopened, 8)
+            assert pid != old_pid
+            assert first.wait(5) == 0
+            assert int(pidfile.read_text()) == pid
+            assert (root / "launcher.log").read_text().count(f"Starting app-{__version__}") == 2
+            assert user.PostMessageW(hwnd, 0x0010, 0, 0)
+            assert reopened.wait(5) == 0 and not pidfile.exists()
     finally:
-        if first.poll() is None:
-            subprocess.run(["taskkill", "/pid", str(first.pid), "/t", "/f"], capture_output=True)
-            first.wait(10)
+        for process in launches:
+            if process.poll() is None:
+                subprocess.run(["taskkill", "/pid", str(process.pid), "/t", "/f"],
+                               capture_output=True)
+                process.wait(10)

@@ -1,16 +1,26 @@
-"""One auto-reset show event per Windows session and installed directory."""
+"""Desktop ownership and focus requests for one installed directory."""
 
 import ctypes
+import logging
 import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from ctypes import wintypes
 from pathlib import Path
 
+from ._layout import EXE, precedence, same_location
+
 if os.name == "nt":
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel.CreateEventW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.BOOL, wintypes.LPCWSTR]
     kernel.CreateEventW.restype = wintypes.HANDLE
+    kernel.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
+    kernel.CreateMutexW.restype = wintypes.HANDLE
+    kernel.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+    kernel.OpenProcess.restype = wintypes.HANDLE
+    kernel.QueryFullProcessImageNameW.argtypes = [
+        wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD),
+    ]
     kernel.CloseHandle.argtypes = [wintypes.HANDLE]
     kernel.SetEvent.argtypes = [wintypes.HANDLE]
     kernel.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
@@ -20,30 +30,79 @@ if os.name == "nt":
     user.AllowSetForegroundWindow.argtypes = [wintypes.DWORD]
 
 
-@contextmanager
-def show_event(root: Path) -> Iterator[tuple[int, bool]]:
-    if os.name != "nt":
-        yield 0, True
-        return
+def _name(root: Path, kind: str) -> str:
     identity = root.stat()
-    name = rf"Local\Gilhound-show-{identity.st_dev:x}-{identity.st_ino:x}"
-    handle = kernel.CreateEventW(None, False, False, name)
+    return rf"Local\Gilhound-{kind}-{identity.st_dev:x}-{identity.st_ino:x}"
+
+
+@contextmanager
+def owner_mutex(root: Path) -> Iterator[bool]:
+    """The desktop keeps the sole persistent handle until its window closes."""
+    handle = kernel.CreateMutexW(None, False, _name(root, "owner"))
     if not handle:
         raise ctypes.WinError(ctypes.get_last_error())
     try:
-        yield handle, ctypes.get_last_error() != 183  # ERROR_ALREADY_EXISTS
+        yield ctypes.get_last_error() != 183  # ERROR_ALREADY_EXISTS
     finally:
         kernel.CloseHandle(handle)
 
 
-def request_show(root: Path, handle: int) -> None:
+@contextmanager
+def show_event(root: Path) -> Iterator[int]:
+    handle = kernel.CreateEventW(None, False, False, _name(root, "show"))
+    if not handle:
+        raise ctypes.WinError(ctypes.get_last_error())
     try:
-        pid = int((root / "window.pid").read_text())
-        user.AllowSetForegroundWindow(pid)
-    except (OSError, ValueError):
-        pass  # The event also queues a request during startup.
+        yield handle
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def _image(pid: int) -> Path | None:
+    if os.name != "nt" or not 0 < pid <= 0xffffffff:
+        return None
+    handle = kernel.OpenProcess(0x101000, False, pid)  # QUERY_LIMITED_INFORMATION | SYNCHRONIZE
+    if not handle:
+        return None
+    try:
+        buffer = ctypes.create_unicode_buffer(32768)
+        size = wintypes.DWORD(len(buffer))
+        if (kernel.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size))
+                and kernel.WaitForSingleObject(handle, 0) == 258):
+            return Path(buffer.value)
+        return None
+    finally:
+        kernel.CloseHandle(handle)
+
+
+def window_pid(root: Path) -> int | None:
+    """Caller holds window.lock across validation and focus or registration."""
+    path = root / "window.pid"
+    try:
+        pid = int(path.read_text(encoding="ascii"))
+        image = _image(pid)
+        if (image and image.name.lower() == EXE and image.parent.name.startswith("app-")
+                and same_location(image.parent.parent, root)):
+            version = precedence(image.parent.name[4:])
+            if version < precedence("0.2.4"):  # Older desktops only publish a PID.
+                return pid
+            with owner_mutex(root) as first:
+                if not first:
+                    return pid
+    except FileNotFoundError:
+        return None
+    except ValueError:
+        pass
+    path.unlink(missing_ok=True)
+    logging.info("stale instance file removed")
+    return None
+
+
+def request_show(pid: int, handle: int) -> None:
+    user.AllowSetForegroundWindow(pid)
     if not kernel.SetEvent(handle):
         raise ctypes.WinError(ctypes.get_last_error())
+    logging.info("focused existing pid %d", pid)
 
 
 def wait_show(handle: int) -> bool:
