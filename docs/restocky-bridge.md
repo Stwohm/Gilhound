@@ -25,18 +25,19 @@ Gilhound treats the bridge as available when `heartbeat.json` is younger than
 15 s and `enabled` is true; otherwise Go falls back to copying the command.
 Gilhound waits up to 5 s for the outbox reply and shows its status.
 
-## v2 addition: item search on market-board open (optional field)
+## v2 addition: item name search on market-board open (optional field)
 
 Inbox requests may carry an optional `item` object:
 `{"version":1,"id":"<uuid4>","command":"/li Raiden market","created_ts":<epoch s>,"item":{"id":50971,"hq":false,"name":"Ascendant Twine"}}`
 
 - Restocky ≥ 0.3.10 accepts it (older versions ignore unknown fields).
-- After the command succeeds, Restocky stores one **pending search** (item id,
-  HQ flag, expires 10 min after the command, replaced by any newer Go).
-- When the player opens the market board themselves (the item-search window
-  appears) while the pending search is valid and the player is on the target
-  world, Restocky searches that item and opens its listings, then clears the
-  pending search. It never walks to or interacts with the market board.
-- Heartbeat gains `"features":["travel","mb_search"]` so Gilhound can show
-  whether item search is supported.
-- `item.id` must be a positive integer; `name` is informational only.
+- After the command succeeds, Restocky stores one **pending search** by item
+  name. The search expires after 10 min or is replaced by a newer Go request.
+- When the player opens the market board on the target world while the search
+  is pending, Restocky enters `item.name`, runs the search, and clears the
+  pending search. The player clicks the item in the results to open its listings.
+- Restocky advertises `"features":["travel","mb_search_name"]` in its heartbeat.
+  Gilhound exposes support as `mb_search_name` and also accepts a heartbeat
+  advertising `mb_search` for forward compatibility.
+- `item.id` must be a positive integer. The request carries `id` and `hq`, and
+  Restocky 0.3.10 searches using `name`.

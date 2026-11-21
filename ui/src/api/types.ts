@@ -661,8 +661,18 @@ export interface components {
         };
         /** BridgeGo */
         BridgeGo: {
+            item?: components["schemas"]["BridgeItem"] | null;
             /** World */
             world: string;
+        };
+        /** BridgeItem */
+        BridgeItem: {
+            /** Hq */
+            hq: boolean;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
         };
         /** BridgeResult */
         BridgeResult: {
@@ -676,6 +686,11 @@ export interface components {
         };
         /** BridgeStatus */
         BridgeStatus: {
+            /**
+             * Mb Search Name
+             * @default false
+             */
+            mb_search_name: boolean;
             /** Plugin Version */
             plugin_version?: string | null;
             /**

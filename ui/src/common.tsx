@@ -106,7 +106,7 @@ export function Item({ item, showQuality = true, buyWorld, quote }: { quote?: Qu
         <rect x="1" y="1" width="16" height="16" rx="3" fill="none" stroke="currentColor" />
         <text x="9" y="13" textAnchor="middle" fill="currentColor" fontSize="12">{badge}</text>
       </svg>
-    </a>)}<TravelButtons world={buyWorld} quote={quote} />{showQuality && <Badge tone={item.hq ? "gold" : "muted"}>{item.hq ? "HQ" : "NQ"}</Badge>}</span>;
+    </a>)}<TravelButtons item={item} world={buyWorld} quote={quote} />{showQuality && <Badge tone={item.hq ? "gold" : "muted"}>{item.hq ? "HQ" : "NQ"}</Badge>}</span>;
 }
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {

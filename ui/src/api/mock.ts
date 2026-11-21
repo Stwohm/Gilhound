@@ -165,7 +165,7 @@ function record(result: Entry["result"], profile?:string) {
     result,description:[]});
 }
 export const mockApi: Api = {
-  async bridge() { return { status: "not_running" }; },
+  async bridge() { return { status: "not_running", mb_search_name: false }; },
   async go() { return { status: "unavailable", reason: "Restocky not running" }; },
   async history(q){return [...archive.values()].reverse().filter(e=>
     (!q.has("kind") || e.kind===q.get("kind")) && (!q.has("profile") || e.profile===q.get("profile"))

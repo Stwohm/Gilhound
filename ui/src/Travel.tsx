@@ -6,6 +6,7 @@ import { api } from "./api/client";
 
 export const route = (world: string) => `/li ${world.toLowerCase()} market`;
 type Status = components["schemas"]["BridgeStatus"];
+type BridgeItem = components["schemas"]["BridgeItem"];
 const labels = {
   available: "Available",
   disabled: "disabled in Restocky",
@@ -57,20 +58,25 @@ export function BridgeIndicator() {
   const { bridge } = useContext(Context);
   return <span>Restocky bridge · {bridge ? labels[bridge.status] : "Status unavailable"}
     {bridge?.plugin_version && ` · v${bridge.plugin_version}`}
-    {bridge?.world && ` · ${bridge.world}`}</span>;
+    {bridge?.world && ` · ${bridge.world}`}
+    {bridge && ` · Market board item search: ${bridge.mb_search_name ? "supported" : "unsupported"} (Restocky 0.3.10+)`}</span>;
 }
 
 export function checkQuotes(quotes: Quote[], home: string) {
   return reviewQuotes(quotes, home, api.recheck, message => window.confirm(message), message => window.alert(message));
 }
 
-export function TravelButtons({ world, quote }: { world?: string | null; quote?: Quote }) {
+export function TravelButtons({ item, world, quote }: { item: BridgeItem; world?: string | null; quote?: Quote }) {
   const { home, bridge, notify } = useContext(Context);
   const [busy, setBusy] = useState(false);
   const target = world === undefined ? home : world;
   const available = bridge?.status === "available";
   const reason = bridge ? labels[bridge.status] : "Bridge status unavailable";
   if (!target) return null;
+  const searchMessage = bridge?.mb_search_name
+    ? `Travels to ${target}; when the market board opens, Restocky searches ${item.name} — click it in the results.`
+    : null;
+  const { id, hq, name } = item;
   async function act(go: boolean) {
     if (!target) return;
     setBusy(true);
@@ -78,9 +84,9 @@ export function TravelButtons({ world, quote }: { world?: string | null; quote?:
       if (quote && !await checkQuotes([quote], home)) return;
       let fallback = reason;
       if (go && available) {
-        const result = await api.go(target);
+        const result = await api.go({ world: target, item: { id, hq, name } });
         if (result.status !== "unavailable") {
-          notify(result.status === "ok" ? "Route sent" : `${result.status}: ${result.reason}`);
+          notify(result.status === "ok" ? (searchMessage ?? "Route sent") : `${result.status}: ${result.reason}`);
           return;
         }
         fallback = result.reason;
@@ -109,7 +115,7 @@ export function TravelButtons({ world, quote }: { world?: string | null; quote?:
         disabled={busy}
         className={available ? undefined : "copy-fallback"}
         aria-label={available ? `Go to ${target}` : `Copy route to ${target}. ${reason}`}
-        title={available ? "Go via Restocky" : `${reason}. Click to copy the command.`}
+        title={available ? (searchMessage ?? "Go via Restocky") : `${reason}. Click to copy the command.`}
         onClick={() => void act(true)}
       >
         ➤
