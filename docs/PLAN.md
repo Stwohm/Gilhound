@@ -4,7 +4,7 @@ Desktop app for FFXIV market-board flipping: scan for flips, run a periodic
 snipe scan with Discord notifications, track positions from plugin data.
 Used by humans (UI) and by AI agents (CLI with compact JSON).
 
-Status: **v0.1.1 released, F0–F3 done** (2026-11-21). F4 (friend install) pending.
+Status: **v0.1.4 released** (2026-11-21). F4 (friend install) pending; server worker deferred.
 
 ## Decisions
 
