@@ -9,8 +9,12 @@ scan with Discord notifications, and position tracking from plugin data
 Install: see [docs/INSTALL.md](docs/INSTALL.md). Design notes:
 [docs/PLAN.md](docs/PLAN.md).
 
-Gilhound only reads public market APIs (Universalis, Saddlebag Exchange) and
-files that Dalamud plugins write on your PC. It does not interact with the game.
+For scans and position tracking, Gilhound reads public market APIs (Universalis
+and Saddlebag Exchange) and files that Dalamud plugins write on your PC.
+If you enable the optional Restocky bridge, clicking **Go** can move your
+character. Gilhound requests only `/li <world> market`, once per click.
+When the bridge is unavailable, **Go** copies the command to your clipboard
+for you to paste and run in game. **Copy route** always uses the clipboard.
 
 ## License
 

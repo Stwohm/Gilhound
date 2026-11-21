@@ -6,8 +6,10 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from contextlib import ExitStack
 from pathlib import Path
+from uuid import uuid4
 
 from gilhound.updater._layout import (
     EXE,
@@ -16,6 +18,7 @@ from gilhound.updater._layout import (
     pointer,
     precedence,
     ready,
+    rejected,
     write_pointer,
 )
 
@@ -36,51 +39,71 @@ def _clean(root: Path, keep: set[str | None]) -> None:
             logging.info("Deferred cleanup of %s", version)
 
 
-def _start(root: Path, version: str) -> subprocess.Popen:
+def _start(root: Path, version: str, marker: Path | None = None) -> subprocess.Popen:
     folder = root / f"app-{version}"
+    args = [folder / EXE, "--launcher-pid", str(os.getpid())]
+    if marker:
+        args.extend(["--ready-marker", marker])
     return subprocess.Popen(
-        [folder / EXE, "--launcher-pid", str(os.getpid())],
+        args,
         cwd=folder,
         env={**os.environ, "PYINSTALLER_RESET_ENVIRONMENT": "1"},
     )
 
 
+def _await_startup(app: subprocess.Popen, marker: Path) -> None:
+    deadline = time.monotonic() + 60
+    while not marker.is_file():
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            app.kill()
+            app.wait()
+            raise RuntimeError("No startup acknowledgement within 60 seconds")
+        try:
+            status = app.wait(timeout=min(0.25, remaining))
+        except subprocess.TimeoutExpired:
+            continue
+        # The child may acknowledge and exit during the same poll.
+        if not marker.is_file():
+            raise RuntimeError(f"Startup exited with status {status} before acknowledgement")
+
+
 def launch(root: Path) -> int:
     with ExitStack() as leases:
-        with lock(root / "install.lock"):
+        with lock(root / "install.lock", timeout=75):
             current = pointer(root, "current.txt")
             pending = pointer(root, "pending.txt")
             if not current:
                 raise ValueError("Installation has no current version")
             previous = pointer(root, "previous.txt")
-            trial = bool(pending and ready(root / f"app-{pending}"))
-            if trial and pending and pending != current:
-                previous = current
-                write_pointer(root, "previous.txt", previous)
-                write_pointer(root, "current.txt", pending)
-                current = pending
-            _clean(root, {current, pending, previous if trial else None})
-            leases.enter_context(lock(root / f"use-{current}.lock", shared=True))
-            try:
-                app = _start(root, current)
-                if trial:
-                    try:
-                        status = app.wait(timeout=10)
-                    except subprocess.TimeoutExpired:
-                        status = 0
-                    if status:
-                        raise RuntimeError(f"Startup exited with status {status}")
-            except (OSError, RuntimeError):
-                if not trial or not previous or previous == current:
-                    raise
-                logging.exception("Rolling back %s to %s", current, previous)
-                write_pointer(root, "current.txt", previous)
-                (root / "pending.txt").unlink(missing_ok=True)
-                leases.enter_context(lock(root / f"use-{previous}.lock", shared=True))
-                app = _start(root, previous)
-            if trial:
-                (root / "pending.txt").unlink(missing_ok=True)
+            if previous and current == pending:
+                # Recover the last good version from an interrupted legacy trial.
+                current = previous
+                write_pointer(root, "current.txt", current)
             (root / "previous.txt").unlink(missing_ok=True)
+            _clean(root, {current, pending})
+            if pending and (pending == current or rejected(root, pending)):
+                (root / "pending.txt").unlink(missing_ok=True)
+                pending = None
+            app = None
+            if pending and ready(root / f"app-{pending}"):
+                leases.enter_context(lock(root / f"use-{pending}.lock", shared=True))
+                marker = root / f"ready-{pending}-{uuid4().hex}"
+                try:
+                    app = _start(root, pending, marker)
+                    _await_startup(app, marker)
+                except (OSError, RuntimeError):
+                    logging.exception("Rolling back %s to %s", pending, current)
+                    write_pointer(root, "failed.txt", pending)
+                    app = None
+                else:
+                    write_pointer(root, "current.txt", pending)
+                finally:
+                    marker.unlink(missing_ok=True)
+                (root / "pending.txt").unlink(missing_ok=True)
+            if app is None:
+                leases.enter_context(lock(root / f"use-{current}.lock", shared=True))
+                app = _start(root, current)
         return app.wait()
 
 
@@ -112,12 +135,13 @@ def install(source: Path, root: Path) -> None:
     precedence(version)
     with lock(root / "install.lock"):
         launcher = root / "Gilhound.exe"
-        if not launcher.exists():
+        current = pointer(root, "current.txt")
+        if current is None or precedence(version) >= precedence(current):
             temp = root / "Gilhound.exe.partial"
             shutil.copyfile(source / launcher.name, temp)
             temp.replace(launcher)
-        current = pointer(root, "current.txt")
-        if current is None or precedence(version) > precedence(current):
+        if current is None or (precedence(version) > precedence(current)
+                               and not rejected(root, version)):
             folder = root / bundle.name
             if not ready(folder):
                 partial = root / "install.partial"
