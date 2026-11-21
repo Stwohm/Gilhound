@@ -17,7 +17,6 @@ from gilhound.models import (
     ScanPreset,
     ScanResult,
     SnipeHit,
-    SnipeRule,
     SourceStatus,
     UserSettings,
 )
@@ -92,7 +91,7 @@ class Runtime:
         result = run_scan(params, clock=time.time)
         hits = evaluate(
             result.rows,
-            SnipeRule(max_top_buyer_share=0.5),
+            settings.snipe_rule,
             settings.freshness_tiers,
             result.finished_ts,
         )

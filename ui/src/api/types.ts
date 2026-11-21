@@ -260,6 +260,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/update/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Update */
+        post: operations["apply_update_api_update_apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -274,6 +291,11 @@ export interface components {
         };
         /** AppInfo */
         AppInfo: {
+            /**
+             * Latest Version
+             * @description Newer release, when available.
+             */
+            latest_version?: string | null;
             /**
              * Update Available
              * @description Whether a newer release is available.
@@ -717,6 +739,39 @@ export interface components {
             /** @description Home-world sales evidence. */
             volume_proof: components["schemas"]["VolumeProof"];
         };
+        /** SnipeRule */
+        SnipeRule: {
+            /**
+             * Max Home Median Ratio
+             * @description Maximum listing price as a fraction of the home-world median.
+             * @default 0.5
+             */
+            max_home_median_ratio: number;
+            /**
+             * Max Last Sale Age H
+             * @description Exclusive sale age limit.
+             * @default 24
+             */
+            max_last_sale_age_h: number;
+            /**
+             * Max Top Buyer Share
+             * @description Maximum share held by the largest buyer (default 0.5, or 50%).
+             * @default 0.5
+             */
+            max_top_buyer_share: number;
+            /**
+             * Min Distinct Buyers 7D
+             * @description Minimum seven-day buyer count.
+             * @default 3
+             */
+            min_distinct_buyers_7d: number;
+            /**
+             * Min Profit
+             * @description Minimum net profit in gil per unit.
+             * @default 5000
+             */
+            min_profit: number;
+        };
         /**
          * SourceName
          * @enum {string}
@@ -782,6 +837,7 @@ export interface components {
              * @default 5
              */
             scan_interval_min: number;
+            snipe_rule?: components["schemas"]["SnipeRule"];
             /**
              * Travel Cost
              * @description Travel cost in gil keyed by data centre name.
@@ -830,6 +886,7 @@ export interface components {
              * @default 5
              */
             scan_interval_min: number;
+            snipe_rule?: components["schemas"]["SnipeRule"];
             /**
              * Travel Cost
              * @description Travel cost in gil keyed by data centre name.
@@ -1583,6 +1640,54 @@ export interface operations {
             401: {
                 headers: {
                     "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    apply_update_api_update_apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
                     [name: string]: unknown;
                 };
                 content: {

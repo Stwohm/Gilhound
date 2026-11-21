@@ -1,6 +1,6 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { api, mockMode } from "./api/client";
-import { Badge, defaults, useResource } from "./common";
+import { Badge, Notice, defaults, errorMessage, useResource } from "./common";
 import Scan from "./screens/Scan";
 import Snipes from "./screens/Snipes";
 import Retainer from "./screens/Retainer";
@@ -22,6 +22,51 @@ function subscribe(onChange: () => void) {
 
 function currentPage() {
   return pages.find((page) => `#${page.id}` === window.location.hash) ?? pages[0];
+}
+
+function UpdateBanner() {
+  const [version, setVersion] = useState<string | null>();
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total?: number | null }>();
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    let active = true;
+    let timer: number;
+    async function refresh(delay: number) {
+      try {
+        const info = await api.getInfo();
+        if (active) setVersion(info.update_available ? info.latest_version : null);
+      } catch {
+        // Retain the last successful check until the local API responds again.
+      } finally {
+        if (active) timer = window.setTimeout(() => void refresh(60000), delay);
+      }
+    }
+    void refresh(2000);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, []);
+
+  async function apply() {
+    setBusy(true);
+    setMessage("");
+    setProgress({ done: 0 });
+    try {
+      await api.applyUpdate((done, total) => setProgress({ done, total }));
+      setMessage(mockMode ? "Update simulated." : "Restarting Gilhound…");
+    } catch (error) {
+      setMessage(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (!version && !busy) return null;
+  return <Notice tone="warn">
+    Update to v{version} available{" "}
+    <button type="button" disabled={busy} onClick={() => void apply()}>Download &amp; restart</button>{" "}
+    {busy && <progress aria-label="Update download" max={progress?.total || undefined}
+      value={progress?.total ? progress.done : undefined} />}
+    <span role="status">{message}</span>
+  </Notice>;
 }
 
 export default function App() {
@@ -60,6 +105,7 @@ export default function App() {
       </div>
     </aside>
     <main id="main" tabIndex={-1} aria-label={page.title}>
+      <UpdateBanner />
       <div className="retained-screen" hidden={page.id !== "scan"}><Scan settings={preferences} /></div>
       <div className="retained-screen" hidden={page.id !== "retainer"}><Retainer settings={preferences} /></div>
       {screens[page.id]}

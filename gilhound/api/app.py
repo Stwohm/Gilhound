@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from gilhound import __version__
 from gilhound.api.jobs import Job, Jobs
+from gilhound.api.updates import Updates
 from gilhound.models import (
     AppInfo,
     PnLSummary,
@@ -63,9 +64,11 @@ def create_app(
             runtime.discord.stopped.set()
             runtime.scheduler.stop()
             jobs.close()
+            updates.close()
             runtime.close()
 
     jobs = Jobs()
+    updates = Updates()
     app = FastAPI(
         lifespan=lifespan,
         title="Gilhound API",
@@ -117,7 +120,15 @@ def create_app(
 
     @app.get("/api/info")
     def get_info() -> AppInfo:
-        return AppInfo(version=__version__, update_available=False)
+        release = updates.latest()
+        return AppInfo(
+            version=__version__, update_available=release is not None,
+            latest_version=release.version if release else None,
+        )
+
+    @app.post("/api/update/apply", status_code=202, responses={409: {"model": ApiError}})
+    def apply_update() -> Job:
+        return updates.apply(jobs)
 
     @app.get("/api/settings")
     def get_settings() -> UserSettings:

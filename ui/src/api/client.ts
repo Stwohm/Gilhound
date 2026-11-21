@@ -20,6 +20,7 @@ export interface Api {
   getSettings(): Promise<JsonResult<"get_settings_api_settings_get">>;
   saveSettings(settings: JsonBody<"put_settings_api_settings_put">): Promise<JsonResult<"put_settings_api_settings_put">>;
   getInfo(): Promise<JsonResult<"get_info_api_info_get">>;
+  applyUpdate(progress: (done: number, total?: number | null) => void): Promise<void>;
   exportDiagnostics(): Promise<Blob>;
   testDiscord(): Promise<void>;
 }
@@ -67,13 +68,19 @@ async function json<T>(path: string, method?: string, body?: unknown): Promise<T
   }
 }
 
-async function job<T>(path: string, params?: unknown): Promise<T> {
+async function waitForJob(path: string, params?: unknown, progress?: (done: number, total?: number | null) => void) {
   type Job = components["schemas"]["Job"];
   let current = await json<Job>(path, "POST", params);
   while (current.state === "queued" || current.state === "running") {
+    progress?.(current.done, current.total);
     await new Promise(resolve => window.setTimeout(resolve, 400));
     current = await json<Job>(`/api/jobs/${current.id}`);
   }
+  return current;
+}
+
+async function job<T>(path: string, params?: unknown): Promise<T> {
+  const current = await waitForJob(path, params);
   if (current.state !== "complete" || current.result == null) throw new Error("Market scan failed. Please retry.");
   return current.result as T;
 }
@@ -89,6 +96,10 @@ const realApi: Api = {
   getSettings: () => json("/api/settings"),
   saveSettings: (settings) => json("/api/settings", "PUT", settings),
   getInfo: () => json("/api/info"),
+  async applyUpdate(progress) {
+    const current = await waitForJob("/api/update/apply", undefined, progress);
+    if (current.state !== "complete") throw new Error("Update failed. Please retry.");
+  },
   exportDiagnostics: async () => (await request("/api/diagnostics/export", "POST")).blob(),
   testDiscord: async () => {
     await request("/api/settings/discord/test", "POST");

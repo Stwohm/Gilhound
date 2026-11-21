@@ -112,7 +112,9 @@ class SnipeRule(BaseModel):
         default=3, ge=0, description="Minimum seven-day buyer count."
     )
     max_last_sale_age_h: float = Field(default=24, gt=0, description="Exclusive sale age limit.")
-    max_top_buyer_share: Fraction = Field(description="Maximum share held by the largest buyer.")
+    max_top_buyer_share: Fraction = Field(
+        default=0.5, description="Maximum share held by the largest buyer (default 0.5, or 50%)."
+    )
 
 
 class FreshnessTier(BaseModel):
@@ -217,6 +219,7 @@ class PnLSummary(BaseModel):
 
 
 class UserSettings(BaseModel):
+    snipe_rule: SnipeRule = Field(default_factory=SnipeRule)
     home_world: str = Field(description="Default world for resale and retainer scans.")
     buy_region: str = Field(description="Default market region for purchases.")
     scan_interval_min: int = Field(default=5, gt=0, description="Minutes between snipe scans.")
@@ -246,5 +249,6 @@ class UserSettings(BaseModel):
 
 
 class AppInfo(BaseModel):
+    latest_version: str | None = Field(default=None, description="Newer release, when available.")
     version: str = Field(description="Installed Gilhound version.")
     update_available: bool = Field(description="Whether a newer release is available.")

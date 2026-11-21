@@ -17,6 +17,18 @@
       },
       "AppInfo": {
         "properties": {
+          "latest_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Newer release, when available.",
+            "title": "Latest Version"
+          },
           "update_available": {
             "description": "Whether a newer release is available.",
             "title": "Update Available",
@@ -812,6 +824,49 @@
         "title": "SnipeHit",
         "type": "object"
       },
+      "SnipeRule": {
+        "properties": {
+          "max_home_median_ratio": {
+            "default": 0.5,
+            "description": "Maximum listing price as a fraction of the home-world median.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Max Home Median Ratio",
+            "type": "number"
+          },
+          "max_last_sale_age_h": {
+            "default": 24,
+            "description": "Exclusive sale age limit.",
+            "exclusiveMinimum": 0.0,
+            "title": "Max Last Sale Age H",
+            "type": "number"
+          },
+          "max_top_buyer_share": {
+            "default": 0.5,
+            "description": "Maximum share held by the largest buyer (default 0.5, or 50%).",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Max Top Buyer Share",
+            "type": "number"
+          },
+          "min_distinct_buyers_7d": {
+            "default": 3,
+            "description": "Minimum seven-day buyer count.",
+            "minimum": 0.0,
+            "title": "Min Distinct Buyers 7D",
+            "type": "integer"
+          },
+          "min_profit": {
+            "default": 5000,
+            "description": "Minimum net profit in gil per unit.",
+            "minimum": 0.0,
+            "title": "Min Profit",
+            "type": "integer"
+          }
+        },
+        "title": "SnipeRule",
+        "type": "object"
+      },
       "SourceName": {
         "enum": [
           "cashflow",
@@ -912,6 +967,9 @@
             "title": "Scan Interval Min",
             "type": "integer"
           },
+          "snipe_rule": {
+            "$ref": "#/components/schemas/SnipeRule"
+          },
           "travel_cost": {
             "additionalProperties": {
               "minimum": 0.0,
@@ -982,6 +1040,9 @@
             "exclusiveMinimum": 0.0,
             "title": "Scan Interval Min",
             "type": "integer"
+          },
+          "snipe_rule": {
+            "$ref": "#/components/schemas/SnipeRule"
           },
           "travel_cost": {
             "additionalProperties": {
@@ -1964,6 +2025,61 @@
           }
         },
         "summary": "Get Sources"
+      }
+    },
+    "/api/update/apply": {
+      "post": {
+        "operationId": "apply_update_api_update_apply_post",
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Conflict"
+          }
+        },
+        "summary": "Apply Update"
       }
     }
   },

@@ -84,6 +84,10 @@ function SettingsForm({ settings, onSaved }: { settings: Settings; onSaved: (set
           <Field label="Home world"><input required value={draft.home_world} onChange={(e) => update("home_world", e.target.value)} /></Field>
           <Field label="Buy region"><input required value={draft.buy_region} onChange={(e) => update("buy_region", e.target.value)} /></Field>
           <Field label="Scan interval (min)"><Numeric min={1} value={draft.scan_interval_min ?? 5} onValue={(value) => update("scan_interval_min", value)} /></Field>
+          {draft.snipe_rule && <Field label="Maximum top buyer share (%)">
+            <Numeric max={100} step="any" value={draft.snipe_rule.max_top_buyer_share * 100}
+              onValue={(value) => update("snipe_rule", { ...draft.snipe_rule!, max_top_buyer_share: value / 100 })} />
+          </Field>}
         </div>
       </fieldset>
     </Section>
@@ -159,7 +163,6 @@ export default function SettingsScreen({ resource }: { resource: ReturnType<type
 
   return <>
     <PageTitle title="Settings" description="Manage market defaults, freshness tiers and Discord notifications." />
-    {info.data?.update_available && <Notice tone="warn">An update is available for Gilhound.</Notice>}
     {resource.data ? <SettingsForm settings={resource.data} onSaved={resource.setData} />
       : <Section title="Preferences"><ResourceState error={resource.error} retry={resource.retry} loading="Loading settings…" /></Section>}
     <Section title="About & diagnostics" action={info.data && <Badge>v{info.data.version}</Badge>}>

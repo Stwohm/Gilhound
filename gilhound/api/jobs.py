@@ -35,7 +35,7 @@ class Jobs:
                 raise HTTPException(404, "Job not found.")
             return self.jobs[key].model_copy()
 
-    def submit(self, task: Callable[[Progress], Result]) -> Job:
+    def submit(self, task: Callable[[Progress], Result | None]) -> Job:
         job = Job(id=token_hex(16))
         with self.lock:
             if len(self.jobs) >= 24:

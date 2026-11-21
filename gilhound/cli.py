@@ -91,7 +91,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         from gilhound import desktop
 
         if args.command == "app":
-            return desktop.main()
+            return desktop.main([])
         desktop.serve(args.port)
         return 0
     if args.top < 0:

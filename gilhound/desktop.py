@@ -1,5 +1,6 @@
 """Start the desktop window on a pre-bound loopback socket."""
 
+import argparse
 import ctypes
 import getpass
 import os
@@ -10,6 +11,7 @@ import struct
 import sys
 import threading
 import time
+from collections.abc import Sequence
 from pathlib import Path
 
 import uvicorn
@@ -36,7 +38,10 @@ def serve(port: int) -> None:
     uvicorn.run(create_app(token, serve_ui=False), host="127.0.0.1", port=port, access_log=False)
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="Gilhound")
+    parser.add_argument("--launcher-pid", type=int, help=argparse.SUPPRESS)
+    parser.parse_args(argv)
     import webview
 
     if sys.platform == "win32" and not webview2_available(Path(webview.__file__).parent / "lib"):
@@ -54,7 +59,8 @@ def main() -> int:
         port = listener.getsockname()[1]
         server = uvicorn.Server(
             uvicorn.Config(
-                create_app(secrets.token_urlsafe(32)), host="127.0.0.1", port=port, access_log=False
+                create_app(secrets.token_urlsafe(32)), host="127.0.0.1", port=port,
+                access_log=False, use_colors=False,
             )
         )
         worker = threading.Thread(target=server.run, kwargs={"sockets": [listener]})

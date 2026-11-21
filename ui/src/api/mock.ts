@@ -11,6 +11,8 @@ const now = () => Math.floor(Date.now() / 1000);
 const pause = (ms = 150) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
 let settings: Settings = {
+  snipe_rule: { max_home_median_ratio: 0.5, max_last_sale_age_h: 24, max_top_buyer_share: 0.5,
+    min_distinct_buyers_7d: 3, min_profit: 5000 },
   home_world: "Cerberus",
   buy_region: "Europe",
   scan_interval_min: 5,
@@ -162,7 +164,13 @@ export const mockApi: Api = {
   },
   async getInfo() {
     await pause();
-    return { version: "0.1.0", update_available: true };
+    return { version: "0.1.0", latest_version: "0.1.1", update_available: true };
+  },
+  async applyUpdate(progress) {
+    for (let done = 0; done <= 100; done += 25) {
+      progress(done, 100);
+      await pause();
+    }
   },
   async exportDiagnostics() {
     await pause();
