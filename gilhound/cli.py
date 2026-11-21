@@ -51,7 +51,10 @@ def report(runtime: Runtime, args: argparse.Namespace) -> dict:
             warning_count=len(scan.warnings),
         )
     elif args.command == "profiles":
-        profiles = runtime.profiles.list("scan", runtime.settings.get())
+        profiles = runtime.profiles.list(args.library, runtime.settings.get())
+        if args.describe:
+            description = profiles.descriptions[args.describe]
+            return {**result, "name": args.describe, "description": description}
         return {**result, "total": len(profiles.profiles), "rows": [
             {"name": name, "strategy": profile.params.preset}
             for name, profile in profiles.profiles.items()]}
@@ -103,7 +106,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     scan = commands.add_parser("scan", parents=[common])
     strategy = scan.add_mutually_exclusive_group()
     strategy.add_argument("--profile")
-    commands.add_parser("profiles", parents=[common])
+    profiles = commands.add_parser("profiles", parents=[common])
+    profiles.add_argument("--describe", metavar="NAME")
+    profiles.add_argument("--library", choices=["scan", "snipes"], default="scan")
     strategy.add_argument("--preset", choices=[*ScanPreset, "high-margin"], default="flip")
     retainer = commands.add_parser("retainer", parents=[common])
     retainer.add_argument("name")

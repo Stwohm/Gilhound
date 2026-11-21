@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { api } from "../api/client";
+import ProfileSummary from "./ProfileSummary";
 import type { Library } from "../api/client";
 import { Field, Notice, ResourceState, TravelEditor, errorMessage, travelCosts, travelEntries, useResource } from "../common";
 import type { Schema } from "../common";
@@ -53,6 +54,7 @@ function Editor({ library, running, onRun, catalog, name, select, updated }: Pro
   updated: (catalog: Schema<"ProfileList">, target: string) => void;
 }) {
   const saved = catalog.profiles[name];
+  const [mode, setMode] = useState<"view" | "edit" | "create" | "rename">("view");
   const [draft, setDraft] = useState(saved);
   const [travel, setTravel] = useState(travelEntries(saved.params.travel_cost));
   const [newName, setNewName] = useState("");
@@ -101,14 +103,35 @@ function Editor({ library, running, onRun, catalog, name, select, updated }: Pro
     } catch (e) { setError(errorMessage(e)); }
     finally { setBusy(false); }
   }
-  return <form ref={form} className="panel-body profile-editor" onSubmit={e => { e.preventDefault(); void act(onRun ? "run" : "save"); }}>
+  return <form ref={form} className="panel-body profile-editor" onSubmit={e => {
+    e.preventDefault();
+    if (mode !== "view" || onRun) void act(mode === "view" ? "run" : mode === "edit" ? "save" : mode);
+  }}>
     <fieldset disabled={busy || running} className="editor">
-      <Field label={library === "snipes" ? "Active snipe preset" : "Scan profile"}>
-        <select value={name} onChange={e => {
-          if (dirty && !window.confirm("Discard unsaved changes?")) return;
-          if (library === "snipes") void act("activate", e.target.value); else select(e.target.value);
-        }}>{Object.keys(catalog.profiles).map(n => <option key={n}>{n}</option>)}</select>
-      </Field>
+      <div className="profile-chips" role="group" aria-label={library === "snipes" ? "Snipe presets" : "Scan profiles"}>
+        {[...Object.keys(catalog.defaults), ...Object.keys(catalog.profiles).filter(n => !Object.hasOwn(catalog.defaults, n))].map(n =>
+          <button type="button" className="preset" key={n} aria-pressed={name === n} onClick={() => {
+            if (n === name || (mode !== "view" && !window.confirm("Discard unsaved changes?"))) return;
+            if (library === "snipes") void act("activate", n); else select(n);
+          }}>{n}</button>)}
+        <button type="button" disabled={mode !== "view"} onClick={() => {
+          const initial = Object.values(catalog.defaults).find(p => p.params.preset === params.preset)!;
+          setDraft(initial); setTravel(travelEntries(initial.params.travel_cost)); setMode("create");
+        }}>+ New</button>
+      </div>
+      {mode === "view" && <><ProfileSummary name={name} catalog={catalog} />
+        <div className="form-actions">
+          <button type="button" onClick={() => setMode("edit")}>Edit</button>
+          <button type="button" onClick={() => { setNewName(name + " copy"); setMode("create"); }}>Duplicate</button>
+          <button type="button" onClick={() => void act("reset")}>Reset to default</button>
+          {!Object.hasOwn(catalog.defaults, name) && <>
+            <button type="button" onClick={() => { setNewName(name); setMode("rename"); }}>Rename</button>
+            <button type="button" onClick={() => void act("delete")}>Delete</button></>}
+          {onRun && <button className="primary" type="submit">{running ? "Scanning…" : "Run scan"}</button>}
+        </div></>}
+      {(mode === "create" || mode === "rename") && <Field label="Profile name"><input autoFocus required maxLength={80}
+        value={newName} onChange={e => setNewName(e.target.value)} /></Field>}
+      {(mode === "edit" || mode === "create") && <>
       <details onInvalidCapture={e => { e.currentTarget.open = true; }}><summary>Candidate search</summary><div className="fields">
         <Field label="Home world"><input required pattern=".*\S.*" value={params.home_world} onChange={e => param("home_world", e.target.value)} /></Field>
         <Field label="Buy region"><input required pattern=".*\S.*" value={params.buy_region} onChange={e => param("buy_region", e.target.value)} /></Field>
@@ -169,14 +192,9 @@ function Editor({ library, running, onRun, catalog, name, select, updated }: Pro
       })}<button type="button" onClick={() => param("freshness_tiers", [...tiers, {
         name: "", max_age_h: Math.max(0, ...tiers.map(t => t.max_age_h)) + 1, send_discord: false,
       }])}>Add tier</button></fieldset></>}
-      {dirty && <small role="status">Unsaved changes</small>}
-      <div className="form-actions"><button type="button" onClick={() => void act("save")}>Save</button>
-        <button type="button" onClick={() => void act("reset")}>Reset to default</button>
-        {onRun && <button className="primary" type="submit">{running ? "Scanning…" : "Run scan"}</button>}</div>
-      <Field label="New profile name"><input maxLength={80} value={newName} onChange={e => setNewName(e.target.value)} /></Field>
-      <div className="form-actions"><button type="button" disabled={!newName.trim()} onClick={() => void act("create")}>Save as new profile</button>
-        {!Object.hasOwn(catalog.defaults, name) && <><button type="button" disabled={!newName.trim()} onClick={() => void act("rename")}>Rename</button>
-          <button type="button" onClick={() => void act("delete")}>Delete</button></>}</div>
+      {dirty && <small role="status">Unsaved changes</small>}</>}
+      {mode !== "view" && <div className="form-actions"><button className="primary" type="submit">Save</button>
+        <button type="button" onClick={() => updated(catalog, name)}>Cancel</button></div>}
       {error && <Notice tone="error">{error}</Notice>}
     </fieldset>
   </form>;

@@ -47,8 +47,22 @@ for (const library of ["scan", "snipes"] as const) {
   const defaults = Object.fromEntries(Object.entries(mockParams)
     .filter(([name]) => library === "scan" || name === "Snipe")
     .map(([name, params]) => [name, { params: { ...params, travel_cost: settings.travel_cost,
-      snipe_rule: settings.snipe_rule, freshness_tiers: settings.freshness_tiers } }]));
-  catalogs[library] = { defaults, profiles: structuredClone(defaults), active: library === "scan" ? "Flip" : "Snipe" };
+      snipe_rule: name === "Snipe" ? settings.snipe_rule : null,
+      freshness_tiers: name === "Snipe" ? settings.freshness_tiers : null } }]));
+  catalogs[library] = { defaults, descriptions: {}, profiles: structuredClone(defaults), active: library === "scan" ? "Flip" : "Snipe" };
+}
+function mockCatalog(library: Library): Catalog {
+  const catalog = structuredClone(catalogs[library]);
+  for (const [name, { params: p }] of Object.entries(catalog.profiles)) {
+    const lines = [`Finds items in ${p.buy_region} to sell on ${p.home_world}.`,
+      `Requires at least ${p.min_distinct_buyers} buyers, ${p.min_days_with_sales} sale days and ${p.min_units_day} units/day.`,
+      `Requires positive profit of at least ${p.min_profit} gil per unit after taxes, capped at ${p.sellable_days} days of sales.`];
+    const r = p.snipe_rule;
+    if (r) lines.push(`Alerts at up to ${r.max_home_median_ratio * 100}% of the home median for at least ${r.min_profit} gil profit and ${r.min_distinct_buyers_7d} buyers, with the last sale under ${r.max_last_sale_age_h} h and top buyer share up to ${r.max_top_buyer_share * 100}%.`);
+    for (const t of p.freshness_tiers ?? []) lines.push(`${t.name} up to ${t.max_age_h} h: ${t.send_discord ? "app and Discord when enabled" : "app only"}.`);
+    catalog.descriptions[name] = lines;
+  }
+  return catalog;
 }
 const hidden = new Map<string, components["schemas"]["ItemRef"]>();
 
@@ -109,7 +123,7 @@ let lastRun = now();
 let nextRun = lastRun + 300;
 
 export const mockApi: Api = {
-  async getProfiles(library) { return structuredClone(catalogs[library]); },
+  async getProfiles(library) { return mockCatalog(library); },
   async changeProfile(library, { action, name, new_name, profile }) {
     const state = catalogs[library];
     const target = action === "rename" ? new_name! : name;
@@ -121,7 +135,7 @@ export const mockApi: Api = {
     if (action === "reset") state.profiles[name] = structuredClone(Object.values(state.defaults)
       .find(p => p.params.preset === state.profiles[name].params.preset)!);
     if (library === "snipes") state.active = action === "delete" ? "Snipe" : target;
-    return structuredClone(state);
+    return mockCatalog(library);
   },
   async getHidden() { return [...hidden.values()]; },
   async setPersonal(change) {
@@ -204,6 +218,7 @@ export const mockApi: Api = {
       avg_cost: index === 3 ? costs.get(`${row.item.id}-${row.item.hq}`) ?? null : row.buy_ppu,
       cost_known: index !== 3 || costs.has(`${row.item.id}-${row.item.hq}`),
       known_capital: index === 4 ? 0 : (row.sellable_qty + 3) * (index === 3 ? costs.get(`${row.item.id}-${row.item.hq}`) ?? 0 : row.buy_ppu),
+      listing_count: index === 4 ? 0 : 1,
       listed_qty: index === 4 ? 0 : row.sellable_qty, realised_profit: index === 3 ? 0 : 42500 + index * 16700,
     })).filter(r => !hidden.has(r.item.id + "-" + r.item.hq));
   },

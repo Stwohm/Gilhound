@@ -136,6 +136,13 @@ def test_position_views_and_cost(
             )
             (updated,) = client.get("/api/positions").json()
             assert updated["avg_cost"] == 7 and updated["known_capital"] == 21
+            change = {"item_id": listed.id, "hq": listed.hq, "personal": True}
+            assert client.put("/api/positions/personal", json=change).status_code == 204
+            assert client.get("/api/positions").json() == []
+            assert client.get("/api/positions?view=closed").json() == [closed]
+            change["personal"] = False
+            assert client.put("/api/positions/personal", json=change).status_code == 204
+            assert client.get("/api/positions").json() == [updated]
 
 
 def test_live_snipe_controls(tmp_path: Path, token: str, monkeypatch: pytest.MonkeyPatch) -> None:

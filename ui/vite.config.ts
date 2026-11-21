@@ -7,6 +7,7 @@ export default defineConfig({
       allow: [
         fileURLToPath(new URL(".", import.meta.url)),
         fileURLToPath(new URL("../assets", import.meta.url)),
+        fileURLToPath(new URL("../openapi.json", import.meta.url)),
       ],
     },
   },

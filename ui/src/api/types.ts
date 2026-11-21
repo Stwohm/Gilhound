@@ -574,6 +574,12 @@ export interface components {
              */
             listed_qty: number;
             /**
+             * Listing Count
+             * @description Stacks in the current listing snapshot.
+             * @default 0
+             */
+            listing_count: number;
+            /**
              * Qty Open
              * @description Units still held, including listed units.
              */
@@ -626,6 +632,10 @@ export interface components {
             /** Defaults */
             defaults: {
                 [key: string]: components["schemas"]["Profile"];
+            };
+            /** Descriptions */
+            descriptions: {
+                [key: string]: string[];
             };
             /** Profiles */
             profiles: {

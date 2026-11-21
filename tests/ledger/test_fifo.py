@@ -86,10 +86,11 @@ def test_snapshot_overlap_and_remaining_cost() -> None:
                 listings=[Stock(item, 3)],
             ),
         ),
-        source(S.ALLAGAN_MARKET, Records(listings=[Stock(item, 3)])),
+        source(S.ALLAGAN_MARKET, Records(listings=[Stock(item, 1), Stock(item, 2)])),
         source(S.RESTOCKY, Records(remaining_costs=[Stock(item, 5, 4)])),
     ]
     (p,) = build_ledger(sources).positions
+    assert p.listing_count == 2
     assert (p.qty_open, p.listed_qty, p.avg_cost) == (3, 3, 107 / 3)
 
 

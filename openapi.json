@@ -339,6 +339,13 @@
             "title": "Listed Qty",
             "type": "integer"
           },
+          "listing_count": {
+            "default": 0,
+            "description": "Stacks in the current listing snapshot.",
+            "minimum": 0.0,
+            "title": "Listing Count",
+            "type": "integer"
+          },
           "qty_open": {
             "description": "Units still held, including listed units.",
             "minimum": 0.0,
@@ -486,6 +493,16 @@
             "title": "Defaults",
             "type": "object"
           },
+          "descriptions": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Descriptions",
+            "type": "object"
+          },
           "profiles": {
             "additionalProperties": {
               "$ref": "#/components/schemas/Profile"
@@ -497,7 +514,8 @@
         "required": [
           "profiles",
           "defaults",
-          "active"
+          "active",
+          "descriptions"
         ],
         "title": "ProfileList",
         "type": "object"
@@ -1697,7 +1715,7 @@
   },
   "info": {
     "title": "Gilhound API",
-    "version": "0.1.3"
+    "version": "0.1.4"
   },
   "openapi": "3.1.0",
   "paths": {

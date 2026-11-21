@@ -49,6 +49,7 @@ def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | Non
     }
     inventory: dict[ItemKey, int] = defaultdict(int)
     listed: dict[ItemKey, int] = defaultdict(int)
+    listing_counts: dict[ItemKey, int] = defaultdict(int)
     costs: dict[ItemKey, list[Stock]] = defaultdict(list)
     items: dict[ItemKey, ItemRef] = {}
     sellable: dict[ItemKey, int] = defaultdict(int)
@@ -69,6 +70,7 @@ def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | Non
         for stock in latest.records.listings:
             key = stock.item.id, stock.item.hq
             listed[key] += stock.qty
+            listing_counts[key] += 1
             items[key] = stock.item
     for key, item in items.items():
         held = existing.get(key, 0)
@@ -106,6 +108,8 @@ def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | Non
     ):
         limits = {key: sellable[key] + listed[key] for key in set(sellable) | set(listed)}
     ledger = calculate(history, manual, limits)
+    for position in ledger.positions:
+        position.listing_count = listing_counts[position.item.id, position.item.hq]
     if limits is None:
         ledger.warnings.append(
             "Allagan Tools inventory unavailable. Using purchase history and listings."

@@ -295,6 +295,9 @@ class Position(BaseModel):
     avg_cost: float | None = Field(description="Average open cost in gil, if known.")
     cost_known: bool = Field(description="Whether all open units have a known cost basis.")
     listed_qty: int = Field(ge=0, description="Open units currently listed.")
+    listing_count: int = Field(
+        default=0, ge=0, description="Stacks in the current listing snapshot."
+    )
     realised_profit: int = Field(description="Net realised gil profit for sales with known cost.")
 
 

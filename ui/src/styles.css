@@ -219,3 +219,13 @@ th[aria-sort] { color: var(--accent); }
 .profile-editor .fields { width: 100%; margin-block: 10px; }
 .profile-editor .field > small[role="alert"] { color: var(--red); }
 .profile-editor > fieldset > .field { max-width: 28rem; }
+.profile-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.profile-summary { padding: 14px; border: 1px solid var(--line); border-radius: 8px; }
+.profile-summary p { margin-top: 5px; }
+.profile-summary details { margin-top: 8px; }
+.profile-summary td, .profile-summary th { padding: 4px 8px; white-space: normal; overflow-wrap: anywhere; }
+.positions-table th, .positions-table td { padding: 7px; white-space: normal; }
+.positions-table .item-name { flex-wrap: wrap; }
+.positions-table :is(th, td):last-child { position: sticky; right: 0; text-align: center; }
+.position-toast { position: fixed; bottom: 20px; right: 20px; z-index: 3; padding: 8px 12px;
+  border-radius: 8px; background: var(--rail); color: var(--rail-ink); }

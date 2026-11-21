@@ -143,7 +143,7 @@ export default function Snipes({ resource }: { resource: ReturnType<typeof useRe
         : "No completed run yet"}</small>
       {statusError && <Notice tone="error">{statusError}</Notice>}
     </section> : <ResourceState error={resource.error} retry={resource.retry} loading="Loading snipe controls…" />}
-    <details open={window.location.hash === "#snipes/rules" || undefined} className="panel panel-body"><summary>Snipe rules</summary><ProfileEditor library="snipes" /></details>
+    <Section title="Snipe rules"><ProfileEditor library="snipes" /></Section>
     {runError && <Notice tone="error">{runError}</Notice>}
     <Section title="Live listings" detail={lastChecked == null ? "Refreshes every 15 seconds" : `Last checked ${time(lastChecked)} · Refreshes every 15 seconds`}>
       {pollError && <Notice tone="error">{pollError}</Notice>}

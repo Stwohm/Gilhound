@@ -25,6 +25,9 @@ def test_profiles_lifecycle_and_upgrade(tmp_path: Path) -> None:
 
         change("save", "Volume", profile=profile)
         change("create", "My volume", profile=profile)
+        profile.params.windows[0].hours_ago = 6
+        change("save", "Volume", profile=profile)
+        assert store.list("scan", settings).profiles["My volume"].params.windows[0].hours_ago == 12
         change("rename", "My volume", new_name="Fast")
         change("reset", "Volume")
         with pytest.raises(ValueError):
@@ -102,7 +105,7 @@ def test_hide_and_unhide_preserve_cost_and_quality(
         original = runtime.ledger()
         runtime.set_personal(item.id, item.hq, True)
         assert runtime.hidden() == [item]
-        assert [p.item for p in runtime.ledger().positions] == [nq]
+        assert runtime.ledger().positions == [p for p in original.positions if p.item == nq]
         assert runtime.ledger().summary.sales_proceeds == 0
         runtime.set_personal(item.id, item.hq, False)
         assert runtime.hidden() == []
@@ -129,3 +132,19 @@ def test_cli_profile(
 
     monkeypatch.setattr("gilhound.runtime.run_scan", scan)
     assert cli.main(["scan", "--profile", "High margin"]) == 0
+
+
+@pytest.mark.parametrize(("name", "phrases"), [
+    ("Flip", ["5 sales", "positive", "5% buyer tax"]),
+    ("High margin", ["4 distinct buyers", "12,000 gil"]),
+    ("Volume", ["8 distinct buyers", "2.5 units/day", "6,000 gil"]),
+    ("Snipe", ["50% of the Cerberus 7-day median", "5,000 gil", "1 to under 6 hours"]),
+])
+def test_profile_descriptions(
+    name: str, phrases: list[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    assert cli.main(["profiles", "--describe", name]) == 0
+    text = " ".join(json.loads(capsys.readouterr().out)["description"])
+    assert all(phrase in text for phrase in phrases)
