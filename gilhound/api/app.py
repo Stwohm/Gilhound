@@ -215,7 +215,7 @@ def create_app(
 
     @app.post("/api/bridge/go")
     def go(request: BridgeGo) -> BridgeResult:
-        return runtime.bridge.send(f"/li {request.world} market")
+        return runtime.bridge.send(f"/li {request.world} market", request.item)
 
     @app.get("/api/retainer-profiles")
     def retainer_profiles() -> dict[str, RetainerScanParams]:

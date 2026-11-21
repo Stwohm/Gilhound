@@ -214,6 +214,16 @@
       },
       "BridgeGo": {
         "properties": {
+          "item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BridgeItem"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "world": {
             "title": "World",
             "type": "string"
@@ -223,6 +233,30 @@
           "world"
         ],
         "title": "BridgeGo",
+        "type": "object"
+      },
+      "BridgeItem": {
+        "properties": {
+          "hq": {
+            "title": "Hq",
+            "type": "boolean"
+          },
+          "id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Id",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "hq",
+          "name"
+        ],
+        "title": "BridgeItem",
         "type": "object"
       },
       "BridgeResult": {
@@ -251,6 +285,11 @@
       },
       "BridgeStatus": {
         "properties": {
+          "mb_search_name": {
+            "default": false,
+            "title": "Mb Search Name",
+            "type": "boolean"
+          },
           "plugin_version": {
             "anyOf": [
               {

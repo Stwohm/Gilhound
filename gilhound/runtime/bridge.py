@@ -8,10 +8,10 @@ from threading import Lock
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
 from gilhound.ingest.discover import plugin_config_root
-from gilhound.models import BridgeResult, BridgeStatus
+from gilhound.models import BridgeItem, BridgeResult, BridgeStatus
 
 COMMAND = re.compile(r"/li [A-Za-z][A-Za-z' -]{1,30} market")
 
@@ -23,6 +23,7 @@ class Heartbeat(BaseModel):
     logged_in: bool
     world: str | None
     enabled: bool
+    features: list[str] = Field(default_factory=list)
 
 
 class Reply(BaseModel):
@@ -53,7 +54,9 @@ class Bridge:
         if not 0 <= time.time() - beat.ts < 15:
             state.status = "not_running"
             state.world = None
-        elif (
+            return state
+        state.mb_search_name = "mb_search_name" in beat.features or "mb_search" in beat.features
+        if (
             beat.version != 1
             or not re.fullmatch(r"[0-9]{1,6}(\.[0-9]{1,6}){2,3}", beat.plugin_version)
             or tuple(map(int, beat.plugin_version.split("."))) < (0, 3, 9)
@@ -63,7 +66,7 @@ class Bridge:
             state.status = "disabled"
         return state
 
-    def send(self, command: str) -> BridgeResult:
+    def send(self, command: str, item: BridgeItem | None = None) -> BridgeResult:
         if not COMMAND.fullmatch(command):
             return BridgeResult(status="rejected", reason="Invalid travel command.")
         with self._lock:
@@ -78,12 +81,15 @@ class Bridge:
                 return BridgeResult(status="rejected", reason="Wait two seconds between commands.")
             request_id = str(uuid4())
             temporary = self.directory / "inbox" / f"{request_id}.tmp"
+            request: dict[str, object] = {
+                "version": 1, "id": request_id, "command": command,
+                "created_ts": int(time.time()),
+            }
+            if item is not None:
+                request["item"] = item.model_dump()
             try:
                 temporary.parent.mkdir(exist_ok=True)
-                temporary.write_text(json.dumps({
-                    "version": 1, "id": request_id, "command": command,
-                    "created_ts": int(time.time()),
-                }), encoding="utf-8")
+                temporary.write_text(json.dumps(request), encoding="utf-8")
                 temporary.replace(temporary.with_suffix(".json"))
             except OSError:
                 return BridgeResult(status="error", reason="Could not write the Restocky request.")

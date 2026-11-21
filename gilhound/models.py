@@ -93,6 +93,7 @@ class BridgeStatus(BaseModel):
     status: Literal["available", "disabled", "not_running", "incompatible"]
     plugin_version: str | None = None
     world: str | None = None
+    mb_search_name: bool = False
 
 
 class BridgeResult(BaseModel):
@@ -100,8 +101,15 @@ class BridgeResult(BaseModel):
     reason: str
 
 
+class BridgeItem(BaseModel):
+    id: int = Field(gt=0, strict=True)
+    hq: bool
+    name: str
+
+
 class BridgeGo(BaseModel):
     world: str
+    item: BridgeItem | None = None
 
 
 class CandidateWindow(BaseModel):

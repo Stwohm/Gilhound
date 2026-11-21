@@ -35,7 +35,8 @@ def test_reply_timestamp(ts: int | float) -> None:
 
 
 @pytest.mark.parametrize(("changes", "state"), [
-    ({"enabled": False}, "disabled"), ({"ts": 1}, "not_running"),
+    ({"enabled": False}, "disabled"),
+    ({"ts": 1, "features": ["travel", "mb_search_name"]}, "not_running"),
     ({"version": 2}, "incompatible"), ({"plugin_version": "0.3.8.9"}, "incompatible"),
     ({"plugin_version": "0.3.10"}, "available"), ({"logged_in": False}, "available"),
 ])
@@ -45,6 +46,8 @@ def test_status(tmp_path: Path, changes: dict, state: str) -> None:
     heartbeat(bridge.directory, **changes)
     status = bridge.status()
     assert status.status == state
+    if state == "not_running":
+        assert not status.mb_search_name
     if state == "not_running" or changes.get("logged_in") is False:
         assert status.world is None
     if state != "available":
@@ -52,16 +55,34 @@ def test_status(tmp_path: Path, changes: dict, state: str) -> None:
         assert not (bridge.directory / "inbox").exists()
 
 
-@pytest.mark.parametrize(("status", "reason"), [
-    ("ok", ""), ("rejected", "In combat"), ("error", "Lifestream unavailable"),
-])
-def test_round_trip(tmp_path: Path, client: TestClient, status: str, reason: str) -> None:
+@pytest.mark.parametrize(
+    ("features", "mb_search_name", "include_item", "status", "reason"), [
+        (["travel", "mb_search_name"], True, True, "ok", ""),
+        (["travel", "mb_search"], True, True, "ok", ""),
+        (["travel"], False, True, "ok", ""),
+        (None, False, True, "ok", ""),
+        (None, False, False, "ok", ""),
+        (None, False, False, "rejected", "In combat"),
+        (None, False, False, "error", "Lifestream unavailable"),
+    ],
+)
+def test_round_trip(
+    tmp_path: Path, client: TestClient, features: list[str] | None, mb_search_name: bool,
+    include_item: bool, status: str, reason: str,
+) -> None:
     directory = tmp_path / "plugins" / "Restocky" / "bridge"
-    heartbeat(directory)
+    if features is None:
+        heartbeat(directory)
+    else:
+        heartbeat(directory, plugin_version="0.3.10.0", features=features)
     (directory / "outbox").mkdir()
     assert client.get("/api/bridge").json() == {
-        "status": "available", "plugin_version": "0.3.9.0", "world": "Cerberus",
+        "status": "available", "world": "Cerberus",
+        "plugin_version": "0.3.9.0" if features is None else "0.3.10.0",
+        "mb_search_name": mb_search_name,
     }
+    item = {"id": 123, "hq": True, "name": "Test Item"}
+    payload = {"world": "Raiden", "item": item} if include_item else {"world": "Raiden"}
 
     def respond() -> None:
         deadline = time.monotonic() + 4
@@ -71,6 +92,10 @@ def test_round_trip(tmp_path: Path, client: TestClient, status: str, reason: str
                 assert request["id"] == path.stem and UUID(path.stem).version == 4
                 assert request["version"] == 1 and request["command"] == "/li Raiden market"
                 assert 0 <= time.time() - request["created_ts"] < 5
+                if include_item:
+                    assert request["item"] == item
+                else:
+                    assert "item" not in request
                 (directory / "outbox" / path.name).write_text(json.dumps({
                     "version": 1, "id": path.stem, "status": status, "reason": reason,
                     "ts": int(time.time()) + 0.5,
@@ -82,7 +107,7 @@ def test_round_trip(tmp_path: Path, client: TestClient, status: str, reason: str
 
     with ThreadPoolExecutor(max_workers=1) as worker:
         responder = worker.submit(respond)
-        result = client.post("/api/bridge/go", json={"world": "Raiden"})
+        result = client.post("/api/bridge/go", json=payload)
         responder.result()
     assert result.json() == {"status": status, "reason": reason}
     retry = client.post("/api/bridge/go", json={"world": "Raiden"}).json()

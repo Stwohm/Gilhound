@@ -19,7 +19,7 @@ export interface Api {
   getHidden(): Promise<Schema["ItemRef"][]>;
   setPersonal(change: Schema["PositionPersonal"]): Promise<void>;
   bridge(): Promise<Schema["BridgeStatus"]>;
-  go(world: string): Promise<Schema["BridgeResult"]>;
+  go(request: Schema["BridgeGo"]): Promise<Schema["BridgeResult"]>;
   history(query: URLSearchParams): Promise<Schema["ArchiveSummary"][]>;
   entry(id: number): Promise<Schema["ArchiveEntry"]>;
   deleteEntry(id: number): Promise<void>;
@@ -115,7 +115,7 @@ const realApi: Api = {
   getHidden: () => json("/api/positions/hidden"),
   setPersonal: async change => { await request("/api/positions/personal", "PUT", change); },
   bridge: () => json("/api/bridge"),
-  go: world => json("/api/bridge/go", "POST", { world }),
+  go: request => json("/api/bridge/go", "POST", request),
   history: query => json("/api/history?" + query),
   entry: id => json("/api/history/" + id),
   deleteEntry: async id => { await request("/api/history/" + id, "DELETE"); },
