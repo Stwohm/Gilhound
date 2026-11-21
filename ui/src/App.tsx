@@ -82,7 +82,7 @@ export default function App() {
   const preferences = settings.data ?? defaults;
   const screens = {
     scan: null,
-    snipes: <Snipes />,
+    snipes: <Snipes resource={settings} />,
     retainer: null,
     positions: <Positions />,
     settings: <SettingsScreen resource={settings} />,

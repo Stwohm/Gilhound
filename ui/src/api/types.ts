@@ -260,6 +260,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/snipes/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Snipe Status */
+        get: operations["get_snipe_status_api_snipes_status_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/sources": {
         parameters: {
             query?: never;
@@ -354,6 +371,8 @@ export interface components {
              * @description Whether this is the high-quality variant.
              */
             hq: boolean;
+            /** Icon Url */
+            icon_url?: string | null;
             /**
              * Id
              * @description Item ID.
@@ -808,6 +827,33 @@ export interface components {
              */
             min_profit: number;
         };
+        /** SnipeStatus */
+        SnipeStatus: {
+            /**
+             * Fresh
+             * @default 0
+             */
+            fresh: number;
+            /** Last Run Ts */
+            last_run_ts?: number | null;
+            /** Next Run Ts */
+            next_run_ts?: number | null;
+            /**
+             * Notified
+             * @default 0
+             */
+            notified: number;
+            /**
+             * Running
+             * @default false
+             */
+            running: boolean;
+            /**
+             * Stale
+             * @default 0
+             */
+            stale: number;
+        };
         /**
          * SourceName
          * @enum {string}
@@ -841,6 +887,11 @@ export interface components {
         /** UserSettings */
         "UserSettings-Input": {
             /**
+             * Auto Snipe Enabled
+             * @default true
+             */
+            auto_snipe_enabled: boolean;
+            /**
              * Buy Region
              * @description Default market region for purchases.
              */
@@ -851,6 +902,11 @@ export interface components {
              * @default 6
              */
             dedup_cooldown_h: number;
+            /**
+             * Discord Coin Emoji
+             * @default 🪙
+             */
+            discord_coin_emoji: string;
             /**
              * Discord Notifier
              * @description Whether Discord delivery is enabled.
@@ -890,6 +946,11 @@ export interface components {
         /** UserSettings */
         "UserSettings-Output": {
             /**
+             * Auto Snipe Enabled
+             * @default true
+             */
+            auto_snipe_enabled: boolean;
+            /**
              * Buy Region
              * @description Default market region for purchases.
              */
@@ -900,6 +961,11 @@ export interface components {
              * @default 6
              */
             dedup_cooldown_h: number;
+            /**
+             * Discord Coin Emoji
+             * @default 🪙
+             */
+            discord_coin_emoji: string;
             /**
              * Discord Notifier
              * @description Whether Discord delivery is enabled.
@@ -1683,6 +1749,45 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SnipeHit"][];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    get_snipe_status_api_snipes_status_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnipeStatus"];
                 };
             };
             /** @description Invalid Host header */

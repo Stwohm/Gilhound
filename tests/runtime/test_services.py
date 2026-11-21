@@ -5,14 +5,13 @@ import threading
 import zipfile
 from pathlib import Path
 
-import pytest
 from pydantic import SecretStr
 
-from gilhound.market.snipe import discord_payload
+from gilhound.market.snipe import discord_embed, embed_length
 from gilhound.models import ScanPreset, ScanResult, SnipeHit, UserSettings
 from gilhound.runtime import Runtime
 from gilhound.runtime.diagnostics import LOG, WEBHOOK, RedactWebhook, archive
-from gilhound.runtime.discord import DeliveryError, Discord
+from gilhound.runtime.discord import Discord
 from gilhound.runtime.scheduler import Scheduler
 from gilhound.runtime.store import History
 
@@ -71,18 +70,17 @@ def test_delivery_retry_tiers_and_persistent_cooldown(tmp_path: Path) -> None:
         return next(replies)
 
     sender = Discord(transport, delays.append)
-    sender.notify(config.model_copy(update={"discord_notifier": False}), row, db)
+    sender.notify_many(config.model_copy(update={"discord_notifier": False}), [row], db)
     muted = row.model_copy(update={"tier": row.tier.model_copy(update={"send_discord": False})})
-    sender.notify(config, muted, db)
+    sender.notify_many(config, [muted], db)
     assert not calls
-    with pytest.raises(DeliveryError):
-        sender.notify(config, row, db)
+    assert sender.notify_many(config, [row], db) == 0
     assert db.hits()[0].notified_ts is None
-    sender.notify(config, row, db)
+    sender.notify_many(config, [row], db)
     reopened = History(db.path)
     reopened.record_hits([row.model_copy(update={"first_seen_ts": 10})])
-    sender.notify(config, row, reopened)
-    assert len(calls) == 3 and calls[-1] == discord_payload(row)
+    sender.notify_many(config, [row], reopened)
+    assert len(calls) == 3 and calls[-1]["embeds"] == [discord_embed(row, "Cerberus", "🪙")]
     assert delays == [0.25]
     (saved,) = reopened.hits()
     assert saved.first_seen_ts == 5 and saved.notified_ts
@@ -170,3 +168,94 @@ def test_scheduler_no_overlap_and_shutdown() -> None:
         release.set()
         scheduler.stop()
     assert not scheduler.thread.is_alive()
+
+
+def test_scheduler_pause_resume_and_live_interval() -> None:
+    ran = threading.Event()
+    delay: float | None = 60
+    scheduler = Scheduler(lambda: delay, ran.set)
+    scheduler.start()
+    try:
+        delay = None
+        scheduler.configure()
+        assert scheduler.next_run is None
+        assert not ran.wait(0.05)
+        delay = 60
+        scheduler.configure()
+        assert ran.wait(1)
+        ran.clear()
+        delay = 0.02
+        scheduler.configure()
+        assert ran.wait(1)
+        delay = None
+        scheduler.configure()
+        ran.clear()
+        assert not ran.wait(0.1)
+    finally:
+        scheduler.stop()
+
+
+def test_embed_and_batch_snapshots(tmp_path: Path) -> None:
+    config = settings()
+    config.discord_coin_emoji = "<:gil:123>"
+    row = hit()
+    row.item.hq = True
+    expected = {
+        "title": "Item HQ",
+        "url": "https://universalis.app/market/1?server=Cerberus",
+        "description": "```\n/li World market\n```",
+        "color": 0x2ECC71,
+        "footer": {"text": "Gilhound v0.1.2 · fresh"},
+        "timestamp": "1970-01-01T00:00:05+00:00",
+        "fields": [
+            {"name": name, "value": value, "inline": True}
+            for name, value in [
+                ("🛒 Buy", "1 <:gil:123> × 2\nWorld (DC)"),
+                ("📊 Cerberus median", "12 <:gil:123>"),
+                ("🏷️ Lowest on Cerberus", "Unknown"),
+                ("💰 Profit", "+9 <:gil:123> / unit\n+18 <:gil:123> total"),
+                ("📈 Sells", "2.0/day · 3 buyers · last 1.0 h ago"),
+                ("🕒 Data age", "0 min (fresh)"),
+            ]
+        ],
+    }
+    messages = []
+
+    def capture(url: str, payload: dict) -> tuple[int, bytes]:
+        messages.append(payload)
+        return 204, b""
+
+    sender = Discord(capture)
+    history = History(tmp_path / "db")
+    rows = [row.model_copy(update={"listing_key": str(i)}) for i in range(12)]
+    history.record_hits(rows)
+    assert sender.notify_many(config, rows[:1], history) == 1
+    assert messages.pop() == {"embeds": [expected], "allowed_mentions": {"parse": []}}
+    config.dedup_cooldown_h = 0
+    assert sender.notify_many(config, rows, history) == 12
+    assert messages == [
+        {
+            "allowed_mentions": {"parse": []},
+            "embeds": [
+                expected if i == 0 else {**expected, "url": expected["url"] + f"#listing-{i}"}
+                for i in range(count)
+            ],
+        }
+        for count in (10, 2)
+    ]
+    messages.clear()
+    row.item.icon_url = "https://v2.xivapi.com/api/asset?path=ui/icon/sample.tex&format=png"
+    row.item.name = "@everyone" + "💰" * 300
+    config.home_world = "W" * 400
+    config.discord_coin_emoji = "🪙" * 80
+    assert sender.notify_many(config, rows, history) == 12
+    assert len(messages) > 2
+    for message in messages:
+        assert sum(map(embed_length, message["embeds"])) <= 6000
+        for embed in message["embeds"]:
+            assert embed["thumbnail"]["url"] == row.item.icon_url
+            assert len(embed["title"].encode("utf-16-le")) <= 512
+            assert "@everyone" not in embed["title"]
+            assert all(len(field["name"]) <= 256 for field in embed["fields"])
+    sender.test(config)
+    assert messages[-1]["embeds"][0]["title"].startswith("Test")

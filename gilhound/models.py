@@ -23,6 +23,7 @@ class DataCenter(BaseModel):
 
 
 class ItemRef(BaseModel):
+    icon_url: str | None = None
     universalis_url: str | None = None
     saddlebag_url: str | None = None
     id: int = Field(gt=0, description="Item ID.")
@@ -103,6 +104,15 @@ class ScanResult(BaseModel):
     started_ts: EpochSeconds = Field(description="Scan start in UTC epoch seconds.")
     finished_ts: EpochSeconds = Field(description="Scan completion in UTC epoch seconds.")
     warnings: list[str] = Field(default_factory=list, description="Non-fatal scan warnings.")
+
+
+class SnipeStatus(BaseModel):
+    running: bool = False
+    next_run_ts: EpochSeconds | None = None
+    last_run_ts: EpochSeconds | None = None
+    fresh: int = 0
+    stale: int = 0
+    notified: int = 0
 
 
 class SnipeRule(BaseModel):
@@ -225,7 +235,11 @@ class UserSettings(BaseModel):
     snipe_rule: SnipeRule = Field(default_factory=SnipeRule)
     home_world: str = Field(description="Default world for resale and retainer scans.")
     buy_region: str = Field(description="Default market region for purchases.")
-    scan_interval_min: int = Field(default=5, gt=0, description="Minutes between snipe scans.")
+    auto_snipe_enabled: bool = True
+    discord_coin_emoji: str = Field(default="🪙", min_length=1, max_length=80)
+    scan_interval_min: int = Field(
+        default=5, gt=0, le=240, description="Minutes between snipe scans."
+    )
     discord_notifier: bool = Field(
         default=False, description="Whether Discord delivery is enabled."
     )

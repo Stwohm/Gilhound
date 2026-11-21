@@ -136,3 +136,55 @@ def test_position_views_and_cost(
             )
             (updated,) = client.get("/api/positions").json()
             assert updated["avg_cost"] == 7 and updated["known_capital"] == 21
+
+
+def test_live_snipe_controls(tmp_path: Path, token: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime = Runtime(tmp_path)
+    entered, release = Event(), Event()
+
+    def scan(params: ScanParams, settings: object) -> tuple[ScanResult, list]:
+        entered.set()
+        assert release.wait(3)
+        return ScanResult(params=params, rows=[], started_ts=1, finished_ts=2), []
+
+    monkeypatch.setattr(runtime, "_snipe_scan", scan)
+    with TestClient(
+        create_app(token, runtime),
+        base_url="http://localhost",
+        headers={"Authorization": f"Bearer {token}"},
+    ) as client:
+        settings = client.get("/api/settings").json()
+
+        def save(**changes: object) -> None:
+            settings.update(changes)
+            assert client.put("/api/settings", json=settings).is_success
+
+        def status() -> dict:
+            return client.get("/api/snipes/status").json()
+
+        assert settings["auto_snipe_enabled"]
+        save(scan_interval_min=1)
+        assert 58 <= status()["next_run_ts"] - time.time() <= 60
+        deadline = status()["next_run_ts"]
+        save(discord_notifier=True)
+        assert status()["next_run_ts"] == deadline
+        save(auto_snipe_enabled=False)
+        assert status()["next_run_ts"] is None
+        save(auto_snipe_enabled=True)
+        assert entered.wait(2)
+        save(auto_snipe_enabled=False)
+        assert status()["running"]
+        release.set()
+        for _ in range(100):
+            if not status()["running"]:
+                break
+            time.sleep(0.01)
+        result = status()
+        assert result["last_run_ts"] and not result["running"]
+        assert result["fresh"] == result["stale"] == result["notified"] == 0
+        assert result["next_run_ts"] is None
+        assert client.post("/api/snipes/run").json() == []
+        assert (
+            client.put("/api/settings", json={**settings, "scan_interval_min": 241}).status_code
+            == 422
+        )

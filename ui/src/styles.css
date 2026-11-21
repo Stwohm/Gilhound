@@ -205,3 +205,6 @@ th[aria-sort] { color: var(--accent); }
   .scan-fields, .preset-grid, .tier-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .editor-row > button { justify-self: start; }
 }
+
+.snipe-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 20px; margin-bottom: 8px; }
+.snipe-controls input[type="number"] { width: 5em; }

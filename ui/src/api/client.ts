@@ -12,6 +12,7 @@ type JsonBody<K extends keyof operations> = operations[K] extends {
 export interface Api {
   scan(params: JsonBody<"run_scan_api_scan_post">): Promise<JsonResult<"run_scan_api_scan_post">>;
   retainerScan(params: JsonBody<"run_retainer_scan_api_retainer_scan_post">): Promise<JsonResult<"run_retainer_scan_api_retainer_scan_post">>;
+  getSnipeStatus(): Promise<JsonResult<"get_snipe_status_api_snipes_status_get">>;
   getSnipes(): Promise<JsonResult<"get_snipes_api_snipes_get">>;
   runSnipes(): Promise<JsonResult<"run_snipes_api_snipes_run_post">>;
   getSources(): Promise<JsonResult<"get_sources_api_sources_get">>;
@@ -89,6 +90,7 @@ async function job<T>(path: string, params?: unknown): Promise<T> {
 const realApi: Api = {
   scan: (params) => job("/api/jobs/scan", params),
   retainerScan: (params) => job("/api/jobs/retainer", params),
+  getSnipeStatus: () => json("/api/snipes/status"),
   getSnipes: () => json("/api/snipes"),
   runSnipes: () => job("/api/jobs/snipes"),
   getSources: () => json("/api/sources"),

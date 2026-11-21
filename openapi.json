@@ -94,6 +94,17 @@
             "title": "Hq",
             "type": "boolean"
           },
+          "icon_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Icon Url"
+          },
           "id": {
             "description": "Item ID.",
             "exclusiveMinimum": 0.0,
@@ -921,6 +932,56 @@
         "title": "SnipeRule",
         "type": "object"
       },
+      "SnipeStatus": {
+        "properties": {
+          "fresh": {
+            "default": 0,
+            "title": "Fresh",
+            "type": "integer"
+          },
+          "last_run_ts": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Run Ts"
+          },
+          "next_run_ts": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run Ts"
+          },
+          "notified": {
+            "default": 0,
+            "title": "Notified",
+            "type": "integer"
+          },
+          "running": {
+            "default": false,
+            "title": "Running",
+            "type": "boolean"
+          },
+          "stale": {
+            "default": 0,
+            "title": "Stale",
+            "type": "integer"
+          }
+        },
+        "title": "SnipeStatus",
+        "type": "object"
+      },
       "SourceName": {
         "enum": [
           "cashflow",
@@ -983,6 +1044,11 @@
       },
       "UserSettings-Input": {
         "properties": {
+          "auto_snipe_enabled": {
+            "default": true,
+            "title": "Auto Snipe Enabled",
+            "type": "boolean"
+          },
           "buy_region": {
             "description": "Default market region for purchases.",
             "title": "Buy Region",
@@ -994,6 +1060,13 @@
             "minimum": 0.0,
             "title": "Dedup Cooldown H",
             "type": "number"
+          },
+          "discord_coin_emoji": {
+            "default": "\ud83e\ude99",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Discord Coin Emoji",
+            "type": "string"
           },
           "discord_notifier": {
             "default": false,
@@ -1018,6 +1091,7 @@
             "default": 5,
             "description": "Minutes between snipe scans.",
             "exclusiveMinimum": 0.0,
+            "maximum": 240.0,
             "title": "Scan Interval Min",
             "type": "integer"
           },
@@ -1057,6 +1131,11 @@
       },
       "UserSettings-Output": {
         "properties": {
+          "auto_snipe_enabled": {
+            "default": true,
+            "title": "Auto Snipe Enabled",
+            "type": "boolean"
+          },
           "buy_region": {
             "description": "Default market region for purchases.",
             "title": "Buy Region",
@@ -1068,6 +1147,13 @@
             "minimum": 0.0,
             "title": "Dedup Cooldown H",
             "type": "number"
+          },
+          "discord_coin_emoji": {
+            "default": "\ud83e\ude99",
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Discord Coin Emoji",
+            "type": "string"
           },
           "discord_notifier": {
             "default": false,
@@ -1092,6 +1178,7 @@
             "default": 5,
             "description": "Minutes between snipe scans.",
             "exclusiveMinimum": 0.0,
+            "maximum": 240.0,
             "title": "Scan Interval Min",
             "type": "integer"
           },
@@ -2115,6 +2202,51 @@
           }
         },
         "summary": "Run Snipes"
+      }
+    },
+    "/api/snipes/status": {
+      "get": {
+        "operationId": "get_snipe_status_api_snipes_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SnipeStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get Snipe Status"
       }
     },
     "/api/sources": {

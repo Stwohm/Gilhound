@@ -3,14 +3,16 @@
 import json
 import math
 import re
-from collections.abc import Callable
+import time
+from collections.abc import Callable, Iterator
 from threading import Event
 from urllib.error import HTTPError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from gilhound.market.snipe import discord_payload
+from gilhound.market.snipe import discord_embed, embed_length
 from gilhound.models import SnipeHit, UserSettings
 
+from .diagnostics import LOG
 from .store import History
 
 
@@ -76,24 +78,75 @@ class Discord:
         raise DeliveryError("Discord delivery failed. Check the webhook and try again later.")
 
     def test(self, settings: UserSettings) -> None:
-        self.send(
-            settings, {"content": "Gilhound test message.", "allowed_mentions": {"parse": []}}
-        )
+        sample = SnipeHit.model_validate({
+            "item": {"id": 1, "name": "Test · Sample ingot", "hq": True},
+            "buy_world": "Odin", "buy_dc": "Light", "buy_ppu": 12000, "buy_qty_at_price": 3,
+            "home_median_7d": 48500, "home_lowest": 44999, "profit_per_unit": 31200,
+            "total_profit_capped": 93600, "sellable_qty": 3, "est_wait_days": None,
+            "data_age_h": 14 / 60, "listing_key": "sample", "first_seen_ts": int(time.time()),
+            "tier": {"name": "fresh", "max_age_h": 1, "send_discord": True},
+            "volume_proof": {"units_per_day": 4.7, "distinct_buyers_7d": 33,
+                             "last_sale_age_h": 2.1, "top_buyer_share": 0.1, "days_with_sales": 7},
+        })
+        embed = discord_embed(sample, settings.home_world, settings.discord_coin_emoji)
+        self.send(settings, {"embeds": [embed], "allowed_mentions": {"parse": []}})
 
-    def notify(self, settings: UserSettings, hit: SnipeHit, history: History) -> None:
-        if not settings.discord_notifier or not hit.tier.send_discord:
-            return
-        lease = history.reserve(hit.listing_key, settings.dedup_cooldown_h * 3600)
-        if lease is None:
-            return
+    def notify_many(self, settings: UserSettings, hits: list[SnipeHit], history: History) -> int:
+        delivered = 0
+        if settings.discord_notifier and settings.webhook_url:
+            for batch in batches(settings, hits):
+                try:
+                    delivered += self.deliver_batch(settings, batch, history)
+                except DeliveryError:
+                    LOG.warning("Discord delivery failed")
+        return delivered
+
+    def deliver_batch(
+        self, settings: UserSettings, batch: list[tuple[str, dict]], history: History
+    ) -> int:
+        leases: dict[str, float] = {}
+        embeds = []
+        urls: set[str] = set()
         delivered = False
 
         def extend(delay: float) -> None:
-            nonlocal lease
-            lease = history.extend(hit.listing_key, lease, delay)
+            for key, lease in leases.items():
+                leases[key] = history.extend(key, lease, delay)
 
         try:
-            self.send(settings, discord_payload(hit), extend)
-            delivered = True
+            for key, embed in batch:
+                lease = history.reserve(key, settings.dedup_cooldown_h * 3600)
+                if lease is not None:
+                    leases[key] = lease
+                    # Discord hides subsequent embeds with identical title URLs.
+                    url = embed.get("url")
+                    if url in urls:
+                        embed = {**embed, "url": f"{url}#listing-{len(embeds)}"}
+                    elif url:
+                        urls.add(url)
+                    embeds.append(embed)
+            if embeds:
+                self.send(settings, {"embeds": embeds, "allowed_mentions": {"parse": []}}, extend)
+                delivered = True
+            return len(embeds)
         finally:
-            history.release(hit.listing_key, lease, delivered)
+            for key, lease in leases.items():
+                history.release(key, lease, delivered)
+
+
+def batches(settings: UserSettings, hits: list[SnipeHit]) -> Iterator[list[tuple[str, dict]]]:
+    batch: list[tuple[str, dict]] = []
+    size = 0
+    for hit in hits:
+        if not hit.tier.send_discord:
+            continue
+        embed = discord_embed(hit, settings.home_world, settings.discord_coin_emoji)
+        length = embed_length(embed)
+        if len(batch) == 10 or size + length > 6000:
+            yield batch
+            batch = []
+            size = 0
+        batch.append((hit.listing_key, embed))
+        size += length
+    if batch:
+        yield batch

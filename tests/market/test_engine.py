@@ -5,7 +5,7 @@ import pytest
 
 from gilhound.market.http import HttpClient, RateLimiter
 from gilhound.market.profit import profit_per_unit, sellable_qty, wait_days
-from gilhound.market.snipe import Deduper, MarketRow, MemoryStore, discord_payload, evaluate
+from gilhound.market.snipe import Deduper, MarketRow, MemoryStore, discord_embed, evaluate
 from gilhound.market.universalis import Universalis
 from gilhound.market.volume import DAY, volume_proof
 from gilhound.models import FreshnessTier, ItemRef, Listing, Sale, SnipeRule
@@ -130,5 +130,6 @@ def test_evaluation_and_cooldown() -> None:
     assert Deduper(store=store).claim(hit, now)
     assert not Deduper(store=store).claim(hit, now + 1)
     assert Deduper(store=store).claim(hit, now + 6 * 3600)
-    content = discord_payload(stale)["content"]
-    assert "data age 1.00 h" in content and "/li World market" in content
+    embed = discord_embed(stale, "Home", "🪙")
+    assert embed["fields"][-1]["value"] == "60 min (stale)"
+    assert "/li World market" in embed["description"]

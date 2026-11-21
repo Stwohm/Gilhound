@@ -1,14 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import {
-  Badge, Item, Loading, Notice, PageTitle, Section, Table, age, ageTone, epoch, errorMessage, gil, time,
+  Badge, Item, Loading, Notice, PageTitle, Section, Table, ResourceState, useResource, age, ageTone, epoch, errorMessage, gil, time,
 } from "../common";
-import type { Schema } from "../common";
+import type { Schema, Settings } from "../common";
 
 type Hit = Schema<"SnipeHit">;
 const sessionHistory = new Map<string, Hit>();
 
-export default function Snipes() {
+export default function Snipes({ resource }: { resource: ReturnType<typeof useResource<Settings>> }) {
+  const settings = resource.data;
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<Schema<"SnipeStatus">>();
+  const [statusError, setStatusError] = useState("");
+  const [now, setNow] = useState(epoch);
+
   const [hits, setHits] = useState<Hit[]>();
   const [history, setHistory] = useState(() => [...sessionHistory.values()]);
   const [lastChecked, setLastChecked] = useState<number>();
@@ -55,6 +61,43 @@ export default function Snipes() {
     };
   }, []);
 
+  useEffect(() => {
+    let disposed = false;
+    let timer: number;
+    async function refresh() {
+      try {
+        const next = await api.getSnipeStatus();
+        if (!disposed) { setStatus(next); setStatusError(""); }
+      } catch (error) {
+        if (!disposed) setStatusError(errorMessage(error));
+      } finally {
+        if (!disposed) timer = window.setTimeout(refresh, 2000);
+      }
+    }
+    void refresh();
+    const clock = window.setInterval(() => setNow(epoch()), 1000);
+    return () => { disposed = true; clearTimeout(timer); clearInterval(clock); };
+  }, [settings, running]);
+
+  async function save(change: Partial<Settings>) {
+    if (!settings || saving) return;
+    setSaving(true);
+    setRunError("");
+    try {
+      const { webhook_url: _mask, ...editable } = settings;
+      resource.setData(await api.saveSettings({ ...editable, ...change }));
+    } catch (error) {
+      setRunError(errorMessage(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const remaining = Math.max(0, (status?.next_run_ts ?? now) - now);
+  const countdown = Math.floor(remaining / 60) + ":" + String(remaining % 60).padStart(2, "0");
+  const state = running || status?.running ? "Running…" : settings?.auto_snipe_enabled === false
+    ? "Paused" : status?.next_run_ts ? "Next run in " + countdown : "Waiting for schedule…";
+
   async function run() {
     manual.current = true;
     generation.current++;
@@ -76,9 +119,29 @@ export default function Snipes() {
 
   return <>
     <PageTitle title="Snipes" description="Track discounted listings and their Discord notification status.">
-      <button className="primary" type="button" disabled={running} onClick={() => void run()}>{running ? "Scanning…" : "Run now"}</button>
+      <button className="primary" type="button" disabled={running || status?.running} onClick={() => void run()}>{running ? "Scanning…" : "Run now"}</button>
     </PageTitle>
-    {running && <Loading>Running the snipe scan…</Loading>}
+    {settings ? <section className="panel panel-body" aria-label="Snipe controls">
+      <fieldset className="snipe-controls" disabled={saving}>
+        <label className="check"><input type="checkbox" role="switch" checked={settings.auto_snipe_enabled ?? true}
+          onChange={e => void save({ auto_snipe_enabled: e.target.checked })} />Auto snipe</label>
+        <label>Interval (min) <input key={String(settings.scan_interval_min) + saving} type="number" min="1" max="240" required
+          defaultValue={settings.scan_interval_min} onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
+          onBlur={e => {
+            const input = e.currentTarget;
+            if (!input.reportValidity()) { input.value = String(settings.scan_interval_min); return; }
+            if (input.valueAsNumber !== settings.scan_interval_min) void save({ scan_interval_min: input.valueAsNumber });
+          }} /></label>
+        <label className="check"><input type="checkbox" role="switch" checked={Boolean(settings.webhook_url && settings.discord_notifier)}
+          disabled={!settings.webhook_url} aria-describedby={!settings.webhook_url ? "webhook-hint" : undefined}
+          onChange={e => void save({ discord_notifier: e.target.checked })} />Send to Discord</label>
+        {!settings.webhook_url && <small id="webhook-hint">Set a webhook in Settings</small>}
+      </fieldset>
+      <small>{state} · {status?.last_run_ts
+        ? `Last run ${time(status.last_run_ts)} · ${status.fresh} fresh · ${status.stale} stale · ${status.notified} notified`
+        : "No completed run yet"}</small>
+      {statusError && <Notice tone="error">{statusError}</Notice>}
+    </section> : <ResourceState error={resource.error} retry={resource.retry} loading="Loading snipe controls…" />}
     {runError && <Notice tone="error">{runError}</Notice>}
     <Section title="Live listings" detail={lastChecked == null ? "Refreshes every 15 seconds" : `Last checked ${time(lastChecked)} · Refreshes every 15 seconds`}>
       {pollError && <Notice tone="error">{pollError}</Notice>}

@@ -83,7 +83,8 @@ function SettingsForm({ settings, onSaved }: { settings: Settings; onSaved: (set
         <div className="fields">
           <Field label="Home world"><input required value={draft.home_world} onChange={(e) => update("home_world", e.target.value)} /></Field>
           <Field label="Buy region"><input required value={draft.buy_region} onChange={(e) => update("buy_region", e.target.value)} /></Field>
-          <Field label="Scan interval (min)"><Numeric min={1} value={draft.scan_interval_min ?? 5} onValue={(value) => update("scan_interval_min", value)} /></Field>
+          <label className="check"><input type="checkbox" role="switch" checked={draft.auto_snipe_enabled ?? true} onChange={e => update("auto_snipe_enabled", e.target.checked)} />Auto snipe</label>
+          <Field label="Scan interval (min)"><Numeric min={1} max={240} value={draft.scan_interval_min ?? 5} onValue={(value) => update("scan_interval_min", value)} /></Field>
           {draft.snipe_rule && <Field label="Maximum top buyer share (%)">
             <Numeric max={100} step="any" value={draft.snipe_rule.max_top_buyer_share * 100}
               onValue={(value) => update("snipe_rule", { ...draft.snipe_rule!, max_top_buyer_share: value / 100 })} />
@@ -111,6 +112,7 @@ function SettingsForm({ settings, onSaved }: { settings: Settings; onSaved: (set
         <legend className="sr-only">Discord notifications</legend>
         <label className="check"><input type="checkbox" checked={draft.discord_notifier ?? false} onChange={(e) => update("discord_notifier", e.target.checked)} />Enable Discord notifier</label>
         <div className="fields">
+          <Field label="Coin emoji"><input required maxLength={80} value={draft.discord_coin_emoji ?? "🪙"} onChange={e => update("discord_coin_emoji", e.target.value)} /></Field>
           <Field label="Discord webhook URL">
             <input type="password" ref={webhook} disabled={clearWebhook} autoComplete="new-password" spellCheck={false}
               placeholder={savedWebhook ? "Saved · enter a new URL to replace" : "Enter webhook URL"} />

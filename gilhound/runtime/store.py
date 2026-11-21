@@ -10,9 +10,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from threading import RLock
 
-from pydantic import ValidationError
-
-from gilhound.models import ScanResult, SnipeHit, UserSettings
+from gilhound.models import ScanResult, SnipeHit, SnipeStatus, UserSettings
 
 
 def data_dir() -> Path:
@@ -27,10 +25,14 @@ class SettingsStore:
     def get(self) -> UserSettings:
         with self.lock:
             try:
-                return UserSettings.model_validate_json(self.path.read_bytes())
+                values = json.loads(self.path.read_bytes())
+                # Older releases allowed intervals above the current input range.
+                if isinstance(values, dict) and isinstance(values.get("scan_interval_min"), int):
+                    values["scan_interval_min"] = min(values["scan_interval_min"], 240)
+                return UserSettings.model_validate(values)
             except FileNotFoundError:
                 return UserSettings(home_world="Cerberus", buy_region="Europe")
-            except ValidationError:
+            except ValueError:
                 raise ValueError(
                     "Gilhound settings could not be read. Check settings.json."
                 ) from None
@@ -62,6 +64,7 @@ class History:
         path.parent.mkdir(parents=True, exist_ok=True)
         with self.connection() as db:
             db.executescript("""
+                CREATE TABLE IF NOT EXISTS last_snipe_run (id INTEGER PRIMARY KEY, body TEXT);
                 CREATE TABLE IF NOT EXISTS scans (id INTEGER PRIMARY KEY, body TEXT NOT NULL);
                 CREATE TABLE IF NOT EXISTS current_hits (key TEXT PRIMARY KEY);
                 CREATE TABLE IF NOT EXISTS hits (
@@ -73,6 +76,17 @@ class History:
     def connection(self) -> Iterator[sqlite3.Connection]:
         with closing(sqlite3.connect(self.path, timeout=15)) as db, db:
             yield db
+
+    def last_run(self) -> SnipeStatus:
+        with self.connection() as db:
+            row = db.execute("SELECT body FROM last_snipe_run WHERE id=1").fetchone()
+            return SnipeStatus.model_validate_json(row[0]) if row else SnipeStatus()
+
+    def save_run(self, status: SnipeStatus) -> None:
+        with self.connection() as db:
+            db.execute(
+                "INSERT OR REPLACE INTO last_snipe_run VALUES (1,?)", (status.model_dump_json(),)
+            )
 
     def save_scan(self, result: ScanResult) -> None:
         with self.connection() as db:

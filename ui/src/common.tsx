@@ -8,6 +8,8 @@ export const defaults: Settings = {
   home_world: "Cerberus",
   buy_region: "Europe",
   scan_interval_min: 5,
+  auto_snipe_enabled: true,
+  discord_coin_emoji: "🪙",
   dedup_cooldown_h: 6,
   discord_notifier: false,
   travel_cost: { Chaos: 0, Light: 0 },

@@ -17,6 +17,8 @@ let settings: Settings = {
     min_distinct_buyers_7d: 3, min_profit: 5000 },
   home_world: "Cerberus",
   buy_region: "Europe",
+  auto_snipe_enabled: true,
+  discord_coin_emoji: "🪙",
   scan_interval_min: 5,
   discord_notifier: false,
   dedup_cooldown_h: 6,
@@ -86,6 +88,8 @@ function snipeHits(): SnipeHit[] {
 }
 
 let hits = snipeHits();
+let lastRun = now();
+let nextRun = lastRun + 300;
 
 export const mockApi: Api = {
   async scan(params) {
@@ -116,12 +120,23 @@ export const mockApi: Api = {
         }) : [],
     };
   },
+  async getSnipeStatus() {
+    if (settings.auto_snipe_enabled && now() >= nextRun) {
+      hits = snipeHits();
+      lastRun = now();
+      nextRun = lastRun + (settings.scan_interval_min ?? 5) * 60;
+    }
+    return { running: false, next_run_ts: settings.auto_snipe_enabled ? nextRun : null,
+      last_run_ts: lastRun, fresh: hits.filter(h => h.tier.name === "fresh").length,
+      stale: hits.filter(h => h.tier.name === "stale").length, notified: hits.filter(h => h.notified_ts).length };
+  },
   async getSnipes() {
     await pause();
     return hits;
   },
   async runSnipes() {
     await pause(750);
+    lastRun = now();
     const previous = new Map(hits.map((hit) => [hit.listing_key, hit]));
     hits = snipeHits().map((hit) => ({
       ...hit, first_seen_ts: previous.get(hit.listing_key)?.first_seen_ts ?? hit.first_seen_ts,
@@ -163,6 +178,8 @@ export const mockApi: Api = {
   async saveSettings(input) {
     await pause();
     const { webhook_url, ...fields } = input;
+    if (!settings.auto_snipe_enabled && fields.auto_snipe_enabled) nextRun = now();
+    else if (settings.scan_interval_min !== fields.scan_interval_min) nextRun = now() + (fields.scan_interval_min ?? 5) * 60;
     settings = {
       ...fields,
       webhook_url: webhook_url === undefined ? settings.webhook_url : webhook_url ? "**********" : null,

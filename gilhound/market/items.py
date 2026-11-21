@@ -30,8 +30,13 @@ def save_cache(path: Path, data: dict[int, str] | list[int]) -> None:
         temp.unlink(missing_ok=True)
 
 
+def market_url(item_id: int, world: str) -> str:
+    return f"https://universalis.app/market/{item_id}?" + urlencode({"server": world})
+
+
 class ItemCatalog:
     def __init__(self, root: Path, http: HttpClient | None = None) -> None:
+        self.icons: dict[int, str | None] = {}
         self.path = root / "items.json"
         self.http = http or HttpClient(timeout=4, attempts=1)
         try:
@@ -51,6 +56,26 @@ class ItemCatalog:
         self.lock = Lock()
         self.worker = ThreadPoolExecutor(max_workers=1)
         self.pending: set[int] = set()
+
+    def decorate_icons(self, items: list[ItemRef]) -> None:
+        for group in batched(sorted({item.id for item in items} - self.icons.keys()), 100):
+            rows = ",".join(map(str, group))
+            try:
+                result = self.http.request(f"{SHEET}?rows={rows}&fields=Icon")
+                for row in result["rows"]:
+                    icon = row["fields"].get("Icon")
+                    if not isinstance(icon, dict):
+                        continue
+                    path = icon.get("path_hr1") or icon.get("path")
+                    if isinstance(path, str) and path:
+                        query = urlencode({"path": path, "format": "png"})
+                        self.icons[row["row_id"]] = f"https://v2.xivapi.com/api/asset?{query}"
+                    else:
+                        self.icons[row["row_id"]] = None
+            except UNAVAILABLE:
+                continue
+        for item in items:
+            item.icon_url = self.icons.get(item.id)
 
     def close(self) -> None:
         self.worker.shutdown(cancel_futures=True)
@@ -140,9 +165,7 @@ class ItemCatalog:
             for item in refs:
                 fallback = f"Item {item.id}" if item.name == str(item.id) else item.name
                 item.name = self.names.get(item.id, fallback)
-                item.universalis_url = f"https://universalis.app/market/{item.id}?" + urlencode(
-                    {"server": world}
-                )
+                item.universalis_url = market_url(item.id, world)
                 item.saddlebag_url = (
                     f"https://saddlebagexchange.com/queries/item-data/{item.id}"
                     if item.id in self.marketable_ids

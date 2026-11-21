@@ -26,6 +26,7 @@ from gilhound.models import (
     ScanParams,
     ScanResult,
     SnipeHit,
+    SnipeStatus,
     SourceStatus,
     UserSettings,
 )
@@ -153,6 +154,10 @@ def create_app(
     @app.post("/api/retainer-scan")
     def run_retainer_scan(params: RetainerScanParams) -> RetainerScanResult:
         return runtime.retainer(params)
+
+    @app.get("/api/snipes/status")
+    def get_snipe_status() -> SnipeStatus:
+        return runtime.snipe_status()
 
     @app.get("/api/snipes")
     def get_snipes() -> list[SnipeHit]:
