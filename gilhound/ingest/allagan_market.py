@@ -33,7 +33,7 @@ def read(folder: Path, local_tz: tzinfo | None = None, seller_tax_pct: int = 5) 
                     rate = uint(row[6]) or seller_tax_pct
                     require(0 <= rate <= 100)
                 else:
-                    updated = timestamp(row[8])
+                    timestamp(row[8])
                     if len(row) == 10:
                         uint(row[9])
                 if item_id == 0 and qty == 0 and not sold:
@@ -52,8 +52,9 @@ def read(folder: Path, local_tz: tzinfo | None = None, seller_tax_pct: int = 5) 
                             gross - gross * rate // 100,
                         )
                     )
+                    records.events[-1].details.gross = gross
                 else:
-                    records.listings.append(Stock(item, qty, price, str(owner), ts=updated))
+                    records.listings.append(Stock(item, qty, price, str(owner), ts=ts))
         return records
 
     return read_source(

@@ -189,3 +189,27 @@ def test_sorted_storage_caps_only_open_purchases(tmp_path: Path) -> None:
     fallback = build_ledger([cash, allagan_tools.read(tmp_path / "missing")])
     assert len(fallback.positions) == len(events)
     assert fallback.warnings
+
+
+def test_realised_sale_holding_time_coverage_and_zero_basis() -> None:
+    item = item_ref(1000, False)
+    rows = [event(S.CASHFLOW, K.BUY, item, 1, 0, 0),
+            event(S.CASHFLOW, K.BUY, item, 2, 86400, 20),
+            event(S.CASHFLOW, K.SELL, item, 3, 259200, 55)]
+    duplicate = event(S.RESTOCKY, K.SELL, item, 3, 259201, 55)
+    duplicate.details.first_listed = 86400
+    duplicate.details.gross = 58
+    known, = calculate([*rows, duplicate]).sales
+    assert known.fifo_cost == 20 and known.known_profit == 35 and known.roi_pct == 175
+    assert known.purchase_days == 7 / 3 and known.listing_days == 2
+    assert known.sources == [S.CASHFLOW, S.RESTOCKY] and known.gross == 58
+    from gilhound.ledger.fifo import rollup_sales
+
+    group, = rollup_sales([known, known])
+    assert group.profit_per_slot_day == 17.5 and group.net == 110 and group.sales == 2
+    assert duplicate.details.first_listed == 86400 and not rows[-1].sources
+    unknown, = calculate([rows[-1]]).sales
+    assert unknown.fifo_cost is unknown.roi_pct is unknown.purchase_days is None
+    assert unknown.unknown_qty == 3 and unknown.known_profit == 0
+    zero, = calculate([rows[0], event(S.CASHFLOW, K.SELL, item, 1, 10, 7)]).sales
+    assert zero.fifo_cost == 0 and zero.known_profit == 7 and zero.roi_pct is None

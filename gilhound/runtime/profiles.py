@@ -14,6 +14,7 @@ from gilhound.models import ScanParams, ScanPreset, UserSettings
 BUILTINS = {
     "Flip": ScanPreset.FLIP,
     "High margin": ScanPreset.HIGH_MARGIN,
+    "Safe flip": ScanPreset.SAFE_FLIP,
     "Volume": ScanPreset.VOLUME,
     "Snipe": ScanPreset.SNIPE,
 }

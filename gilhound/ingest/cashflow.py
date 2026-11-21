@@ -87,9 +87,9 @@ def parse(paths: dict[str, Path]) -> Records:
             ("RetainerSales", LedgerEventKind.SELL),
         ):
             rows = copy.execute(
-                f"SELECT Item, Quantity, Price, UnixTime, IsMannequinn FROM {table}"
+                f"SELECT Item, Quantity, Price, UnixTime, IsMannequinn, RetainerName FROM {table}"
             )
-            for raw_item, qty, price, millis, mannequin in rows:
+            for raw_item, qty, price, millis, mannequin, owner in rows:
                 raw_item, qty, price, millis, mannequin = map(
                     uint, (raw_item, qty, price, millis, mannequin)
                 )
@@ -101,6 +101,10 @@ def parse(paths: dict[str, Path]) -> Records:
                 records.events.append(
                     event(SourceName.CASHFLOW, kind, item(raw_item), qty, millis // 1000, total)
                 )
+                if kind == LedgerEventKind.SELL:
+                    records.events[-1].details.retainer = owner or None
+                    if mannequin:
+                        records.events[-1].details.gross = total
         for cid, player, retainer, millis in copy.execute(
             "SELECT Cid, GilPlayer, GilRetainer, UnixTime FROM GilRecords"
         ):

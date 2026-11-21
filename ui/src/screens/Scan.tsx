@@ -1,8 +1,9 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 import { api } from "../api/client";
 import { Item, Notice, PageTitle, Section, Table, age, errorMessage, gil, number, time } from "../common";
 import type { Schema } from "../common";
-import { route } from "../Travel";
+import { checkQuotes, route } from "../Travel";
+import { purchasePlan } from "../purchasePlan";
 import ProfileEditor from "./ProfileEditor";
 
 type Row = Schema<"ScanRow">;
@@ -50,6 +51,12 @@ const definitions: Column[] = [
   { label: "Home lowest", group: "Competition", value: (r) => r.home_lowest },
   { label: "Units below target", group: "Competition", value: (r) => r.units_below_sell },
   { label: "Profit/unit", group: "Profit", value: (r) => r.profit_per_unit, format: gil },
+  { label: "Median net/unit", group: "Profit", value: r => r.median_profit_per_unit, format: gil },
+  { label: "Median capped net", group: "Profit", value: r => r.median_profit_per_unit == null ? null : r.median_profit_per_unit * r.sellable_qty, format: gil },
+  { label: "Observed exit", group: "Profit", value: r => r.ask_exit_ppu ?? (r.home_lowest == null ? "No observed ask" : null) },
+  { label: "Ask depth", group: "Profit", value: r => r.home_lowest_units },
+  { label: "Ask net/unit", group: "Profit", value: r => r.ask_profit_per_unit, format: gil },
+  { label: "Ask capped net", group: "Profit", value: r => r.ask_profit_capped, format: gil },
   { label: "ROI", group: "Profit", value: (r) => r.roi_pct, format: pct },
   { label: "Sellable qty", group: "Profit", value: (r) => r.sellable_qty },
   { label: "Capital needed", group: "Profit", value: (r) => r.capital_needed, format: gil },
@@ -64,7 +71,7 @@ const initial = [
   "Buy world",
   "Buy price",
   "Home median",
-  "Profit/unit",
+  "Median net/unit", "Median capped net", "Observed exit", "Ask depth", "Ask net/unit", "Ask capped net", "Qty at price", "Top buyer",
   "ROI",
   "Units/day",
   "Buyers (7d)",
@@ -86,7 +93,11 @@ function display(c: Column, row: Row) {
   const v = c.value(row);
   return typeof v === "number" ? (c.format ?? number)(v) : (v ?? "—");
 }
-function Detail({ row, home }: { row: Row; home: string }) {
+function heading(label: string, home: string, archived = false) {
+  const ageLabel = label === "Data age" ? "Buy listing last seen" : label === "Last sale" ? "Last " + home + " sale" : "";
+  return ageLabel ? ageLabel + (archived ? " at scan time" : "") : label;
+}
+function Detail({ row, home, archived }: { row: Row; home: string; archived: boolean }) {
   const units = row.daily_units_14d;
   return (
     <div className="scan-detail">
@@ -117,7 +128,7 @@ function Detail({ row, home }: { row: Row; home: string }) {
                 .filter((c) => c.group === group)
                 .map((c) => (
                   <Fragment key={c.label}>
-                    <dt>{c.label}</dt>
+                    <dt>{heading(c.label, home, archived)}</dt>
                     <dd>{display(c, row)}</dd>
                   </Fragment>
                 ))}
@@ -128,11 +139,11 @@ function Detail({ row, home }: { row: Row; home: string }) {
     </div>
   );
 }
-export function ScanResults({ result }: { result: Result }) {
+export function ScanResults({ result, archived = false, retry, edit }: { result: Result; archived?: boolean; retry?: () => void; edit?: () => void }) {
   const [visible, setVisible] = useState(readColumns);
   const [selected, setSelected] = useState<number[]>([]);
   const [expanded, setExpanded] = useState<number>();
-  const [sort, setSort] = useState({ label: "Capped profit", desc: true });
+  const [sort, setSort] = useState({ label: "", desc: true });
   const [notice, setNotice] = useState("");
   const [fallback, setFallback] = useState("");
   useEffect(() => {
@@ -143,10 +154,12 @@ export function ScanResults({ result }: { result: Result }) {
     }
   }, [visible]);
   const columns = visible.flatMap((label) => definitions.filter((c) => c.label === label));
-  const sorted = result.rows
-    .map((row, i) => ({ row, i }))
-    .sort((a, b) => {
-      const col = definitions.find((c) => c.label === sort.label)!;
+  const home = result.params.home_world;
+  const sorted = useMemo(() => {
+    const rows = result.rows.map((row, i) => ({ row, i }));
+    const col = definitions.find(c => c.label === sort.label);
+    if (!col) return rows;
+    return rows.sort((a, b) => {
       const x = col.value(a.row),
         y = col.value(b.row);
       if (x == null || y == null) return Number(x == null) - Number(y == null);
@@ -155,13 +168,29 @@ export function ScanResults({ result }: { result: Result }) {
         (typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y)))
       );
     });
+  }, [result.rows, sort]);
+  useEffect(() => {
+    const close = (e: KeyboardEvent) => { if (e.key === "Escape") setExpanded(undefined); };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, []);
+  const [skippedStacks, setSkippedStacks] = useState<Set<string>>(new Set());
+  const chosen = sorted.filter(entry => selected.includes(entry.i));
+  const {preview, purchases, travel, outlay, net, bandFailed} = purchasePlan(chosen, result.params, skippedStacks);
+  const quote = (r: Row) => ({...r, home, maxAge: result.params.max_data_age_h ?? undefined, historyEntries: result.params.history_entries});
+  const [checking, setChecking] = useState(false);
   async function copy(onlyRoute: boolean) {
+    if (onlyRoute) {
+      setChecking(true);
+      try { if (!await checkQuotes(purchases.map(({row, stacks}) => ({...quote(row), plannedStacks: stacks})), home)) return; }
+      catch (e) { setNotice(errorMessage(e)); return; }
+      finally { setChecking(false); }
+    }
     const stops = new Map<string, string[]>();
-    for (const { row, i } of sorted) {
-      if (!selected.includes(i)) continue;
+    for (const { row, qty } of purchases) {
       const items = stops.get(row.buy_world) ?? [];
       items.push(
-        `• ${row.item.name} (${row.item.hq ? "HQ" : "NQ"}) ×${row.sellable_qty} @ ${gil(row.buy_ppu)} gil · profit ${gil(row.total_profit_capped)} gil`,
+        `• ${row.item.name} (${row.item.hq ? "HQ" : "NQ"}) ×${qty} @ ${gil(row.buy_ppu)} gil`,
       );
       stops.set(row.buy_world, items);
     }
@@ -186,7 +215,7 @@ export function ScanResults({ result }: { result: Result }) {
       ))}
       <div className="panel-body">
         <details>
-          <summary>Columns</summary>
+          <summary>Columns</summary><button onClick={() => setVisible(initial)}>Restore default columns</button>
           <div className="metric-groups">
             {groups.map((group) => (
               <fieldset key={group}>
@@ -205,18 +234,37 @@ export function ScanResults({ result }: { result: Result }) {
                           )
                         }
                       />
-                      {c.label}
+                      {heading(c.label, home, archived)}
                     </label>
                   ))}
               </fieldset>
             ))}
           </div>
         </details>
+        <p>Ordered by {sort.label ? heading(sort.label, home, archived) + (sort.desc ? " ↓" : " ↑") :
+          "profile · " + (["volume","safe_flip"].includes(result.params.preset ?? "") ? "profit/day" : result.params.preset === "snipe" ? "profit/unit" : "capped profit")}.
+          {" "}<button onClick={() => setSort({label:"", desc:true})}>Profile order</button></p>
+        {!!chosen.length && <details open><summary>Whole-stack purchase preview</summary>
+          {preview.map(({row, i, qty, units}) => <div key={i}><strong>{row.item.name} · {row.buy_world}</strong>
+            {row.buy_stacks?.map((n,j) => <label className="check" key={j}><input type="checkbox"
+              checked={!skippedStacks.has(i+"/"+j)} onChange={() => setSkippedStacks(previous => {
+                const next = new Set(previous), key = i+"/"+j;
+                if (next.has(key)) next.delete(key); else next.add(key);
+                return next;
+              })}/>Stack of {n}</label>) ?? <span>Stack sizes unavailable at scan time · estimated outlay</span>}
+            <small>{units} sellable · {qty-units} leftover</small></div>)}
+          <p>{gil(outlay)} gil taxed outlay + {gil(travel)} travel = <strong>{gil(outlay+travel)} gil to bring</strong></p>
+          <p>Window net after funding all stacks · {gil(net)} gil ({number(outlay ? net/outlay : null)}×).
+            Uses the lower exit when observed, otherwise the median.</p>
+          {bandFailed && <Notice tone="warn">Route below your large-purchase return target.</Notice>}
+        </details>}
+        {!!result.rejected?.length && <details><summary>Rejected candidates ({result.rejected.length})</summary>
+          {result.rejected.map((r,i) => <p key={i}>{r.item.name} {r.item.hq ? "HQ" : "NQ"} {r.buy_world} · {r.reasons.join(", ")}</p>)}</details>}
         <div className="form-actions">
-          <button disabled={!selected.length} onClick={() => void copy(false)}>
+          <button disabled={!purchases.length} onClick={() => void copy(false)}>
             Copy results ({selected.length})
           </button>
-          <button disabled={!selected.length} onClick={() => void copy(true)}>
+          <button disabled={checking || !purchases.length} onClick={() => void copy(true)}>
             Copy route
           </button>
         </div>
@@ -251,7 +299,7 @@ export function ScanResults({ result }: { result: Result }) {
                       })
                     }
                   >
-                    {c.label}
+                    {heading(c.label, home, archived)}
                     {sort.label === c.label ? (sort.desc ? " ↓" : " ↑") : ""}
                   </button>
                 </th>
@@ -277,13 +325,15 @@ export function ScanResults({ result }: { result: Result }) {
                       {c.label === "Item" ? (
                         <>
                           <button
-                            aria-expanded={expanded === i}
+                            title="Toggle details (Esc to close)" aria-expanded={expanded === i}
                             aria-label={`Details for ${row.item.name}`}
                             className="sort-button"
                           >
                             {expanded === i ? "▾" : "▸"}
                           </button>
-                          <Item item={row.item} buyWorld={row.buy_world} />
+                          <Item item={row.item} buyWorld={row.buy_world} quote={quote(row)} />
+                          {row.ask_below_floor && <small className="warning-text">Below floor at observed ask</small>}
+                          {row.large_buy_below_multiple && <small className="warning-text">Large buy below return target</small>}
                         </>
                       ) : (
                         display(c, row)
@@ -294,7 +344,7 @@ export function ScanResults({ result }: { result: Result }) {
                 {expanded === i && (
                   <tr>
                     <td colSpan={columns.length + 1}>
-                      <Detail row={row} home={result.params.home_world} />
+                      <Detail row={row} home={home} archived={archived} />
                     </td>
                   </tr>
                 )}
@@ -303,7 +353,8 @@ export function ScanResults({ result }: { result: Result }) {
           </tbody>
         </Table>
       ) : (
-        <Notice>No listings matched these settings.</Notice>
+        <Notice>{result.warnings?.length ? <>No confirmed matches in the data received · {result.warnings.length} warnings. {retry && <button onClick={retry}>Retry</button>}</> :
+          <>No matches for {result.params.quality} quality in {result.params.buy_region} with a {gil(result.params.min_profit)} gil/unit floor. {edit && <button onClick={edit}>Edit profile</button>}</>}</Notice>
       )}
     </Section>
   );
@@ -314,7 +365,9 @@ export default function Scan({ settings }: { settings: Schema<"UserSettings-Outp
   const [revision, setRevision] = useState(0);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
+  const [profile, setProfile] = useState("");
   async function run(params: Schema<"ScanParams">, name: string) {
+    setProfile(name);
     setRunning(true);
     setError("");
     try {
@@ -341,7 +394,7 @@ export default function Scan({ settings }: { settings: Schema<"UserSettings-Outp
         />
       </Section>
       {error && <Notice tone="error">{error}</Notice>}
-      {result && <ScanResults key={revision} result={result} />}
+      {result && <ScanResults key={revision} result={result} retry={running ? undefined : () => void run(result.params,profile)} edit={() => document.querySelector<HTMLButtonElement>(".profile-editor .edit-profile")?.click()} />}
     </>
   );
 }

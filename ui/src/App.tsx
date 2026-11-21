@@ -8,6 +8,7 @@ import History from "./screens/History";
 import Scan from "./screens/Scan";
 import Snipes from "./screens/Snipes";
 import Retainer from "./screens/Retainer";
+import Sales from "./screens/Sales";
 import Positions from "./screens/Positions";
 import SettingsScreen from "./screens/Settings";
 
@@ -17,6 +18,7 @@ const pages = [
   { id: "snipes", title: "Snipes", icon: "bolt" },
   { id: "retainer", title: "Retainer", icon: "bag" },
   { id: "positions", title: "Positions", icon: "chart" },
+  { id: "sales", title: "Sales", icon: "chart" },
   { id: "settings", title: "Settings", icon: "gear" },
 ] as const;
 
@@ -75,6 +77,7 @@ export default function App() {
     snipes: <Snipes resource={settings} />,
     retainer: null,
     positions: <Positions />,
+    sales: <Sales />,
     settings: <SettingsScreen resource={settings} updates={updates} />,
   };
 

@@ -49,6 +49,7 @@ def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | Non
     }
     inventory: dict[ItemKey, int] = defaultdict(int)
     listed: dict[ItemKey, int] = defaultdict(int)
+    stacks: dict[ItemKey, list[Stock]] = defaultdict(list)
     listing_counts: dict[ItemKey, int] = defaultdict(int)
     costs: dict[ItemKey, list[Stock]] = defaultdict(list)
     items: dict[ItemKey, ItemRef] = {}
@@ -70,6 +71,7 @@ def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | Non
         for stock in latest.records.listings:
             key = stock.item.id, stock.item.hq
             listed[key] += stock.qty
+            stacks[key].append(stock)
             listing_counts[key] += 1
             items[key] = stock.item
     for key, item in items.items():
@@ -108,7 +110,31 @@ def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | Non
     ):
         limits = {key: sellable[key] + listed[key] for key in set(sellable) | set(listed)}
     ledger = calculate(history, manual, limits)
+    tracked: dict[ItemKey, list[Stock]] = defaultdict(list)
+    for src in inputs:
+        if src.status.name == SourceName.RESTOCKY:
+            for stock in src.records.listings or []:
+                tracked[stock.item.id, stock.item.hq].append(stock)
     for position in ledger.positions:
+        active = stacks[position.item.id, position.item.hq]
+        position.lowest_list_price = min((s.ppu for s in active if s.ppu), default=None)
+        restocky = tracked[position.item.id, position.item.hq]
+        if active and sorted((s.qty, s.ppu or 0) for s in restocky) == sorted(
+            (s.qty, s.ppu or 0) for s in active
+        ):
+            active = restocky
+        position.first_listed = min(
+            (s.ts for s in active if s.ts and s.container is None), default=None
+        )
+        observation = max((s for s in active if s.competing_price and s.observed_ts),
+                          key=lambda s: s.observed_ts, default=None)
+        if observation and position.lowest_list_price:
+            position.home_lowest = min(position.lowest_list_price, observation.competing_price)
+            position.home_observed_ts = observation.observed_ts
+            if position.lowest_list_price == position.home_lowest:
+                position.home_rank = 1
+        if active and all(s.undercut_count is not None for s in active):
+            position.undercut_count = sum(s.undercut_count for s in active)
         position.listing_count = listing_counts[position.item.id, position.item.hq]
     if limits is None:
         ledger.warnings.append(

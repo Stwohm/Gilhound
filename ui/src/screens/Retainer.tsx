@@ -60,20 +60,22 @@ export default function Retainer({ settings }: { settings: Settings }) {
     <RetainerResults result={result} running={running}/></>;
 }
 
-export function RetainerResults({result,running=false}: {result?: Schema<"RetainerScanResult">;running?: boolean}) {
+export function RetainerResults({result,running=false,archived=false}: {archived?:boolean;result?: Schema<"RetainerScanResult">;running?: boolean}) {
   return <Section title="Retainer listings" detail={result ? `${result.params.retainer_name} · ${number(result.items_scanned)} items checked in ${number(result.duration_s)} s` : undefined}>
       {result?.warnings?.map((warning, index) => <Notice tone="warn" key={index}>{warning}</Notice>)}
       {result?.rows.length ? <Table label="Retainer listings"><thead><tr>
-        {["Item", "Listed price", "Qty", "Data age", "Cheapest world / DC", "Cheapest price", "Cheapest qty", "Gap", "Profit / unit"].map((label) => <th key={label} scope="col">{label}</th>)}
+        {["Item", "Listed price", "Qty", archived ? "Retainer listing last seen at scan time" : "Retainer listing last seen", "Cheapest world / DC", "Cheapest price", "Cheapest qty", "Spread to retainer’s asking price", "Profit / unit"].map((label) => <th key={label} scope="col">{label}</th>)}
       </tr></thead><tbody>
         {result.rows.map((row, index) => <tr key={index}>
-          <td><Item buyWorld={row.cheapest_world} item={row.item} /></td><td>{gil(row.their_ppu)}</td><td>{number(row.qty)}</td>
+          <td><Item quote={row.cheapest_world && row.cheapest_ppu && row.cheapest_qty ? {
+            item:row.item,buy_world:row.cheapest_world,buy_ppu:row.cheapest_ppu,buy_qty_at_price:row.cheapest_qty,
+          }:undefined} buyWorld={row.cheapest_world} item={row.item} /></td><td>{gil(row.their_ppu)}</td><td>{number(row.qty)}</td>
           <td><Badge tone={ageTone(row.data_age_h)}>{age(row.data_age_h)}</Badge></td>
           <td>{row.cheapest_world ?? "—"} {row.cheapest_dc && <small>{row.cheapest_dc}</small>}</td>
           <td>{gil(row.cheapest_ppu)}</td><td>{number(row.cheapest_qty)}</td>
           <td>{row.gap_pct == null ? "—" : `${number(row.gap_pct)}%`}</td>
           <td><strong className={row.profit_per_unit == null ? "" : row.profit_per_unit >= 0 ? "profit" : "loss"}>{gil(row.profit_per_unit)}</strong></td>
         </tr>)}
-      </tbody></Table> : <Notice>{result ? "No uploaded listings found for this retainer and world." : running ? "Waiting for retainer listings…" : "Run a retainer scan to compare listings here."}</Notice>}
+      </tbody></Table> : <Notice>{result ? result.warnings?.length ? "No confirmed matches in the data received · " + result.warnings.length + " warnings." : "No uploaded listings found for this retainer and world." : running ? "Waiting for retainer listings…" : "Run a retainer scan to compare listings here."}</Notice>}
     </Section>;
 }

@@ -17,6 +17,8 @@ from pydantic import BaseModel, Field
 from gilhound import __version__
 from gilhound.api.jobs import Job, Jobs
 from gilhound.api.updates import Updates
+from gilhound.ledger.fifo import rollup_sales
+from gilhound.market.recheck import recheck
 from gilhound.models import (
     AppInfo,
     BridgeGo,
@@ -25,8 +27,12 @@ from gilhound.models import (
     ItemRef,
     PnLSummary,
     Position,
+    QuoteRequest,
+    QuoteSnapshot,
+    RealisedSale,
     RetainerScanParams,
     RetainerScanResult,
+    SalesByItem,
     ScanParams,
     ScanResult,
     SnipeHit,
@@ -244,10 +250,31 @@ def create_app(
     def get_sources() -> list[SourceStatus]:
         return runtime.sources()
 
+    @app.post("/api/recheck")
+    def refresh_quote(query: QuoteRequest) -> QuoteSnapshot:
+        return recheck(query)
+
+    @app.get("/api/sales")
+    def get_sales(since: int | None = None, until: int | None = None, item: int | None = None,
+                  retainer: str | None = None) -> list[RealisedSale]:
+        rows = runtime.ledger().filtered_sales(since, until, item, retainer)
+        runtime.items.decorate((r.item for r in rows), runtime.settings.get().home_world)
+        return rows
+
+    @app.get("/api/sales/items")
+    def get_sales_by_item(
+        since: int | None = None, until: int | None = None,
+        item: int | None = None, retainer: str | None = None,
+    ) -> list[SalesByItem]:
+        return rollup_sales(get_sales(since, until, item, retainer))
+
     @app.get("/api/positions")
-    def get_positions(view: Literal["open", "closed", "all"] = "open") -> list[Position]:
+    def get_positions(
+        view: Literal["listed", "open", "closed", "all"] = "listed",
+    ) -> list[Position]:
         rows = [p for p in runtime.ledger().positions
-                if view == "all" or (p.qty_open > 0) == (view == "open")]
+                if view == "all" or (p.listed_qty > 0 if view == "listed" else
+                                     (p.qty_open > 0) == (view == "open"))]
         runtime.items.decorate((r.item for r in rows), runtime.settings.get().home_world)
         return rows
 

@@ -9,7 +9,7 @@ from pydantic import Field
 
 from gilhound import __version__
 from gilhound.market.items import market_url
-from gilhound.models import FreshnessTier, Listing, ScanRow, SnipeHit, SnipeRule
+from gilhound.models import FreshnessTier, Listing, RejectedCandidate, ScanRow, SnipeHit, SnipeRule
 
 
 class MarketRow(ScanRow):
@@ -35,6 +35,7 @@ def qualifying_listings(
     rule: SnipeRule,
     tiers: list[FreshnessTier],
     now: int,
+    rejected: list[RejectedCandidate] | None = None,
 ) -> Iterator[tuple[ScanRow, str, FreshnessTier, float]]:
     """Evaluate scan output, or pair a deserialised ScanRow with its source Listing."""
     ordered = sorted(tiers, key=lambda tier: tier.max_age_h)
@@ -47,19 +48,21 @@ def qualifying_listings(
         else:
             raise ValueError("A deserialised scan row requires its source Listing")
         proof = row.volume_proof
-        if not listing.last_review_ts:
-            continue
         age = max(0, now - listing.last_review_ts) / 3600
         tier = next((tier for tier in ordered if age < tier.max_age_h), None)
-        if (
-            tier is None
-            or row.buy_ppu > row.home_median_7d * rule.max_home_median_ratio
-            or row.profit_per_unit < rule.min_profit
-            or proof.distinct_buyers_7d < rule.min_distinct_buyers_7d
-            or proof.last_sale_age_h is None
-            or proof.last_sale_age_h + age - row.data_age_h >= rule.max_last_sale_age_h
-            or proof.top_buyer_share > rule.max_top_buyer_share
-        ):
+        reasons = [label for label, failed in (
+            ("Buy quote age", tier is None or not listing.last_review_ts),
+            ("Home median ratio", row.buy_ppu > row.home_median_7d * rule.max_home_median_ratio),
+            ("Net profit floor", row.profit_per_unit < rule.min_profit),
+            ("Distinct buyers", proof.distinct_buyers_7d < rule.min_distinct_buyers_7d),
+            ("Last sale age", proof.last_sale_age_h is None or
+             proof.last_sale_age_h + age - row.data_age_h >= rule.max_last_sale_age_h),
+            ("Top buyer share", proof.top_buyer_share > rule.max_top_buyer_share),
+        ) if failed]
+        if reasons:
+            if rejected is not None:
+                rejected.append(RejectedCandidate(item=row.item, buy_world=row.buy_world,
+                                                  reasons=reasons))
             continue
         key = listing_key(row, listing)
         if key in seen:
@@ -125,7 +128,7 @@ def discord_embed(hit: SnipeHit, home: str, coin: str) -> dict:
     last = (
         "last sale unknown"
         if proof.last_sale_age_h is None
-        else f"last {proof.last_sale_age_h:.1f} h ago"
+        else f"last {home} sale {proof.last_sale_age_h:.1f} h ago"
     )
     lowest = "Unknown" if hit.home_lowest is None else f"{hit.home_lowest:,} {coin}"
     unit_profit = f"{hit.profit_per_unit:+,.0f} {coin} / unit"
@@ -136,8 +139,8 @@ def discord_embed(hit: SnipeHit, home: str, coin: str) -> dict:
         (f"📊 {home} median", f"{hit.home_median_7d:,.0f} {coin}"),
         (f"🏷️ Lowest on {home}", lowest),
         ("💰 Profit", f"{unit_profit}\n{total_profit}"),
-        ("📈 Sells", f"{sales} · {last}"),
-        ("🕒 Data age", f"{hit.data_age_h * 60:,.0f} min ({tier})"),
+        ("📈 Sells", f"{sales} · {last} · top buyer {proof.top_buyer_share:.0%}"),
+        ("🕒 Buy listing last seen", f"{hit.data_age_h * 60:,.0f} min ({tier})"),
     ]
     embed = {
         "title": clip(hit.item.name, 253) + (" HQ" if hit.item.hq else ""),

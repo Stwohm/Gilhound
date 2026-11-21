@@ -96,6 +96,11 @@ function SettingsForm({ settings, onSaved }: { settings: Settings; onSaved: (set
         {testResult && <Notice tone={testResult.success ? "good" : "error"}>{testResult.message}</Notice>}
       </fieldset>
     </Section>
+    <Section title="Large purchases" detail="Net return multiple is profit in the sale window divided by the full taxed stack outlay. Unsold stock contributes no proceeds.">
+      <div className="fields panel-body"><Field label="Taxed outlay threshold (gil)"><input type="number" min="0" placeholder="Off" value={draft.large_buy_gil ?? ""}
+        onChange={e => update("large_buy_gil", e.target.value === "" ? null : Number(e.target.value))}/></Field>
+        <Field label="Minimum net return multiple"><input type="number" min="0" step="any" required value={draft.min_net_multiple ?? 1} onChange={e=>update("min_net_multiple",Number(e.target.value))}/></Field></div>
+    </Section>
     <Section title="Travel costs" detail="Fixed gil cost per buying trip, shared across the purchased units.">
       <fieldset className="panel-body" disabled={saving}>
         <legend className="sr-only">Travel costs</legend>

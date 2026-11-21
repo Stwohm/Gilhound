@@ -103,7 +103,9 @@ function Editor({ library, running, onRun, catalog, name, select, updated }: Pro
     } catch (e) { setError(errorMessage(e)); }
     finally { setBusy(false); }
   }
-  return <form ref={form} className="panel-body profile-editor" onSubmit={e => {
+  return <form ref={form} className="panel-body profile-editor" onKeyDown={e => {
+    if (e.ctrlKey && e.key === "Enter" && onRun) { e.preventDefault(); if (!e.repeat && !busy && !running) void act("run"); }
+  }} onSubmit={e => {
     e.preventDefault();
     if (mode !== "view" || onRun) void act(mode === "view" ? "run" : mode === "edit" ? "save" : mode);
   }}>
@@ -121,13 +123,13 @@ function Editor({ library, running, onRun, catalog, name, select, updated }: Pro
       </div>
       {mode === "view" && <><ProfileSummary name={name} catalog={catalog} />
         <div className="form-actions">
-          <button type="button" onClick={() => setMode("edit")}>Edit</button>
+          <button className="edit-profile" type="button" onClick={() => setMode("edit")}>Edit</button>
           <button type="button" onClick={() => { setNewName(name + " copy"); setMode("create"); }}>Duplicate</button>
           <button type="button" onClick={() => void act("reset")}>Reset to default</button>
           {!Object.hasOwn(catalog.defaults, name) && <>
             <button type="button" onClick={() => { setNewName(name); setMode("rename"); }}>Rename</button>
             <button type="button" onClick={() => void act("delete")}>Delete</button></>}
-          {onRun && <button className="primary" type="submit">{running ? "Scanning…" : "Run scan"}</button>}
+          {onRun && <button title="Run scan (Ctrl+Enter)" className="primary" type="submit">{running ? "Scanning…" : "Run scan"}</button>}
         </div></>}
       {(mode === "create" || mode === "rename") && <Field label="Profile name"><input autoFocus required maxLength={80}
         value={newName} onChange={e => setNewName(e.target.value)} /></Field>}

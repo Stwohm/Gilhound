@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import type { components } from "./api/types";
+import { reviewQuotes, type Quote } from "./recheck";
 import { api } from "./api/client";
 
 export const route = (world: string) => `/li ${world.toLowerCase()} market`;
@@ -59,7 +60,11 @@ export function BridgeIndicator() {
     {bridge?.world && ` · ${bridge.world}`}</span>;
 }
 
-export function TravelButtons({ world }: { world?: string | null }) {
+export function checkQuotes(quotes: Quote[], home: string) {
+  return reviewQuotes(quotes, home, api.recheck, message => window.confirm(message), message => window.alert(message));
+}
+
+export function TravelButtons({ world, quote }: { world?: string | null; quote?: Quote }) {
   const { home, bridge, notify } = useContext(Context);
   const [busy, setBusy] = useState(false);
   const target = world === undefined ? home : world;
@@ -70,6 +75,7 @@ export function TravelButtons({ world }: { world?: string | null }) {
     if (!target) return;
     setBusy(true);
     try {
+      if (quote && !await checkQuotes([quote], home)) return;
       let fallback = reason;
       if (go && available) {
         const result = await api.go(target);

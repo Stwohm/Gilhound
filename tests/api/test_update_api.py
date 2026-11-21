@@ -1,3 +1,4 @@
+import json
 import time
 from io import BytesIO
 from pathlib import Path
@@ -73,11 +74,14 @@ def test_manual_check_bypasses_cache_and_rate_limits(
     clock = Mock(wraps=time)
     clock.monotonic.return_value = 100.0
     monkeypatch.setattr(updates, "time", clock)
+    major, minor, _ = map(int, __version__.split("."))
+    newer = f"{major}.{minor + 1}.0"
     feed = Mock(side_effect=[
         BytesIO(f'{{"tag_name": "v{__version__}"}}'.encode()),
-        BytesIO(b'{"tag_name":"v0.2.0","assets":['
-                b'{"name":"Gilhound-0.2.0-win64.zip","browser_download_url":"asset"},'
-                b'{"name":"SHA256SUMS.txt","browser_download_url":"sum"}]}'),
+        BytesIO(json.dumps({"tag_name": f"v{newer}", "assets": [
+            {"name": f"Gilhound-{newer}-win64.zip", "browser_download_url": "asset"},
+            {"name": "SHA256SUMS.txt", "browser_download_url": "sum"},
+        ]}).encode()),
     ])
     monkeypatch.setattr(updater, "_open", feed)
 
@@ -100,7 +104,7 @@ def test_manual_check_bypasses_cache_and_rate_limits(
     response = client.post("/api/update/check")
     assert response.status_code == 200
     assert response.json()["update_available"] is True
-    assert response.json()["latest_version"] == "0.2.0"
+    assert response.json()["latest_version"] == newer
     assert client.get("/api/info").json() == response.json()
     assert feed.call_count == 2
 

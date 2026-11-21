@@ -51,3 +51,9 @@ def test_raw_cashflow_per_item_and_variant() -> None:
     assert [e for e in kept if e.source == SourceName.CASHFLOW] == [
         e for e in ledger.events if e.kind == LedgerEventKind.SELL
     ]
+
+    assert sum(s.net for s in merged.sales) == merged.summary.sales_proceeds
+    assert sum(s.known_profit for s in merged.sales) == merged.summary.realised_profit
+    assert sum(s.unknown_qty for s in merged.sales) == merged.summary.unknown_cost_qty_sold
+    assert any(s.retainer and s.listing_days and s.reprices and s.rivals for s in merged.sales)
+    assert any(s.own_undercuts is not None for s in merged.sales)

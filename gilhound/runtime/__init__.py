@@ -83,6 +83,9 @@ class Runtime:
         )
 
     def scan(self, params: ScanParams, profile: str | None = None) -> ScanResult:
+        settings = self.settings.get()
+        params = params.model_copy(update={"large_buy_gil": settings.large_buy_gil,
+                                           "min_net_multiple": settings.min_net_multiple})
         if params.preset == ScanPreset.SNIPE:
             with self.scan_lock:
                 result, _ = self._snipe_scan(params, self.settings.get(), profile)
@@ -122,6 +125,7 @@ class Runtime:
         self, params: ScanParams, settings: UserSettings, profile: str | None = None
     ) -> tuple[ScanResult, list[SnipeHit]]:
         params = params.model_copy(update={
+            "large_buy_gil": settings.large_buy_gil, "min_net_multiple": settings.min_net_multiple,
             "snipe_rule": params.snipe_rule or settings.snipe_rule,
             "freshness_tiers": settings.freshness_tiers if params.freshness_tiers is None
             else params.freshness_tiers,

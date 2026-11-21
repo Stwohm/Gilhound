@@ -278,6 +278,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/recheck": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh Quote */
+        post: operations["refresh_quote_api_recheck_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/retainer-profiles": {
         parameters: {
             query?: never;
@@ -307,6 +324,40 @@ export interface paths {
         put?: never;
         /** Run Retainer Scan */
         post: operations["run_retainer_scan_api_retainer_scan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sales": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Sales */
+        get: operations["get_sales_api_sales_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/sales/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Sales By Item */
+        get: operations["get_sales_by_item_api_sales_items_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -708,6 +759,14 @@ export interface components {
              * @description Whether all open units have a known cost basis.
              */
             cost_known: boolean;
+            /** First Listed */
+            first_listed?: number | null;
+            /** Home Lowest */
+            home_lowest?: number | null;
+            /** Home Observed Ts */
+            home_observed_ts?: number | null;
+            /** Home Rank */
+            home_rank?: number | null;
             /** @description Item and quality variant held. */
             item: components["schemas"]["ItemRef"];
             /**
@@ -727,6 +786,8 @@ export interface components {
              * @default 0
              */
             listing_count: number;
+            /** Lowest List Price */
+            lowest_list_price?: number | null;
             /**
              * Qty Open
              * @description Units still held, including listed units.
@@ -737,6 +798,8 @@ export interface components {
              * @description Net realised gil profit for sales with known cost.
              */
             realised_profit: number;
+            /** Undercut Count */
+            undercut_count?: number | null;
         };
         /** PositionCost */
         PositionCost: {
@@ -789,6 +852,91 @@ export interface components {
             profiles: {
                 [key: string]: components["schemas"]["Profile"];
             };
+        };
+        /** QuoteRequest */
+        QuoteRequest: {
+            /** Buy World */
+            buy_world: string;
+            /**
+             * History Entries
+             * @default 80
+             */
+            history_entries: number;
+            /** Home World */
+            home_world: string;
+            /** Hq */
+            hq: boolean;
+            /** Item Id */
+            item_id: number;
+        };
+        /** QuoteSnapshot */
+        QuoteSnapshot: {
+            /** Age H */
+            age_h: number | null;
+            /** Home Lowest */
+            home_lowest: number | null;
+            /** Home Median */
+            home_median: number | null;
+            /** Price */
+            price: number | null;
+            /** Qty */
+            qty: number;
+            /** Stacks */
+            stacks: number[];
+        };
+        /** RealisedSale */
+        RealisedSale: {
+            /** Buy Ppu */
+            readonly buy_ppu: number | null;
+            /** Fifo Cost */
+            fifo_cost: number | null;
+            /** First Listed */
+            first_listed?: number | null;
+            /** Gross */
+            gross?: number | null;
+            /** Gross Ppu */
+            readonly gross_ppu: number | null;
+            item: components["schemas"]["ItemRef"];
+            /** Known Profit */
+            known_profit: number;
+            /** Listing Days */
+            listing_days: number | null;
+            /** Net */
+            net: number;
+            /** Net Ppu */
+            readonly net_ppu: number;
+            /** Own Undercuts */
+            own_undercuts?: number | null;
+            /** Profit */
+            readonly profit: number | null;
+            /** Purchase Days */
+            purchase_days: number | null;
+            /** Qty */
+            qty: number;
+            /** Reprices */
+            reprices?: number | null;
+            /** Retainer */
+            retainer?: string | null;
+            /** Rivals */
+            rivals?: {
+                [key: string]: number;
+            };
+            /** Roi Pct */
+            roi_pct: number | null;
+            /** Sources */
+            sources: components["schemas"]["SourceName"][];
+            /** Ts */
+            ts: number;
+            /** Unknown Qty */
+            unknown_qty: number;
+        };
+        /** RejectedCandidate */
+        RejectedCandidate: {
+            /** Buy World */
+            buy_world?: string | null;
+            item: components["schemas"]["ItemRef"];
+            /** Reasons */
+            reasons: string[];
         };
         Result: components["schemas"]["ScanResult"] | components["schemas"]["RetainerScanResult"] | components["schemas"]["SnipeHit"][];
         /** RetainerItemRow */
@@ -889,6 +1037,37 @@ export interface components {
              */
             warnings?: string[];
         };
+        /** SalesByItem */
+        SalesByItem: {
+            item: components["schemas"]["ItemRef"];
+            /**
+             * Known Profit
+             * @default 0
+             */
+            known_profit: number;
+            /**
+             * Net
+             * @default 0
+             */
+            net: number;
+            /** Profit Per Slot Day */
+            profit_per_slot_day?: number | null;
+            /**
+             * Qty
+             * @default 0
+             */
+            qty: number;
+            /**
+             * Sales
+             * @default 0
+             */
+            sales: number;
+            /**
+             * Unknown Qty
+             * @default 0
+             */
+            unknown_qty: number;
+        };
         /** ScanParams */
         ScanParams: {
             /**
@@ -942,6 +1121,11 @@ export interface components {
              */
             include_vendor: boolean;
             /**
+             * Large Buy Gil
+             * @description Large-buy taxed outlay threshold.
+             */
+            large_buy_gil?: number | null;
+            /**
              * Max Data Age H
              * @description Listing age limit (h).
              */
@@ -975,6 +1159,12 @@ export interface components {
              * @default 3
              */
             min_history_sales: number;
+            /**
+             * Min Net Multiple
+             * @description Minimum net profit / outlay.
+             * @default 1
+             */
+            min_net_multiple: number;
             /**
              * Min Ppu
              * @description Minimum purchase price in gil per unit.
@@ -1071,7 +1261,7 @@ export interface components {
          * ScanPreset
          * @enum {string}
          */
-        ScanPreset: "flip" | "high_margin" | "volume" | "snipe";
+        ScanPreset: "flip" | "high_margin" | "volume" | "safe_flip" | "snipe";
         /** ScanResult */
         ScanResult: {
             /**
@@ -1081,6 +1271,8 @@ export interface components {
             finished_ts: number;
             /** @description Parameters applied to the scan. */
             params: components["schemas"]["ScanParams"];
+            /** Rejected */
+            rejected?: components["schemas"]["RejectedCandidate"][];
             /**
              * Rows
              * @description Matching purchase opportunities.
@@ -1099,6 +1291,14 @@ export interface components {
         };
         /** ScanRow */
         ScanRow: {
+            /** Ask Below Floor */
+            ask_below_floor?: boolean | null;
+            /** Ask Exit Ppu */
+            ask_exit_ppu?: number | null;
+            /** Ask Profit Capped */
+            ask_profit_capped?: number | null;
+            /** Ask Profit Per Unit */
+            ask_profit_per_unit?: number | null;
             /** Average Sale Size */
             average_sale_size?: number | null;
             /**
@@ -1116,6 +1316,8 @@ export interface components {
              * @description Units available at the purchase price.
              */
             buy_qty_at_price: number;
+            /** Buy Stacks */
+            buy_stacks?: number[] | null;
             /**
              * Buy World
              * @description World where the purchase is available.
@@ -1146,6 +1348,8 @@ export interface components {
              * @description Lowest current home-world gil per unit, if known.
              */
             home_lowest: number | null;
+            /** Home Lowest Units */
+            home_lowest_units?: number | null;
             /**
              * Home Median 7D
              * @description Home-world seven-day median gil per unit.
@@ -1155,8 +1359,12 @@ export interface components {
             hq_sale_share?: number | null;
             /** @description Item and quality variant. */
             item: components["schemas"]["ItemRef"];
+            /** Large Buy Below Multiple */
+            large_buy_below_multiple?: boolean | null;
             /** Max Sale Price */
             max_sale_price?: number | null;
+            /** Median Profit Per Unit */
+            median_profit_per_unit?: number | null;
             /** Min Sale Price */
             min_sale_price?: number | null;
             /** Nearby Listings */
@@ -1198,9 +1406,19 @@ export interface components {
             units_sold_7d?: number | null;
             /** @description Home-world sales evidence. */
             volume_proof: components["schemas"]["VolumeProof"];
+            /** Whole Stack Outlay */
+            whole_stack_outlay?: number | null;
         };
         /** SnipeHit */
         SnipeHit: {
+            /** Ask Below Floor */
+            ask_below_floor?: boolean | null;
+            /** Ask Exit Ppu */
+            ask_exit_ppu?: number | null;
+            /** Ask Profit Capped */
+            ask_profit_capped?: number | null;
+            /** Ask Profit Per Unit */
+            ask_profit_per_unit?: number | null;
             /** Average Sale Size */
             average_sale_size?: number | null;
             /**
@@ -1218,6 +1436,8 @@ export interface components {
              * @description Units available at the purchase price.
              */
             buy_qty_at_price: number;
+            /** Buy Stacks */
+            buy_stacks?: number[] | null;
             /**
              * Buy World
              * @description World where the purchase is available.
@@ -1253,6 +1473,8 @@ export interface components {
              * @description Lowest current home-world gil per unit, if known.
              */
             home_lowest: number | null;
+            /** Home Lowest Units */
+            home_lowest_units?: number | null;
             /**
              * Home Median 7D
              * @description Home-world seven-day median gil per unit.
@@ -1262,6 +1484,8 @@ export interface components {
             hq_sale_share?: number | null;
             /** @description Item and quality variant. */
             item: components["schemas"]["ItemRef"];
+            /** Large Buy Below Multiple */
+            large_buy_below_multiple?: boolean | null;
             /**
              * Listing Key
              * @description Stable listing identifier for notification deduplication.
@@ -1269,6 +1493,8 @@ export interface components {
             listing_key: string;
             /** Max Sale Price */
             max_sale_price?: number | null;
+            /** Median Profit Per Unit */
+            median_profit_per_unit?: number | null;
             /** Min Sale Price */
             min_sale_price?: number | null;
             /** Nearby Listings */
@@ -1317,6 +1543,8 @@ export interface components {
             units_sold_7d?: number | null;
             /** @description Home-world sales evidence. */
             volume_proof: components["schemas"]["VolumeProof"];
+            /** Whole Stack Outlay */
+            whole_stack_outlay?: number | null;
         };
         /** SnipeRule */
         SnipeRule: {
@@ -1453,6 +1681,17 @@ export interface components {
              */
             home_world: string;
             /**
+             * Large Buy Gil
+             * @description Large-buy taxed outlay threshold.
+             */
+            large_buy_gil?: number | null;
+            /**
+             * Min Net Multiple
+             * @description Minimum net profit / outlay.
+             * @default 1
+             */
+            min_net_multiple: number;
+            /**
              * Scan Interval Min
              * @description Minutes between snipe scans.
              * @default 5
@@ -1516,6 +1755,17 @@ export interface components {
              * @description Default world for resale and retainer scans.
              */
             home_world: string;
+            /**
+             * Large Buy Gil
+             * @description Large-buy taxed outlay threshold.
+             */
+            large_buy_gil?: number | null;
+            /**
+             * Min Net Multiple
+             * @description Minimum net profit / outlay.
+             * @default 1
+             */
+            min_net_multiple: number;
             /**
              * Scan Interval Min
              * @description Minutes between snipe scans.
@@ -2148,7 +2398,7 @@ export interface operations {
     get_positions_api_positions_get: {
         parameters: {
             query?: {
-                view?: "open" | "closed" | "all";
+                view?: "listed" | "open" | "closed" | "all";
             };
             header?: never;
             path?: never;
@@ -2438,6 +2688,58 @@ export interface operations {
             };
         };
     };
+    refresh_quote_api_recheck_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["QuoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QuoteSnapshot"];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     retainer_profiles_api_retainer_profiles_get: {
         parameters: {
             query?: never;
@@ -2551,6 +2853,112 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RetainerScanResult"];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_sales_api_sales_get: {
+        parameters: {
+            query?: {
+                since?: number | null;
+                until?: number | null;
+                item?: number | null;
+                retainer?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RealisedSale"][];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_sales_by_item_api_sales_items_get: {
+        parameters: {
+            query?: {
+                since?: number | null;
+                until?: number | null;
+                item?: number | null;
+                retainer?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SalesByItem"][];
                 };
             };
             /** @description Invalid Host header */

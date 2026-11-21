@@ -122,6 +122,13 @@ def test_position_views_and_cost(
             client.headers.update({"Authorization": f"Bearer {token}"})
             (position,) = client.get("/api/positions").json()
             assert position["item"]["name"] == "Bronze Ingot" and position["avg_cost"] is None
+            (sale,) = client.get("/api/sales?item=5333&since=2&until=3").json()
+            assert (sale["fifo_cost"], sale["net"], sale["known_profit"]) == (6, 9, 3)
+            assert (sale["buy_ppu"], sale["net_ppu"], sale["profit"]) == (6, 9, 3)
+            (item_sales,) = client.get("/api/sales/items?item=5333").json()
+            assert item_sales["qty"] == 1 and item_sales["known_profit"] == 3
+            assert sale["sources"] == ["cashflow"] and sale["listing_days"] is None
+            assert client.get("/api/sales?until=2").json() == []
             (closed,) = client.get("/api/positions?view=closed").json()
             assert closed["item"]["name"] == "Hempen Yarn" and closed["realised_profit"] == 3
             assert (

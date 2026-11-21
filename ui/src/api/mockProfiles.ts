@@ -2,6 +2,7 @@ import type { components } from "./types";
 
 export const mockParams: Record<string, components["schemas"]["ScanParams"]> = {
   "Flip": {
+    "min_net_multiple": 1,
     "windows": [
       {
         "preferred_roi": 40,
@@ -43,6 +44,7 @@ export const mockParams: Record<string, components["schemas"]["ScanParams"]> = {
     "sellable_days": 3
   },
   "High margin": {
+    "min_net_multiple": 1,
     "windows": [
       {
         "preferred_roi": 40,
@@ -91,6 +93,7 @@ export const mockParams: Record<string, components["schemas"]["ScanParams"]> = {
     "sellable_days": 3
   },
   "Volume": {
+    "min_net_multiple": 1,
     "windows": [
       {
         "preferred_roi": 40,
@@ -139,6 +142,7 @@ export const mockParams: Record<string, components["schemas"]["ScanParams"]> = {
     "sellable_days": 3
   },
   "Snipe": {
+    "min_net_multiple": 1,
     "windows": [
       {
         "preferred_roi": 40,
@@ -194,3 +198,5 @@ export const mockParams: Record<string, components["schemas"]["ScanParams"]> = {
     "sellable_days": 3
   }
 };
+
+mockParams["Safe flip"] = {...mockParams.Volume, preset:"safe_flip", max_data_age_h:1, max_sale_age_h:24, max_top_buyer_share:0.5};

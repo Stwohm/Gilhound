@@ -50,7 +50,12 @@ def test_restocky_csv_mirror(tmp_path: Path) -> None:
     assert sorted(e.model_dump_json() for e in csv_only.records.events) == sorted(
         e.model_dump_json() for e in full.records.events
     )
-    assert sorted(map(repr, csv_only.records.listings)) == sorted(map(repr, full.records.listings))
+    def listing_projection(source):
+        return sorted((s.item.id, s.item.hq, s.qty, s.ppu, s.owner, s.ts, s.undercut_count)
+                      for s in source.records.listings)
+
+    assert listing_projection(csv_only) == listing_projection(full)
+    assert any(s.competing_price and s.observed_ts for s in full.records.listings)
 
 
 @pytest.mark.parametrize(
@@ -58,6 +63,7 @@ def test_restocky_csv_mirror(tmp_path: Path) -> None:
     [
         ("AllaganMarket", "SoldItems.csv", "1,1,17,2,1,10,0,11/01/2020 00:00:00", "AllaganMarket"),
         ("InventoryTools", "inventories.csv", "0,0,1", "Allagan Tools"),
+        ("Restocky", "undercut-history.json", "[{}]", "Restocky"),
         ("Restocky", "cost-ledger.json", "[{}]", "Restocky"),
         ("Restocky", "listings.json", "[42]", "Restocky"),
         ("CashFlow", "DefaultDbV2.sqlite", "wrong", "CashFlow"),

@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from contextlib import closing
 from typing import Any
 
+from gilhound.ledger.fifo import rollup_sales
 from gilhound.models import RetainerScanParams, ScanPreset
 from gilhound.runtime import Runtime
 from gilhound.runtime.profiles import BUILTINS
@@ -38,6 +39,11 @@ def project(row: dict, fields: list[str]) -> dict:
 
 def report(runtime: Runtime, args: argparse.Namespace) -> dict:
     fields = [s.strip() for s in args.fields.split(",") if s.strip()]
+    if fields == ["proof"] and args.command in {"scan", "snipes"}:
+        fields = ["item.id", "item.name", "item.hq", "buy_world", "buy_ppu", "sellable_qty",
+                  "profit_per_unit", "volume_proof.units_per_day",
+                  "volume_proof.distinct_buyers_7d",
+                  "volume_proof.last_sale_age_h", "volume_proof.top_buyer_share", "data_age_h"]
     result = {"command": args.command}
     total = None
     if args.command == "scan":
@@ -81,17 +87,22 @@ def report(runtime: Runtime, args: argparse.Namespace) -> dict:
         )
     elif args.command == "snipes":
         rows = runtime.run_snipes() if args.run else runtime.history.hits()
+    elif args.command == "sales":
+        rows = runtime.ledger().filtered_sales(args.since, args.until, args.item, args.retainer)
+        if args.rollup:
+            rows = rollup_sales(rows)
     elif args.command == "positions":
         ledger = runtime.ledger()
         for warning in ledger.warnings:
             print(warning, file=sys.stderr)
-        rows = [p for p in ledger.positions if (p.qty_open == 0) == args.closed]
+        rows = [p for p in ledger.positions if (p.qty_open == 0 if args.closed else
+                p.qty_open > 0 if args.unlisted else p.listed_qty > 0)]
     elif args.command == "sources":
         rows = runtime.sources()
     else:
         return {**result, **project(runtime.ledger().summary.model_dump(), fields)}
     visible = rows[: args.top]
-    if args.command in {"snipes", "positions"} and (
+    if args.command in {"snipes", "positions", "sales"} and (
         not fields
         or any(
             f in {"item", "item.name", "item.universalis_url", "item.saddlebag_url"} for f in fields
@@ -132,7 +143,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     retainer.add_argument("name")
     retainer.add_argument("--world")
     commands.add_parser("snipes", parents=[common]).add_argument("--run", action="store_true")
-    commands.add_parser("positions", parents=[common]).add_argument("--closed", action="store_true")
+    positions = commands.add_parser("positions", parents=[common])
+    positions.add_argument("--closed", action="store_true")
+    positions.add_argument("--unlisted", action="store_true", help="Include unlisted stock")
+    sales = commands.add_parser("sales", parents=[common])
+    sales.add_argument("--since", type=int, help="Inclusive UTC epoch seconds")
+    sales.add_argument("--until", type=int, help="Exclusive UTC epoch seconds")
+    sales.add_argument("--item", type=int)
+    sales.add_argument("--retainer")
+    sales.add_argument("--rollup", action="store_true", help="Group by item and quality")
     for name in ("pnl", "sources"):
         commands.add_parser(name, parents=[common])
     commands.add_parser("serve").add_argument("--port", type=int, default=8765)

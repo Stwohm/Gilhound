@@ -13,13 +13,13 @@ const sourceNames: Record<Schema<"SourceName">, string> = {
 };
 
 export default function Positions() {
-  const pnl = useResource(api.getPnl);
   const sources = useResource(api.getSources);
   const positions = useResource(api.getPositions);
   const open = positions.data?.filter((row) => row.qty_open > 0);
   const hidden = useResource(api.getHidden);
   const [view, setView] = useState("Open");
-  const closed = view === "Closed";
+  const [unlisted, setUnlisted] = useState(false);
+  const [needsCost, setNeedsCost] = useState(false);
   const [undo, setUndo] = useState<Schema<"ItemRef">>();
   useEffect(() => {
     if (!undo) return;
@@ -43,7 +43,7 @@ export default function Positions() {
       return;
     }
     try {
-      await Promise.all([api.getPnl().then(pnl.setData),
+      await Promise.all([
         ...(!value ? [api.getPositions().then(positions.setData)] : []),
         ...(!previousHidden ? [api.getHidden().then(hidden.setData)] : [])]);
     } catch { setError("Change saved. Refresh to reload the latest totals and positions."); }
@@ -54,13 +54,14 @@ export default function Positions() {
   const [cost, setCost] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const rows = closed ? positions.data?.filter(row => row.qty_open === 0) : open;
+  const holdings = open?.filter(r => unlisted || r.listed_qty > 0);
+  const known = holdings?.filter(r => r.cost_known).length ?? 0;
+  const rows = holdings?.filter(r => !needsCost || !r.cost_known);
   async function save(item: Schema<"ItemRef">) {
     setSaving(true);
     try {
       await api.setCost({ item_id: item.id, hq: item.hq, unit_cost: Number(cost) });
       positions.retry();
-      pnl.retry();
       setEditing("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save the cost.");
@@ -68,55 +69,55 @@ export default function Positions() {
       setSaving(false);
     }
   }
-  const totals = open && pnl.data && [
-    { label: "Open positions", value: open.length, quantity: true },
+  const totals = open && [
+    { label: "Active listed item qualities", value: open.filter(p=>p.listed_qty>0).length, quantity: true },
     { label: "Listed", value: open.reduce((sum, row) => sum + row.listed_qty, 0), quantity: true,
       listings: open.reduce((sum, row) => sum + (row.listing_count ?? 0), 0) },
-    { label: "Capital tied (known cost)", value: open.reduce((sum, row) => sum + row.known_capital, 0) },
-    { label: "Realised profit", value: pnl.data.realised_profit, tone: pnl.data.realised_profit >= 0 ? "profit" : "loss" },
-    { label: "Net sales proceeds", value: pnl.data.sales_proceeds },
-    { label: "Known cost of goods sold", value: pnl.data.known_cost_of_goods_sold },
-    { label: "Units sold with unknown cost", value: pnl.data.unknown_cost_qty_sold, quantity: true },
+    { label: "Known capital in all holdings", value: open.reduce((sum, row) => sum + row.known_capital, 0) },
   ];
 
   return <>
-    <PageTitle title="Positions" description="Track open flips and review realised profit by item and quality." />
-    <Section title="Profit & loss">
+    <PageTitle title="Positions" description="Active retainer listings and their acquisition costs." />
+    <Section title="Holdings">
       {totals ? <dl className="metric-grid panel-body">
         {totals.map((metric) => <div key={metric.label} title={metric.listings != null ? "Units are the sum of the listed stack sizes." : undefined}>
-          <dt>{metric.label}</dt><dd className={metric.tone}>{metric.listings != null
+          <dt>{metric.label}</dt><dd>{metric.listings != null
             ? gil(metric.listings) + " listings · " + gil(metric.value) + " units"
             : <>{gil(metric.value)}{!metric.quantity && <small> gil</small>}</>}</dd>
         </div>)}
-      </dl> : <ResourceState error={pnl.error || positions.error} retry={() => { positions.retry(); pnl.retry(); }} loading="Loading profit and loss…" />}
+      </dl> : <ResourceState error={positions.error} retry={positions.retry} loading="Loading holdings…" />}
     </Section>
-    <Section title={view + " positions"} action={<div>
-      <button disabled={saving} onClick={() => { positions.retry(); pnl.retry(); hidden.retry(); sources.retry(); }}>Refresh</button>
-      {["Open", "Closed", "Hidden"].map(tab => <button key={tab} aria-pressed={view === tab}
+    <Section title={view === "Open" ? "Active listings" : "Hidden positions"} action={<div>
+      <button disabled={saving} onClick={() => { positions.retry(); hidden.retry(); sources.retry(); }}>Refresh</button>
+      {["Open", "Hidden"].map(tab => <button key={tab} aria-pressed={view === tab}
         onClick={() => setView(tab)}>{tab}</button>)}
     </div>}>
       {error && <Notice tone="error">{error}</Notice>}
       {sources.data?.some(s => s.name === "allagan_tools" && !s.recognised) &&
         <Notice tone="warn">Allagan Tools inventory unavailable. Positions use purchase history and listings.</Notice>}
+      {view !== "Hidden" && <div className="form-actions">
+        <label><input type="checkbox" checked={unlisted} onChange={e=>setUnlisted(e.target.checked)} /> Show unlisted stock</label>
+        <button aria-pressed={needsCost} onClick={()=>setNeedsCost(!needsCost)}>Needs cost</button>
+        <span>Known cost · {known} / {holdings?.length ?? 0} item qualities</span></div>}
       {view === "Hidden" ? hidden.data ? hidden.data.length ? <Table label="Hidden personal items">
         <thead><tr><th>Item</th><th>Action</th></tr></thead><tbody>{hidden.data.map(item =>
           <tr key={item.id + "-" + item.hq}><td><Item item={item} /></td><td><button disabled={saving}
           onClick={() => void personal(item, false)}>Unhide</button></td></tr>)}</tbody></Table>
         : <Notice>No hidden personal items.</Notice> : <ResourceState error={hidden.error} retry={hidden.retry} loading="Loading hidden items…" />
-      : rows ? rows.length ? <Table className="positions-table" label={closed ? "Closed positions" : "Open positions"}>
-        <thead><tr>{["Item", "Quality", "Open qty", "Listed qty", "Average cost", "Realised profit", "Action"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
+      : rows ? rows.length ? <Table className="positions-table" label="Open positions">
+        <thead><tr>{["Item", "Quality", "Open qty", "Listed qty", "Lowest list price", "Oldest listing", "Home lowest / rank", "Undercut observations", "Average cost", "Action"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
         <tbody>{rows.map((row) => <tr key={`${row.item.id}-${row.item.hq}`}>
-          <td><Item item={row.item} showQuality={false} /></td><td>{row.item.hq ? "HQ" : "NQ"}</td><td>{gil(row.qty_open)}</td><td>{gil(row.listed_qty)}</td><td>{row.cost_known ? gil(row.avg_cost) : editing === `${row.item.id}-${row.item.hq}` ?
+          <td><Item item={row.item} showQuality={false} /></td><td>{row.item.hq ? "HQ" : "NQ"}</td><td>{gil(row.qty_open)}</td><td>{gil(row.listed_qty)}</td><td>{gil(row.lowest_list_price)}</td>
+          <td>{row.first_listed ? age(Math.max(0,epoch()-row.first_listed)/3600) : "—"}</td><td title={row.home_observed_ts ? "Observed " + time(row.home_observed_ts) : undefined}>{gil(row.home_lowest)} / {row.home_rank ?? "—"}</td><td>{gil(row.undercut_count)}</td><td>{row.cost_known ? gil(row.avg_cost) : editing === `${row.item.id}-${row.item.hq}` ?
             <form onSubmit={e => { e.preventDefault(); void save(row.item); }}>
               <input aria-label="Unit cost in gil" required type="number" min="0" step="1" value={cost} onChange={e => setCost(e.target.value)} />
               <button disabled={saving}>Save</button><button type="button" onClick={() => setEditing("")}>Cancel</button>
             </form> : <>Unknown <button onClick={() => { setCost(""); setError(""); setEditing(`${row.item.id}-${row.item.hq}`); }}>Set cost</button></>}</td>
-          <td><strong className={row.realised_profit >= 0 ? "profit" : "loss"}>{gil(row.realised_profit)}</strong></td>
           <td><button disabled={saving} title="Hide (personal)" aria-label={`Hide (personal): ${row.item.name}`}
             onClick={() => void personal(row.item, true)}><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"
             fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3l18 18M10 5c5-1 9 3 12 7l-3 4M6 6l-4 6c4 6 10 9 16 5" /></svg></button></td>
         </tr>)}</tbody>
-      </Table> : <Notice>No {closed ? "closed" : "open"} positions found.</Notice> : <ResourceState error={positions.error} retry={positions.retry} loading="Loading positions…" />}
+      </Table> : <Notice>No positions match these listing and cost filters.</Notice> : <ResourceState error={positions.error} retry={positions.retry} loading="Loading positions…" />}
     </Section>
     {undo && <div className="position-toast" role="status">Hidden · <button disabled={saving}
       onClick={() => void personal(undo, false)}>Undo</button></div>}

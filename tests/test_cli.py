@@ -89,7 +89,8 @@ def test_json_rows(
     ]
     monkeypatch.setattr(runtime, "ledger", lambda: ledger)
     monkeypatch.setattr(cli, "Runtime", lambda: runtime)
-    assert cli.main(["positions", "--fields", "item.id,avg_cost", "--json", *options]) == 0
+    args = ["positions", "--unlisted", "--fields", "item.id,avg_cost", "--json", *options]
+    assert cli.main(args) == 0
     output = capsys.readouterr().out
     result = json.loads(output)
     assert len(output.splitlines()) == 1
@@ -131,6 +132,15 @@ def test_scan_replay(
         assert cli.main(["history", "show", str(summary["id"])]) == 0
         entry = json.loads(capsys.readouterr().out)
         assert entry["result"]["params"]["preset"] == "volume" and entry["description"]
+        assert entry["result"]["rejected"]
+        saved = ScanResult.model_validate(entry["result"])
+        monkeypatch.setattr(Runtime, "scan", lambda *_: saved)
+        assert cli.main(["scan", "--fields", "proof", "--top", "1"]) == 0
+        proof, = json.loads(capsys.readouterr().out)["rows"]
+        keys = {"item.id", "item.hq", "volume_proof.units_per_day",
+                "volume_proof.distinct_buyers_7d",
+                "volume_proof.last_sale_age_h", "volume_proof.top_buyer_share", "data_age_h"}
+        assert keys <= proof.keys()
         runtime = Runtime()
         try:
             item_name = entry["result"]["rows"][0]["item"]["name"]

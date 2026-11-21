@@ -233,8 +233,10 @@ class History:
                 query += " AND " + clause
                 args.append(value)
         if search:
-            query += """ AND EXISTS (SELECT 1 FROM json_each(body,'$.rows')
-                     WHERE instr(lower(json_extract(value,'$.item.name')),lower(?))>0)"""
+            query += """ AND EXISTS (
+                SELECT 1 FROM (SELECT value FROM json_each(body,'$.rows')
+                               UNION ALL SELECT value FROM json_each(body,'$.rejected'))
+                WHERE instr(lower(json_extract(value,'$.item.name')),lower(?))>0)"""
             args.append(search)
         page = ("SELECT id,kind,profile,started_ts,duration_s,row_count" + query
                 + " ORDER BY started_ts DESC,id DESC LIMIT ? OFFSET ?")

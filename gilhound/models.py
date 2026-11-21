@@ -3,7 +3,7 @@
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, SecretStr, field_serializer, model_validator
+from pydantic import BaseModel, Field, SecretStr, computed_field, field_serializer, model_validator
 
 EpochSeconds = Annotated[int, Field(strict=True, ge=0)]
 Fraction = Annotated[float, Field(ge=0, le=1)]
@@ -65,6 +65,7 @@ class ScanPreset(StrEnum):
     FLIP = "flip"
     HIGH_MARGIN = "high_margin"
     VOLUME = "volume"
+    SAFE_FLIP = "safe_flip"
     SNIPE = "snipe"
 
 
@@ -112,6 +113,10 @@ class CandidateWindow(BaseModel):
 
 
 class ScanParams(BaseModel):
+    large_buy_gil: GilCost | None = Field(
+        default=None, description="Large-buy taxed outlay threshold."
+    )
+    min_net_multiple: float = Field(default=1, ge=0, description="Minimum net profit / outlay.")
     snipe_rule: SnipeRule | None = Field(default=None, description="Rules for snipe strategy.")
     freshness_tiers: list[FreshnessTier] | None = Field(
         default=None, description="Snipe alert tiers. Omit to use configured tiers."
@@ -162,7 +167,8 @@ class ScanParams(BaseModel):
         if not isinstance(values, dict):
             return values
         preset = values.get("preset", "flip")
-        flip, margin, volume = preset == "flip", preset == "high_margin", preset == "volume"
+        flip, margin = preset == "flip", preset == "high_margin"
+        volume = preset in ("volume", "safe_flip")
         floor = 1500 if flip else 5000 if margin else 3000
         windows = [(floor, 1000 if flip else floor, 24, 5, 40)]
         if not flip:
@@ -190,10 +196,21 @@ class ScanParams(BaseModel):
             home_entries=100 if flip else 0,
             result_limit=30 if flip else None if preset == "snipe" else 60,
         )
+        if preset == "safe_flip":
+            defaults.update(max_sale_age_h=24, max_top_buyer_share=0.5, max_data_age_h=1)
         return defaults | values
 
 
 class ScanRow(BaseModel):
+    ask_exit_ppu: float | None = None
+    ask_profit_per_unit: float | None = None
+    ask_profit_capped: float | None = None
+    ask_below_floor: bool | None = None
+    home_lowest_units: int | None = None
+    median_profit_per_unit: float | None = None
+    whole_stack_outlay: int | None = None
+    buy_stacks: list[int] | None = None
+    large_buy_below_multiple: bool | None = None
     units_sold_7d: int | None = None
     sales_7d: int | None = None
     average_sale_size: float | None = None
@@ -229,7 +246,31 @@ class ScanRow(BaseModel):
     data_age_h: float = Field(ge=0, description="Age of the purchase listing data in hours.")
 
 
+class QuoteRequest(BaseModel):
+    item_id: int = Field(gt=0)
+    hq: bool
+    buy_world: str = Field(min_length=1, max_length=80)
+    home_world: str = Field(min_length=1, max_length=80)
+    history_entries: int = Field(default=80, ge=1, le=10000)
+
+
+class QuoteSnapshot(BaseModel):
+    price: int | None
+    qty: int
+    stacks: list[int]
+    age_h: float | None
+    home_lowest: int | None
+    home_median: float | None
+
+
+class RejectedCandidate(BaseModel):
+    item: ItemRef
+    reasons: list[str]
+    buy_world: str | None = None
+
+
 class ScanResult(BaseModel):
+    rejected: list[RejectedCandidate] = Field(default_factory=list)
     params: ScanParams = Field(description="Parameters applied to the scan.")
     rows: list["SnipeHit | ScanRow"] = Field(description="Matching purchase opportunities.")
     started_ts: EpochSeconds = Field(description="Scan start in UTC epoch seconds.")
@@ -326,7 +367,66 @@ class LedgerEvent(BaseModel):
     source: SourceName | None = Field(description="Plugin source, or null for manual entries.")
 
 
+class SaleDetails(BaseModel):
+    retainer: str | None = None
+    gross: GilCost | None = None
+    first_listed: EpochSeconds | None = None
+    reprices: int | None = None
+    own_undercuts: int | None = None
+    rivals: dict[str, int] = Field(default_factory=dict)
+
+
+class RealisedSale(SaleDetails):
+    item: ItemRef
+    ts: EpochSeconds
+    qty: int
+    net: GilCost
+    sources: list[SourceName]
+    fifo_cost: GilCost | None
+    unknown_qty: int
+    known_profit: int
+    roi_pct: float | None
+    purchase_days: float | None
+    listing_days: float | None
+
+    @computed_field
+    @property
+    def buy_ppu(self) -> float | None:
+        return self.fifo_cost / self.qty if self.fifo_cost is not None else None
+
+    @computed_field
+    @property
+    def gross_ppu(self) -> float | None:
+        return self.gross / self.qty if self.gross is not None else None
+
+    @computed_field
+    @property
+    def net_ppu(self) -> float:
+        return self.net / self.qty
+
+    @computed_field
+    @property
+    def profit(self) -> int | None:
+        return None if self.unknown_qty else self.known_profit
+
+
+class SalesByItem(BaseModel):
+    item: ItemRef
+    sales: int = 0
+    qty: int = 0
+    net: int = 0
+    known_profit: int = 0
+    unknown_qty: int = 0
+    profit_per_slot_day: float | None = None
+
+
 class Position(BaseModel):
+    lowest_list_price: int | None = None
+    first_listed: EpochSeconds | None = None
+    undercut_count: int | None = None
+    home_lowest: int | None = None
+    home_rank: int | None = None
+    home_observed_ts: EpochSeconds | None = None
     item: ItemRef = Field(description="Item and quality variant held.")
     known_capital: int = Field(default=0, ge=0, description="Cost of remaining known FIFO lots.")
     qty_open: int = Field(ge=0, description="Units still held, including listed units.")
@@ -349,6 +449,10 @@ class PnLSummary(BaseModel):
 
 
 class UserSettings(BaseModel):
+    large_buy_gil: GilCost | None = Field(
+        default=None, description="Large-buy taxed outlay threshold."
+    )
+    min_net_multiple: float = Field(default=1, ge=0, description="Minimum net profit / outlay.")
     history_days: int = Field(default=90, ge=1, le=3650)
     snipe_rule: SnipeRule = Field(default_factory=SnipeRule)
     home_world: str = Field(description="Default world for resale and retainer scans.")

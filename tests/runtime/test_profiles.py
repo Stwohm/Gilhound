@@ -123,6 +123,7 @@ def test_cli_profile(
         "Flip",
         "High margin",
         "Volume",
+        "Safe flip",
         "Snipe",
     }
 

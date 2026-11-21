@@ -14,6 +14,8 @@ type Schema = components["schemas"];
 export interface Api {
   getProfiles(library: Library): Promise<Schema["ProfileList"]>;
   changeProfile(library: Library, change: Schema["ProfileChange"]): Promise<Schema["ProfileList"]>;
+  getSales(): Promise<Schema["RealisedSale"][]>;
+  recheck(query: Schema["QuoteRequest"]): Promise<Schema["QuoteSnapshot"]>;
   getHidden(): Promise<Schema["ItemRef"][]>;
   setPersonal(change: Schema["PositionPersonal"]): Promise<void>;
   bridge(): Promise<Schema["BridgeStatus"]>;
@@ -108,6 +110,8 @@ async function job<T>(path: string, params?: unknown): Promise<T> {
 const realApi: Api = {
   getProfiles: library => json("/api/profiles/" + library),
   changeProfile: (library, change) => json("/api/profiles/" + library, "POST", change),
+  getSales: () => json("/api/sales"),
+  recheck: query => json("/api/recheck", "POST", query),
   getHidden: () => json("/api/positions/hidden"),
   setPersonal: async change => { await request("/api/positions/personal", "PUT", change); },
   bridge: () => json("/api/bridge"),
@@ -123,7 +127,7 @@ const realApi: Api = {
   getSnipes: () => json("/api/snipes"),
   runSnipes: () => job("/api/jobs/snipes"),
   getSources: () => json("/api/sources"),
-  getPositions: () => json("/api/positions?view=all"),
+  getPositions: () => json("/api/positions?view=open"),
   setCost: async (cost) => { await request("/api/positions/cost", "PUT", cost); },
   getPnl: () => json("/api/pnl"),
   getSettings: () => json("/api/settings"),

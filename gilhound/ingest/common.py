@@ -8,7 +8,14 @@ from pathlib import Path
 
 from pydantic import Field
 
-from gilhound.models import ItemRef, LedgerEvent, LedgerEventKind, SourceName, SourceStatus
+from gilhound.models import (
+    ItemRef,
+    LedgerEvent,
+    LedgerEventKind,
+    SaleDetails,
+    SourceName,
+    SourceStatus,
+)
 
 READ_ERRORS = (OSError, sqlite3.Error, ValueError, TypeError, KeyError, OverflowError, csv.Error)
 
@@ -16,6 +23,8 @@ READ_ERRORS = (OSError, sqlite3.Error, ValueError, TypeError, KeyError, Overflow
 class Transaction(LedgerEvent):
     """ppu is the integer unit amount. stack_gil preserves tax and division remainders."""
 
+    details: SaleDetails = Field(default_factory=SaleDetails, exclude=True)
+    sources: list[SourceName] = Field(default_factory=list, exclude=True)
     stack_gil: int | None = Field(default=None, ge=0)
 
 
@@ -27,6 +36,9 @@ class Stock:
     owner: str = ""
     container: int | None = None
     ts: int = 0
+    undercut_count: int | None = None
+    competing_price: int | None = None
+    observed_ts: int | None = None
 
 
 @dataclass
@@ -42,6 +54,7 @@ class Records:
     characters: dict[int, tuple[str, int]] = field(default_factory=dict)
     competitors: list[dict] = field(default_factory=list)
     price_history: list[dict] = field(default_factory=list)
+    undercuts: list[dict] = field(default_factory=list)
     warning: str | None = None
 
 

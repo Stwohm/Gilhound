@@ -72,3 +72,15 @@ def test_two_weeks_of_evidence() -> None:
         140,
         3,
     )
+
+    params.min_profit = 55
+    params.travel_cost = {"?": 24}
+    params.seller_tax = params.buyer_tax = 0.05
+    params.large_buy_gil = 330
+    params.min_net_multiple = 2
+    _, taxed = _opportunities(row.item, params, Market(), now, {}, False)[0]
+    assert taxed.home_lowest_units == 2 and taxed.ask_exit_ppu == 100
+    assert taxed.sellable_qty == 6 and taxed.buy_stacks == [8]
+    assert taxed.ask_profit_capped == (95 - 42) * 6 - 24
+    assert taxed.ask_below_floor and taxed.median_profit_per_unit >= params.min_profit
+    assert taxed.whole_stack_outlay == 336 and taxed.large_buy_below_multiple

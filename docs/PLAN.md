@@ -4,7 +4,7 @@ Desktop app for FFXIV market-board flipping: scan for flips, run a periodic
 snipe scan with Discord notifications, track positions from plugin data.
 Used by humans (UI) and by AI agents (CLI with compact JSON).
 
-Status: **v0.1.4 released** (2026-11-21). F4 (friend install) pending; server worker deferred.
+Status: **v0.2.0 in review** (2026-11-21). F4 (friend install) pending; server worker deferred.
 
 ## Decisions
 
@@ -138,8 +138,15 @@ edit shared files (see AGENTS.md); they request changes instead.
 
 ### Scan archive and market evidence
 
-History stores manual, CLI, retainer and scheduled scans in the local user database for 90 days by default. Change retention in Settings. Snipe entries keep the effective alert rules, tiers, warnings and full matching hits, including runs with zero hits. Failed scans retain a warning and their settings. The underlying candidate pool and individual buyer or seller records are omitted. Older saved scans migrate with their original timestamps and available parameters. Missing historical metrics appear as a dash.
+History stores manual, CLI, retainer and scheduled scans in the local user database for 90 days by default. Change retention in Settings. Snipe entries keep the effective alert rules, tiers, warnings and full matching hits, including runs with zero hits. Failed scans retain a warning and their settings. Scans preserve rejected item qualities and gate reasons. Individual market buyer and seller records are omitted. Older saved scans migrate with their original timestamps and available parameters. Missing historical metrics appear as a dash.
 
 Market evidence uses the profile's listing and history entry limits. Weekly statistics and the previous-week comparison use the returned sales within fourteen days, grouped by item quality, except HQ share which counts HQ transactions among both qualities. Each sparkline bucket covers 24 hours ending at scan start. Rival stock counts home units at or below the weekly median. ROI and capital include purchase tax. Days to sell covers the capped quantity at observed velocity; estimated wait also accounts for competing stock.
 
 Use `gilhound history --kind snipe --top 10 --json` to list recent runs and `gilhound history show ID` to inspect a snapshot.
+
+### v0.2.0 buying decisions and sales
+
+- Scan rows carry median and observed-ask exit scenarios, lowest-ask depth and the profile-floor flag. Safe flip starts with 2.5 units/day, eight buyers, four sale days, last sale under 24 hours, at most 50% top-buyer share and buy quotes under one hour.
+- Profile order, demand evidence and archived rejections are visible. Use `gilhound scan --profile "Safe flip" --fields proof` for item identity, purchase quote, sellable quantity, profit and the five evidence fields.
+- A route preview budgets indivisible stacks and one trip per buy world. Large-buy thresholds are per user and initially off. Net multiples exclude returned principal and give leftover inventory no proceeds in the sale window. Travel rechecks refresh the buy world, home ask and weekly median before confirmation.
+- Positions defaults to active listings, with filters for unlisted holdings and missing cost. Sales shows confirmed FIFO outcomes, listing-period competition, rollups, charts and CSV export. Known profit per listing-slot-day measures how efficiently an item used a retainer slot. `gilhound sales --json` supports `--rollup` and accepts item ID, retainer and UTC epoch date filters.

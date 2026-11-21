@@ -26,6 +26,12 @@ export default function Snipes({ resource }: { resource: ReturnType<typeof useRe
   const generation = useRef(0);
   const active = useRef(false);
 
+  function quote(hit: Hit) {
+    return {...hit, plannedStacks: [hit.buy_qty_at_price],
+      maxAge: settings?.freshness_tiers?.[0]?.max_age_h ?? 1,
+      home: hit.item.universalis_url ? new URL(hit.item.universalis_url).searchParams.get("server") ?? undefined : undefined};
+  }
+
   function receive(results: Hit[]) {
     setHits(results);
     setLastChecked(epoch());
@@ -150,11 +156,13 @@ export default function Snipes({ resource }: { resource: ReturnType<typeof useRe
       {hits === undefined && !pollError && <Loading>Loading snipe listings…</Loading>}
       {hits?.length === 0 && <Notice>No current listings match your snipe rules.</Notice>}
       {!!hits?.length && <Table label="Live snipe listings">
-        <thead><tr>{["Item", "Buy world / DC", "Buy price", "Qty at price", "Home median", "Profit / unit", "Tier / data age", "Discord"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
+        <thead><tr>{["Item", "Buy world / DC", "Buy price", "Qty at price", "Home median", "Profit / unit", "Demand (7d)", "Tier / buy listing last seen", "Discord"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
         <tbody>{hits.map((hit) => <tr key={hit.listing_key}>
-          <td><Item buyWorld={hit.buy_world} item={hit.item} /></td><td>{hit.buy_world} <small>{hit.buy_dc}</small></td>
+          <td><Item quote={quote(hit)} buyWorld={hit.buy_world} item={hit.item} /></td><td>{hit.buy_world} <small>{hit.buy_dc}</small></td>
           <td>{gil(hit.buy_ppu)}</td><td>{gil(hit.buy_qty_at_price)}</td><td>{gil(hit.home_median_7d)}</td>
           <td><strong className={hit.profit_per_unit >= 0 ? "profit" : "loss"}>{gil(hit.profit_per_unit)}</strong></td>
+          <td>{hit.volume_proof.units_per_day.toFixed(1)} units/day · {hit.volume_proof.distinct_buyers_7d} buyers<br/>
+            Last home sale {age(hit.volume_proof.last_sale_age_h)} · top buyer {(hit.volume_proof.top_buyer_share*100).toFixed(0)}%</td>
           <td><Badge tone={ageTone(hit.data_age_h)}>{hit.tier.name} · {age(hit.data_age_h)}</Badge></td>
           <td>{hit.notified_ts == null ? <Badge>Not notified</Badge> : <span title={time(hit.notified_ts)}><Badge tone="good">Notified</Badge></span>}</td>
         </tr>)}</tbody>
@@ -162,9 +170,9 @@ export default function Snipes({ resource }: { resource: ReturnType<typeof useRe
     </Section>
     <Section title="Snipe history" detail="Listings observed during this session">
       {history.length ? <Table label="Snipe history">
-        <thead><tr>{["First seen", "Item", "Buy world", "Buy price", "Tier / data age", "Last notified"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
+        <thead><tr>{["First seen", "Item", "Buy world", "Buy price", "Tier / buy listing last seen at scan time", "Last notified"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
         <tbody>{[...history].sort((a, b) => b.first_seen_ts - a.first_seen_ts).map((hit) => <tr key={hit.listing_key}>
-          <td>{time(hit.first_seen_ts)}</td><td><Item buyWorld={hit.buy_world} item={hit.item} /></td><td>{hit.buy_world}</td><td>{gil(hit.buy_ppu)}</td>
+          <td>{time(hit.first_seen_ts)}</td><td><Item quote={quote(hit)} buyWorld={hit.buy_world} item={hit.item} /></td><td>{hit.buy_world}</td><td>{gil(hit.buy_ppu)}</td>
           <td><Badge tone={ageTone(hit.data_age_h)}>{hit.tier.name} · {age(hit.data_age_h)}</Badge></td>
           <td>{hit.notified_ts == null ? "Not notified" : time(hit.notified_ts)}</td>
         </tr>)}</tbody>

@@ -121,7 +121,7 @@ function EntryView({ entry, refresh, close }: { entry: Entry; refresh: () => voi
           {message && <Notice>{message}</Notice>}
         </div>
       </Section>
-      {"items_scanned" in result ? <RetainerResults result={result} /> : <ScanResults result={result} />}
+      {"items_scanned" in result ? <RetainerResults archived result={result} /> : <ScanResults archived result={result} />}
     </>
   );
 }

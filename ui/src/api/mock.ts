@@ -15,6 +15,7 @@ const pause = (ms = 150) => new Promise<void>((resolve) => window.setTimeout(res
 const costs = new Map<string, number>();
 
 let settings: Settings = {
+  min_net_multiple: 1,
   history_days: 90,
   snipe_rule: { max_home_median_ratio: 0.5, max_last_sale_age_h: 24, max_top_buyer_share: 0.5,
     min_distinct_buyers_7d: 3, min_profit: 5000 },
@@ -82,13 +83,18 @@ function marketRows(params: Pick<ScanParams, "buyer_tax" | "seller_tax" | "sella
   return inventory.map((entry, index): ScanRow => {
     const sellable = Math.min(entry.qty, Math.floor(entry.velocity * (params.sellable_days ?? 3)));
     const profit = entry.median * (1 - params.seller_tax) -
-      entry.price * (1 + (params.buyer_tax ?? 0.05)) - (params.travel_cost?.[entry.dc] ?? 0) / entry.qty;
+      entry.price * (1 + (params.buyer_tax ?? 0.05)) - (params.travel_cost?.[entry.dc] ?? 0) / Math.max(1,sellable);
     return {
       item: { id: 91001 + index, name: entry.name, hq: entry.hq,
         universalis_url: `https://universalis.app/market/${91001 + index}?server=${encodeURIComponent(settings.home_world)}`,
         saddlebag_url: `https://saddlebagexchange.com/queries/item-data/${91001 + index}` },
       buy_world: entry.world, buy_dc: entry.dc, buy_ppu: entry.price, buy_qty_at_price: entry.qty,
       home_median_7d: entry.median, home_lowest: index % 4 === 3 ? null : entry.median + 2400,
+      median_profit_per_unit: profit, buy_stacks: [entry.qty],
+      ask_exit_ppu: index % 4 === 3 ? null : entry.median,
+      ask_profit_per_unit: index % 4 === 3 ? null : profit,
+      ask_profit_capped: index % 4 === 3 ? null : profit * sellable,
+      home_lowest_units: index % 4 === 3 ? 0 : 1,
       sellable_qty: sellable, profit_per_unit: profit, total_profit_capped: sellable * profit,
       est_wait_days: sellable / entry.velocity, days_to_sell: sellable / entry.velocity,
       roi_pct: 100 * profit / (entry.price * (1 + (params.buyer_tax ?? 0.05))),
@@ -117,6 +123,7 @@ function scanRows(params: ScanParams): ScanRow[] {
     row.volume_proof.days_with_sales >= params.min_days_with_sales &&
     row.volume_proof.units_per_day >= params.min_units_day &&
     row.volume_proof.top_buyer_share <= params.max_top_buyer_share &&
+    (params.max_sale_age_h == null || (row.volume_proof.last_sale_age_h ?? Infinity) < params.max_sale_age_h) &&
     (params.max_data_age_h == null || row.data_age_h < params.max_data_age_h)
   ));
 }
@@ -254,6 +261,22 @@ export const mockApi: Api = {
     ];
   },
   async setCost(cost) { costs.set(`${cost.item_id}-${cost.hq}`, cost.unit_cost); },
+  async getSales() {
+    return marketRows(mockParams.Flip).slice(0,3).map((r,i) => {
+      const gross = r.home_median_7d * 2, net = Math.floor(gross * 0.95);
+      const basis = i === 2 ? null : Math.floor(2 * r.buy_ppu * 1.05);
+      return {item:r.item, qty:2, ts:now() - (i+1)*86400, gross, net, fifo_cost:basis,
+        buy_ppu:basis == null ? null : basis/2, gross_ppu:gross/2, net_ppu:net/2,
+        profit:basis == null ? null : net-basis, known_profit:basis == null ? 0 : net-basis, roi_pct:basis ? 100*(net-basis)/basis : null,
+        unknown_qty:basis == null ? 2 : 0, sources:["restocky"], listing_days:i+0.5,
+        purchase_days:i+1, retainer:demoRetainer, reprices:i, own_undercuts:i};
+    });
+  },
+  async recheck(q) {
+    const row = marketRows(mockParams.Flip).find(r => r.item.id === q.item_id && r.item.hq === q.hq && r.buy_world === q.buy_world);
+    return { price: row?.buy_ppu ?? null, qty: row?.buy_qty_at_price ?? 0, age_h: row?.data_age_h ?? null,
+      stacks: row?.buy_stacks ?? [], home_lowest: row?.home_lowest ?? null, home_median: row?.home_median_7d ?? null };
+  },
   async getPositions() {
     await pause();
     const rows = marketRows({

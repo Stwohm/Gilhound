@@ -218,8 +218,8 @@ def test_embed_and_batch_snapshots(tmp_path: Path) -> None:
                 ("📊 Cerberus median", "12 <:gil:123>"),
                 ("🏷️ Lowest on Cerberus", "Unknown"),
                 ("💰 Profit", "+9 <:gil:123> / unit\n+18 <:gil:123> total"),
-                ("📈 Sells", "2.0/day · 3 buyers · last 1.0 h ago"),
-                ("🕒 Data age", "0 min (fresh)"),
+                ("📈 Sells", "2.0/day · 3 buyers · last Cerberus sale 1.0 h ago · top buyer 40%"),
+                ("🕒 Buy listing last seen", "0 min (fresh)"),
             ]
         ],
     }

@@ -1,12 +1,13 @@
 """Restocky listing snapshots and confirmed sales. JSON wins over its CSV mirror."""
 
 import json
+from collections import Counter, defaultdict
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from gilhound.models import LedgerEventKind, SourceName
+from gilhound.models import LedgerEventKind, SaleDetails, SourceName
 
 from .common import (
     READ_ERRORS,
@@ -90,7 +91,18 @@ def objects(path: Path) -> list[dict[str, Any]]:
 
 
 def json_listing(row: dict[str, Any]) -> dict[str, Any]:
+    require(isinstance(row.get("Competitors", {}), dict))
+    rivals = {name: uint(stat["TimesBelowUs"]) for name, stat in row.get("Competitors", {}).items()
+              if isinstance(stat, dict)}
+    require(len(rivals) == len(row.get("Competitors", {})))
+    sale_time = row["SaleTimeUtc"] or row.get("SoldRecordedUtc")
     return {
+        "slot": int(row.get("Slot", -1)),
+        "reprice_count": uint(row["RepriceCount"]),
+        "undercut_count": uint(row["UndercutCount"]),
+        "rivals": rivals,
+        "history_only": flag(row.get("HistoryOnly", False)),
+        "sold_gross_gil": None if row.get("SoldGrossGil") is None else uint(row["SoldGrossGil"]),
         "item_id": uint(row["ItemId"]),
         "item_name": row["ItemName"],
         "hq": flag(row["IsHq"]),
@@ -99,7 +111,7 @@ def json_listing(row: dict[str, Any]) -> dict[str, Any]:
         "retainer": row["RetainerName"],
         "last_price": uint(row["LastPrice"]),
         "first_seen_utc": utc(row["FirstSeenUtc"]),
-        "sale_time_utc": utc(row["SaleTimeUtc"]) if row["SaleTimeUtc"] else None,
+        "sale_time_utc": utc(sale_time) if sale_time else None,
         "ended_utc": utc(row["EndedUtc"]) if row["EndedUtc"] else None,
         "sold_total_gil": uint(row["SoldTotalGil"]),
     }
@@ -107,15 +119,26 @@ def json_listing(row: dict[str, Any]) -> dict[str, Any]:
 
 def listings(records: Records, rows: Iterator[dict[str, Any]]) -> None:
     records.listings = []
+    prices: dict[tuple, list[dict]] = defaultdict(list)
+    for price in records.price_history:
+        prices[price["item_id"], price["hq"], price["retainer"], price["slot"]].append(price)
     for row in rows:
         item = item_ref(row["item_id"], row["hq"], row["item_name"])
         qty = row["qty"]
         require(qty > 0)
         outcome = row["outcome"]
+        history = prices.get((item.id, item.hq, row["retainer"], row.get("slot")), [])
         if outcome == "active":
             require(row["last_price"] is not None and row["first_seen_utc"] is not None)
+            last = max((r for r in history
+                        if r["utc_time"] >= row["first_seen_utc"]
+                        and row["last_price"] == r["new_price" if r["applied"] else "old_price"]
+                        ), key=lambda r: r["utc_time"], default=None)
             records.listings.append(
-                Stock(item, qty, row["last_price"], row["retainer"], ts=row["first_seen_utc"])
+                Stock(item, qty, row["last_price"], row["retainer"], ts=row["first_seen_utc"],
+                      undercut_count=row["undercut_count"],
+                      competing_price=last["lowest_competitor"] if last else None,
+                      observed_ts=last["utc_time"] if last else None)
             )
         elif outcome == "sold":
             ts = row["sale_time_utc"] or row["ended_utc"]
@@ -125,12 +148,48 @@ def listings(records: Records, rows: Iterator[dict[str, Any]]) -> None:
                     SourceName.RESTOCKY, LedgerEventKind.SELL, item, qty, ts, row["sold_total_gil"]
                 )
             )
+            first = row["first_seen_utc"] if not row.get("history_only") else None
+            if first is not None and (first > ts or not row["last_price"]):
+                first = None
+            rivals = row.get("rivals")
+            if first is not None and not rivals:
+                # The CSV spans listings. Only assign counts wholly inside this period.
+                rivals = {r["competitor"]: r["times_below_us"] for r in records.competitors
+                          if (r["item_id"], r["hq"]) == (item.id, item.hq)
+                          and first <= r["first_seen_utc"] <= r["last_seen_utc"] <= ts}
+                observed = Counter(
+                    obs["seller"] for obs in records.undercuts
+                    if (obs["item"], obs["hq"]) == (item.id, item.hq) and first <= obs["ts"] <= ts
+                )
+                for name, count in observed.items():
+                    rivals.setdefault(name, count)
+            cuts = None
+            if first is not None and any(first <= r["utc_time"] <= ts for r in history):
+                cuts = sum(
+                    r["applied"] and r["lowest_competitor"] is not None
+                    and r["new_price"] < min(r["old_price"], r["lowest_competitor"])
+                    for r in history if first <= r["utc_time"] <= ts
+                )
+            records.events[-1].details = SaleDetails(
+                retainer=row["retainer"], gross=row.get("sold_gross_gil"), first_listed=first,
+                reprices=row["reprice_count"] if first is not None else None,
+                own_undercuts=cuts, rivals={k: v for k, v in (rivals or {}).items() if v},
+            )
         else:
             require(outcome == "gone")
 
 
 def parse(paths: dict[str, Path]) -> Records:
     records = Records()
+    for name, attr in (("competitors.csv", "competitors"), ("price-history.csv", "price_history")):
+        if name in paths:
+            setattr(records, attr, list(table(paths[name])))
+    if "undercut-history.json" in paths:
+        for obs in objects(paths["undercut-history.json"]):
+            require(isinstance(obs["Seller"], str) and bool(obs["Seller"].strip()))
+            require(uint(obs["OurPrice"]) > uint(obs["RivalPrice"]) > 0)
+            records.undercuts.append(dict(item=uint(obs["ItemId"]), hq=flag(obs["IsHq"]),
+                                          seller=obs["Seller"], ts=utc(obs["ObservedUtc"])))
     if "listings.json" in paths:
         listings(records, map(json_listing, objects(paths["listings.json"])))
         records.listings_mtime = int(paths["listings.json"].stat().st_mtime)
@@ -150,10 +209,6 @@ def parse(paths: dict[str, Path]) -> Records:
                     item, uint(row["RemainingQuantity"]), uint(row["UnitCost"]), ts=utc(row["Utc"])
                 )
             )
-    if "competitors.csv" in paths:
-        records.competitors = list(table(paths["competitors.csv"]))
-    if "price-history.csv" in paths:
-        records.price_history = list(table(paths["price-history.csv"]))
     return records
 
 
@@ -162,6 +217,6 @@ def read(folder: Path) -> Source:
         folder,
         SourceName.RESTOCKY,
         "Restocky",
-        (*HEADERS, "listings.json", "cost-ledger.json"),
+        (*HEADERS, "listings.json", "cost-ledger.json", "undercut-history.json"),
         parse,
     )

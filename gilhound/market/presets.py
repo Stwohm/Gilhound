@@ -4,13 +4,13 @@ from itertools import islice
 from statistics import median
 
 from gilhound.market.http import HttpClient
-from gilhound.market.profit import profit_per_unit, sellable_qty, wait_days
+from gilhound.market.profit import profit_per_unit, sellable_qty, stack_outlay, wait_days
 from gilhound.market.saddlebag import candidates
 from gilhound.market.snipe import MarketRow, qualifying_listings
 from gilhound.market.universalis import Universalis
 from gilhound.market.volume import DAY, recent, volume_proof
 from gilhound.market.workers import parallel
-from gilhound.models import ItemRef, ScanParams, ScanPreset, ScanResult
+from gilhound.models import ItemRef, RejectedCandidate, ScanParams, ScanPreset, ScanResult
 
 # The legacy scripts shipped this map and made no metadata requests.
 LEGACY_WORLD_DCS = {
@@ -30,7 +30,12 @@ def _opportunities(
     now: float,
     dcs: dict[str, str],
     legacy: bool,
+    rejected: list[RejectedCandidate] | None = None,
 ) -> list[tuple[float, MarketRow]]:
+    def reject(*reasons: str, world: str | None = None) -> None:
+        if rejected is not None:
+            rejected.append(RejectedCandidate(item=item, reasons=list(reasons), buy_world=world))
+
     preset = params.preset
     flip, snipe = preset == ScanPreset.FLIP, preset == ScanPreset.SNIPE
     home = api.current(
@@ -44,6 +49,7 @@ def _opportunities(
         params.buy_region, [item.id], listings=params.region_listings, hq=item.hq
     ).get(item.id)
     if not home or not region:
+        reject("Missing market snapshot")
         return []
     history = (
         home.sales
@@ -60,6 +66,7 @@ def _opportunities(
     sales = recent(quality_history, now)
     cheap = [r for r in region.listings if r.world.casefold() != params.home_world.casefold()]
     if not cheap or len(sales) < params.min_history_sales:
+        reject("No regional buy listing" if not cheap else "Minimum weekly sales")
         return []
     med = median(s.ppu for s in sales)
     low = min((r.ppu for r in home.listings), default=None)
@@ -79,16 +86,17 @@ def _opportunities(
     if legacy and flip:
         velocity = home.velocity[item.hq] or velocity
     buyers = proof.distinct_buyers_7d
-    if (
-        buyers < params.min_distinct_buyers
-        or proof.days_with_sales < params.min_days_with_sales
-        or velocity < params.min_units_day
-        or proof.top_buyer_share > params.max_top_buyer_share
-        or (
-            params.max_sale_age_h is not None
-            and (proof.last_sale_age_h is None or proof.last_sale_age_h >= params.max_sale_age_h)
-        )
-    ):
+    failed = [label for label, fails in (
+        ("Distinct buyers", buyers < params.min_distinct_buyers),
+        ("Days with sales", proof.days_with_sales < params.min_days_with_sales),
+        ("Units/day", velocity < params.min_units_day),
+        ("Top buyer share", proof.top_buyer_share > params.max_top_buyer_share),
+        ("Last sale age", params.max_sale_age_h is not None and (
+            proof.last_sale_age_h is None or proof.last_sale_age_h >= params.max_sale_age_h
+        )),
+    ) if fails]
+    if failed:
+        reject(*failed)
         return []
     units = sum(s.qty for s in sales)
     min_sale = min(s.ppu for s in sales)
@@ -100,11 +108,10 @@ def _opportunities(
     results = []
     for index, first in enumerate(cheap if snipe and not legacy else cheap[:1]):
         next_price = cheap[index + 1].ppu if index + 1 < len(cheap) else None
-        qty = (
-            first.qty
-            if snipe
-            else sum(r.qty for r in cheap if r.ppu == first.ppu and r.world == first.world)
-        )
+        same_price = [first] if snipe else [
+            r for r in cheap if r.ppu == first.ppu and r.world == first.world
+        ]
+        qty = sum(r.qty for r in same_price)
         rank_qty = qty
         if legacy and not snipe:
             spread = 1.1 if flip else 1.15
@@ -112,19 +119,22 @@ def _opportunities(
         dc = dcs.get(first.world, "?")
         capped = sellable_qty(qty, velocity, params.sellable_days)
         if not legacy and capped == 0:
+            reject("No sellable units", world=first.world)
             continue
-        gain = profit_per_unit(
-            sell,
-            first.ppu,
+        costs = dict(
             seller_tax=params.seller_tax,
             buyer_tax=params.buyer_tax,
             travel_cost=params.travel_cost.get(dc, 0),
             qty=qty if legacy else capped,
         )
+        gain = profit_per_unit(sell, first.ppu, **costs)
         if gain <= 0 or gain < params.min_profit or first.ppu < params.min_ppu:
+            reject("Minimum buy price" if first.ppu < params.min_ppu else "Net profit floor",
+                   world=first.world)
             continue
-        age = max(0, now - first.last_review_ts) / 3600
+        age = max(0, now - min(r.last_review_ts for r in same_price)) / 3600
         if params.max_data_age_h is not None and age >= params.max_data_age_h:
+            reject("Buy quote age", world=first.world)
             continue
         # A second regional price was the old alert benchmark. Live alert rules
         # compare with the home median and are applied by snipe.evaluate.
@@ -136,7 +146,24 @@ def _opportunities(
             continue
         nearby = [r for r in region.listings if r.ppu * 100 <= first.ppu * 110]
         unit_cost = first.ppu * (1 + params.buyer_tax)
+        exit_price = min(med, low) if low is not None else None
+        ask_gain = profit_per_unit(exit_price, first.ppu, **costs) if exit_price else None
+        floor = max(params.min_profit, params.snipe_rule.min_profit
+                    if snipe and params.snipe_rule else 0)
+        outlay = sum(stack_outlay(r.qty, first.ppu, params.buyer_tax) for r in same_price)
+        proceeds = (exit_price or med) * (1 - params.seller_tax) * capped
+        net_in_window = proceeds - outlay - costs["travel_cost"]
         row = MarketRow(
+            whole_stack_outlay=outlay,
+            median_profit_per_unit=profit_per_unit(med, first.ppu, **costs),
+            ask_exit_ppu=exit_price,
+            ask_profit_per_unit=ask_gain,
+            ask_profit_capped=ask_gain * capped if ask_gain is not None else None,
+            ask_below_floor=ask_gain < floor or ask_gain <= 0 if ask_gain is not None else None,
+            home_lowest_units=sum(r.qty for r in home.listings if r.ppu == low),
+            buy_stacks=[r.qty for r in same_price],
+            large_buy_below_multiple=params.large_buy_gil is not None
+            and outlay >= params.large_buy_gil and net_in_window / outlay < params.min_net_multiple,
             units_sold_7d=units,
             sales_7d=len(sales),
             average_sale_size=units / len(sales),
@@ -175,7 +202,7 @@ def _opportunities(
         score = gain * capped
         if legacy:
             score = gain * min(rank_qty, velocity * params.sellable_days)
-        if preset == ScanPreset.VOLUME:
+        if preset in (ScanPreset.VOLUME, ScanPreset.SAFE_FLIP):
             score = gain * velocity if legacy else row.profit_per_day
         if snipe:
             score = gain
@@ -201,10 +228,11 @@ def run_scan(
         world_dcs = {w.name: dc.name for dc in api.data_centers() for w in dc.worlds}
     items = candidates(params, client)
     warnings = []
+    rejected: list[RejectedCandidate] = []
 
     def process(item: ItemRef) -> list[tuple[float, MarketRow]] | str:
         try:
-            return _opportunities(item, params, api, start, world_dcs, legacy_compat)
+            return _opportunities(item, params, api, start, world_dcs, legacy_compat, rejected)
         except (OSError, HTTPException, ValueError) as exc:
             return f"Item {item.id} ({'HQ' if item.hq else 'NQ'}): {type(exc).__name__}"
 
@@ -220,9 +248,9 @@ def run_scan(
     if not legacy_compat and params.preset == ScanPreset.SNIPE:
         if params.snipe_rule is not None and params.freshness_tiers is not None:
             qualified = qualifying_listings(
-                rows, params.snipe_rule, params.freshness_tiers, finished
+                rows, params.snipe_rule, params.freshness_tiers, finished, rejected
             )
-            selected = [row for row, *_ in islice(qualified, params.result_limit)]
+            selected = [row for row, *_ in qualified][:params.result_limit]
         else:
             # Low-level callers can supply their rules later to evaluate().
             selected = list(rows)
@@ -230,6 +258,7 @@ def run_scan(
         selected = list(islice(rows, params.result_limit))
     return ScanResult(
         params=params,
+        rejected=sorted(rejected, key=lambda r: (r.item.id, r.item.hq, r.buy_world or "")),
         rows=selected,
         started_ts=int(start),
         finished_ts=finished,

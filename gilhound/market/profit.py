@@ -1,3 +1,11 @@
+from decimal import Decimal
+
+
+def stack_outlay(qty: int, price: int, buyer_tax: float) -> int:
+    subtotal = qty * price
+    return subtotal + int(subtotal * Decimal(str(buyer_tax)))
+
+
 def profit_per_unit(
     sell: float,
     buy: int,
