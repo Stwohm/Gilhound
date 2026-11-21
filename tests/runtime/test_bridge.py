@@ -7,7 +7,7 @@ from uuid import UUID
 import pytest
 from fastapi.testclient import TestClient
 
-from gilhound.runtime.bridge import Bridge
+from gilhound.runtime.bridge import Bridge, Heartbeat, Reply
 
 
 def heartbeat(directory: Path, **changes: object) -> None:
@@ -17,6 +17,21 @@ def heartbeat(directory: Path, **changes: object) -> None:
         "logged_in": True, "world": "Cerberus", "enabled": True,
     }
     (directory / "heartbeat.json").write_text(json.dumps(payload | changes))
+
+
+@pytest.mark.parametrize("ts", [1_700_000_000, 1_700_000_000.25])
+def test_heartbeat_timestamp(tmp_path: Path, ts: int | float) -> None:
+    heartbeat(tmp_path, ts=ts)
+    beat = Heartbeat.model_validate_json((tmp_path / "heartbeat.json").read_bytes(), strict=True)
+    assert beat.ts == ts
+
+
+@pytest.mark.parametrize("ts", [1_700_000_000, 1_700_000_000.25])
+def test_reply_timestamp(ts: int | float) -> None:
+    reply = Reply.model_validate_json(json.dumps({
+        "version": 1, "id": "test", "status": "rejected", "reason": "invalid command", "ts": ts,
+    }), strict=True)
+    assert reply.ts == ts
 
 
 @pytest.mark.parametrize(("changes", "state"), [
@@ -58,7 +73,7 @@ def test_round_trip(tmp_path: Path, client: TestClient, status: str, reason: str
                 assert 0 <= time.time() - request["created_ts"] < 5
                 (directory / "outbox" / path.name).write_text(json.dumps({
                     "version": 1, "id": path.stem, "status": status, "reason": reason,
-                    "ts": int(time.time()),
+                    "ts": int(time.time()) + 0.5,
                 }))
                 path.unlink()
                 return

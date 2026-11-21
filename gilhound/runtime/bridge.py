@@ -19,7 +19,7 @@ COMMAND = re.compile(r"/li [A-Za-z][A-Za-z' -]{1,30} market")
 class Heartbeat(BaseModel):
     version: int
     plugin_version: str
-    ts: int
+    ts: float
     logged_in: bool
     world: str | None
     enabled: bool
@@ -30,7 +30,7 @@ class Reply(BaseModel):
     id: str
     status: Literal["ok", "rejected", "error"]
     reason: str
-    ts: int
+    ts: float
 
 
 class Bridge:

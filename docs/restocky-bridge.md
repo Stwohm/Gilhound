@@ -11,6 +11,8 @@ Directory: `%APPDATA%\XIVLauncher\pluginConfigs\Restocky\bridge\`
 | `inbox/<id>.json` | Gilhound | `{"version":1,"id":"<uuid4>","command":"/li Raiden market","created_ts":<epoch s>}` — written as `<id>.tmp` then renamed |
 | `outbox/<id>.json` | Restocky | `{"version":1,"id":"<uuid4>","status":"ok"\|"rejected"\|"error","reason":"…","ts":<epoch s>}` |
 
+The `ts` field in heartbeats and replies is UTC epoch seconds and may be fractional.
+
 Rules (enforced by Restocky):
 - Only `^/li [A-Za-z][A-Za-z' -]{1,30} market$` is accepted. Anything else → `rejected`.
 - Requests older than 30 s → `rejected` ("expired").
