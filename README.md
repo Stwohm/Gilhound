@@ -11,3 +11,7 @@ Install: see [docs/INSTALL.md](docs/INSTALL.md). Design notes:
 
 Gilhound only reads public market APIs (Universalis, Saddlebag Exchange) and
 files that Dalamud plugins write on your PC. It does not interact with the game.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
