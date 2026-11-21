@@ -34,6 +34,36 @@
             "title": "Update Available",
             "type": "boolean"
           },
+          "update_check_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Last release feed failure.",
+            "title": "Update Check Error"
+          },
+          "update_checked_at": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Last check in UTC epoch seconds.",
+            "title": "Update Checked At"
+          },
+          "updates_supported": {
+            "default": true,
+            "description": "Whether this layout supports updates.",
+            "title": "Updates Supported",
+            "type": "boolean"
+          },
           "version": {
             "description": "Installed Gilhound version.",
             "title": "Version",
@@ -2958,6 +2988,88 @@
           }
         },
         "summary": "Apply Update"
+      }
+    },
+    "/api/update/check": {
+      "post": {
+        "operationId": "check_update_api_update_check_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AppInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Updates unavailable in dev mode"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Update check rate limit exceeded",
+            "headers": {
+              "Retry-After": {
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Release feed check failed"
+          }
+        },
+        "summary": "Check Update"
       }
     }
   },

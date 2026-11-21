@@ -1,4 +1,5 @@
 import time
+from io import BytesIO
 from pathlib import Path
 from threading import Event
 from unittest.mock import Mock
@@ -6,7 +7,7 @@ from unittest.mock import Mock
 import pytest
 from fastapi.testclient import TestClient
 
-from gilhound import updater
+from gilhound import __version__, updater
 from gilhound.api import updates
 from gilhound.api.jobs import Progress
 
@@ -14,7 +15,12 @@ from gilhound.api.jobs import Progress
 def test_dev_skips_feed(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
     check = Mock()
     monkeypatch.setattr(updater, "check", check)
-    assert client.get("/api/info").json()["latest_version"] is None
+    info = client.get("/api/info").json()
+    assert info["latest_version"] is None
+    assert not info["updates_supported"]
+    response = client.post("/api/update/check")
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Updates unavailable in dev mode."
     assert client.post("/api/update/apply").status_code == 409
     check.assert_not_called()
 
@@ -57,6 +63,66 @@ def test_release_job(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> Non
     assert client.post("/api/update/apply").status_code == 409
     allow_restart.set()
     assert restarted.wait(2)
+    feed.assert_called_once()
+
+
+def test_manual_check_bypasses_cache_and_rate_limits(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(updates, "installed", lambda: True)
+    clock = Mock(wraps=time)
+    clock.monotonic.return_value = 100.0
+    monkeypatch.setattr(updates, "time", clock)
+    feed = Mock(side_effect=[
+        BytesIO(f'{{"tag_name": "v{__version__}"}}'.encode()),
+        BytesIO(b'{"tag_name":"v0.2.0","assets":['
+                b'{"name":"Gilhound-0.2.0-win64.zip","browser_download_url":"asset"},'
+                b'{"name":"SHA256SUMS.txt","browser_download_url":"sum"}]}'),
+    ])
+    monkeypatch.setattr(updater, "_open", feed)
+
+    response = client.post("/api/update/check")
+    assert response.status_code == 200
+    info = response.json()
+    assert info["version"] == __version__
+    assert info["update_available"] is False
+    assert info["latest_version"] is None
+    assert isinstance(info["update_checked_at"], int)
+    assert client.get("/api/info").json() == info
+
+    clock.monotonic.return_value = 109.0
+    response = client.post("/api/update/check")
+    assert response.status_code == 429
+    assert response.headers["Retry-After"] == "1"
+    feed.assert_called_once()
+
+    clock.monotonic.return_value = 110.0
+    response = client.post("/api/update/check")
+    assert response.status_code == 200
+    assert response.json()["update_available"] is True
+    assert response.json()["latest_version"] == "0.2.0"
+    assert client.get("/api/info").json() == response.json()
+    assert feed.call_count == 2
+
+
+def test_manual_check_reports_feed_failure(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(updates, "installed", lambda: True)
+    feed = Mock(side_effect=OSError("Internal feed error"))
+    monkeypatch.setattr(updater, "_open", feed)
+
+    response = client.post("/api/update/check")
+    assert response.status_code == 502
+    message = response.json()["detail"]
+    assert message == (
+        "Could not check for updates. The release feed is unavailable. Please try again."
+    )
+    info = client.get("/api/info").json()
+    assert info["update_check_error"] == message
+    assert isinstance(info["update_checked_at"], int)
+    assert not info["update_available"]
+    assert client.post("/api/update/check").status_code == 429
     feed.assert_called_once()
 
 

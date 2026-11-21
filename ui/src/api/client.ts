@@ -28,6 +28,7 @@ export interface Api {
   getSettings(): Promise<JsonResult<"get_settings_api_settings_get">>;
   saveSettings(settings: JsonBody<"put_settings_api_settings_put">): Promise<JsonResult<"put_settings_api_settings_put">>;
   getInfo(): Promise<JsonResult<"get_info_api_info_get">>;
+  checkUpdate(): Promise<JsonResult<"check_update_api_update_check_post">>;
   applyUpdate(progress: (done: number, total?: number | null) => void): Promise<void>;
   exportDiagnostics(): Promise<Blob>;
   testDiscord(): Promise<void>;
@@ -63,8 +64,11 @@ async function request(path: string, method = "GET", body?: unknown): Promise<Re
 
   if (response.status === 401) throw new Error("Your session could not be authenticated. Reopen Gilhound.");
   if (response.status === 422) throw new Error("The API rejected one or more fields. Check your input.");
-  if (response.status === 400) throw new Error((await response.json()).detail);
-  if (!response.ok) throw new Error(`Gilhound API request failed (HTTP ${response.status}).`);
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(typeof body?.detail === "string" ? body.detail
+      : `Gilhound API request failed (HTTP ${response.status}).`);
+  }
   return response;
 }
 
@@ -111,6 +115,7 @@ const realApi: Api = {
   getSettings: () => json("/api/settings"),
   saveSettings: (settings) => json("/api/settings", "PUT", settings),
   getInfo: () => json("/api/info"),
+  checkUpdate: () => json("/api/update/check", "POST"),
   async applyUpdate(progress) {
     const current = await waitForJob("/api/update/apply", undefined, progress);
     if (current.state !== "complete") throw new Error("Update failed. Please retry.");

@@ -54,7 +54,14 @@ def test_requires_session_token(app: FastAPI, authorization: str | None) -> None
 def test_accepts_case_insensitive_bearer_scheme(client: TestClient, token: str) -> None:
     response = client.get("/api/info", headers={"Authorization": f"bEaReR {token}"})
     assert response.status_code == 200
-    assert response.json() == dict(version=__version__, latest_version=None, update_available=False)
+    assert response.json() == {
+        "version": __version__,
+        "latest_version": None,
+        "update_available": False,
+        "updates_supported": False,
+        "update_checked_at": None,
+        "update_check_error": None,
+    }
 
 
 def test_webhook_is_masked_by_response_model(client: TestClient) -> None:

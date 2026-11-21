@@ -1,8 +1,9 @@
 import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { api, mockMode } from "../api/client";
+import type { useUpdates } from "../api/useUpdates";
 import {
-  Badge, Field, Notice, Numeric, PageTitle, ResourceState, Section, TravelEditor, errorMessage, travelCosts,
+  Badge, Field, Notice, Numeric, PageTitle, ResourceState, Section, TravelEditor, errorMessage, time, travelCosts,
   travelEntries, useResource,
 } from "../common";
 import type { Settings, TravelEntry } from "../common";
@@ -105,8 +106,11 @@ function SettingsForm({ settings, onSaved }: { settings: Settings; onSaved: (set
   </form>;
 }
 
-export default function SettingsScreen({ resource }: { resource: ReturnType<typeof useResource<Settings>> }) {
-  const info = useResource(api.getInfo);
+export default function SettingsScreen({ resource, updates }: {
+  resource: ReturnType<typeof useResource<Settings>>;
+  updates: ReturnType<typeof useUpdates>;
+}) {
+  const { info, checking, check, result } = updates;
   const [exporting, setExporting] = useState(false);
   const [exportResult, setExportResult] = useState<ActionResult>();
 
@@ -135,8 +139,14 @@ export default function SettingsScreen({ resource }: { resource: ReturnType<type
     <PageTitle title="Settings" description="Manage market defaults and Discord notifications." />
     {resource.data ? <SettingsForm settings={resource.data} onSaved={resource.setData} />
       : <Section title="Preferences"><ResourceState error={resource.error} retry={resource.retry} loading="Loading settings…" /></Section>}
-    <Section title="About & diagnostics" action={info.data && <Badge>v{info.data.version}</Badge>}>
-      {!info.data && <ResourceState error={info.error} retry={info.retry} loading="Loading app version…" />}
+    <Section title="About / Updates" action={info && <Badge>v{info.version}</Badge>}>
+      <div className="panel-body editor">
+        <button type="button" disabled={checking} onClick={() => void check()}>Check for updates</button>
+        <p>Last checked · {info?.update_checked_at == null ? "Never" : time(info.update_checked_at)}</p>
+        <p role="status">{result}</p>
+      </div>
+    </Section>
+    <Section title="Diagnostics">
       <div className="panel-body editor">
         <button type="button" disabled={exporting} onClick={() => void exportDiagnostics()}>{exporting ? "Exporting…" : "Export diagnostics"}</button>
         {exportResult && <Notice tone={exportResult.success ? "good" : "error"}>{exportResult.message}</Notice>}

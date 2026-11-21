@@ -96,6 +96,9 @@ nav a[aria-current="page"] { border-color: #426570; }
 .foot-region { color: #a1b6c2; }
 .home-dot { height: 6px; width: 6px; background: var(--rail-key); border-radius: 50%; }
 .sidebar-foot .badge { background: #3f3826; color: #f2cc83; }
+.sidebar-foot .update-refresh { padding: 0; width: 28px; height: 28px; min-height: 0; background: transparent; color: var(--rail-key); border-color: transparent; font-size: 1.2rem; }
+.sidebar-foot .update-refresh:hover:not(:disabled) { background: var(--rail-active); }
+.sidebar-foot small:empty { display: none; }
 
 main { width: 100%; max-width: 1800px; display: grid; align-content: start; gap: 18px; padding: 36px clamp(17px, 3.3vw, 52px) 42px; }
 .retained-screen:not([hidden]) { display: contents; }

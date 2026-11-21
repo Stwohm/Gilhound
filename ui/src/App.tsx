@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import brandIcon from "../../assets/icon-256.png";
 import { api, mockMode } from "./api/client";
+import { useUpdates } from "./api/useUpdates";
 import { Badge, Notice, defaults, errorMessage, useResource } from "./common";
 import Scan from "./screens/Scan";
 import Snipes from "./screens/Snipes";
@@ -25,27 +26,10 @@ function currentPage() {
   return pages.find((page) => `#${page.id}` === window.location.hash.split("/")[0]) ?? pages[0];
 }
 
-function UpdateBanner() {
-  const [version, setVersion] = useState<string | null>();
+function UpdateBanner({ version }: { version?: string | null }) {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total?: number | null }>();
   const [message, setMessage] = useState("");
-  useEffect(() => {
-    let active = true;
-    let timer: number;
-    async function refresh(delay: number) {
-      try {
-        const info = await api.getInfo();
-        if (active) setVersion(info.update_available ? info.latest_version : null);
-      } catch {
-        // Retain the last successful check until the local API responds again.
-      } finally {
-        if (active) timer = window.setTimeout(() => void refresh(60000), delay);
-      }
-    }
-    void refresh(2000);
-    return () => { active = false; window.clearTimeout(timer); };
-  }, []);
 
   async function apply() {
     setBusy(true);
@@ -62,7 +46,7 @@ function UpdateBanner() {
   }
   if (!version && !busy) return null;
   return <Notice tone="warn">
-    Update to v{version} available{" "}
+    {version && `Update to v${version} available `}
     <button type="button" disabled={busy} onClick={() => void apply()}>Download &amp; restart</button>{" "}
     {busy && <progress aria-label="Update download" max={progress?.total || undefined}
       value={progress?.total ? progress.done : undefined} />}
@@ -73,6 +57,8 @@ function UpdateBanner() {
 export default function App() {
   const page = useSyncExternalStore(subscribe, currentPage);
   const settings = useResource(api.getSettings);
+  const updates = useUpdates();
+  const info = updates.info;
 
   useEffect(() => {
     document.title = `${page.title} · Gilhound`;
@@ -85,7 +71,7 @@ export default function App() {
     snipes: <Snipes resource={settings} />,
     retainer: null,
     positions: <Positions />,
-    settings: <SettingsScreen resource={settings} />,
+    settings: <SettingsScreen resource={settings} updates={updates} />,
   };
 
   return <div className="app">
@@ -106,10 +92,16 @@ export default function App() {
       <div className="sidebar-foot">
         {mockMode && <Badge tone="gold">Mock data</Badge>}
         <div><span className="home-dot" />{preferences.home_world}<span className="foot-region">{preferences.buy_region}</span></div>
+        <div>
+          {info && <span>v{info.version}</span>}
+          <button className="update-refresh" type="button" title="Check for updates" aria-label="Check for updates"
+            disabled={updates.checking} onClick={() => void updates.check()}><span aria-hidden="true">⟳</span></button>
+        </div>
+        {page.id !== "settings" && <small className="foot-region" role="status">{updates.result}</small>}
       </div>
     </aside>
     <main id="main" tabIndex={-1} aria-label={page.title}>
-      <UpdateBanner />
+      <UpdateBanner version={info?.update_available ? info.latest_version : null} />
       <div className="retained-screen" hidden={page.id !== "scan"}><Scan settings={preferences} /></div>
       <div className="retained-screen" hidden={page.id !== "retainer"}><Retainer settings={preferences} /></div>
       {screens[page.id]}

@@ -345,3 +345,10 @@ class AppInfo(BaseModel):
     latest_version: str | None = Field(default=None, description="Newer release, when available.")
     version: str = Field(description="Installed Gilhound version.")
     update_available: bool = Field(description="Whether a newer release is available.")
+    updates_supported: bool = Field(
+        default=True, description="Whether this layout supports updates."
+    )
+    update_checked_at: int | None = Field(
+        default=None, description="Last check in UTC epoch seconds."
+    )
+    update_check_error: str | None = Field(default=None, description="Last release feed failure.")

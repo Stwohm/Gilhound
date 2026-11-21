@@ -9,6 +9,7 @@ type SnipeHit = components["schemas"]["SnipeHit"];
 
 export const demoRetainer = "Demo Retainer 01";
 const now = () => Math.floor(Date.now() / 1000);
+let lastUpdateCheck = now();
 const pause = (ms = 150) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
 const costs = new Map<string, number>();
@@ -233,7 +234,12 @@ export const mockApi: Api = {
   },
   async getInfo() {
     await pause();
-    return { version: "0.1.0", latest_version: "0.1.1", update_available: true };
+    return { version: "0.1.3", updates_supported: true, latest_version: "0.1.4",
+      update_available: true, update_checked_at: lastUpdateCheck };
+  },
+  async checkUpdate() {
+    lastUpdateCheck = now();
+    return mockApi.getInfo();
   },
   async applyUpdate(progress) {
     for (let done = 0; done <= 100; done += 25) {

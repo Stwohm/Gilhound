@@ -137,11 +137,19 @@ def create_app(
 
     @app.get("/api/info")
     def get_info() -> AppInfo:
-        release = updates.latest()
-        return AppInfo(
-            version=__version__, update_available=release is not None,
-            latest_version=release.version if release else None,
-        )
+        return updates.info()
+
+    @app.post("/api/update/check", responses={
+        409: {"model": ApiError, "description": "Updates unavailable in dev mode"},
+        429: {
+            "model": ApiError,
+            "description": "Update check rate limit exceeded",
+            "headers": {"Retry-After": {"schema": {"type": "integer"}}},
+        },
+        502: {"model": ApiError, "description": "Release feed check failed"},
+    })
+    def check_update() -> AppInfo:
+        return updates.refresh()
 
     @app.post("/api/update/apply", status_code=202, responses={409: {"model": ApiError}})
     def apply_update() -> Job:
