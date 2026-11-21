@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gilhound"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Desktop FFXIV market-board scanner and position tracker"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -12,6 +12,7 @@ dependencies = [
     "fastapi==0.165.0",
     "httpx>=0.28.1",
     "pydantic==2.14.4",
+    "pywebview>=6.2.1",
     "uvicorn>=0.54.0",
 ]
 
@@ -19,12 +20,16 @@ dependencies = [
 dev = [
     "httpx2>=2.16.2",
     "pre-commit>=4.7.0",
+    "pyinstaller>=6.22.3",
     "pytest>=9.2.0",
     "ruff>=0.17.6",
 ]
 
 [project.scripts]
 gilhound = "gilhound.cli:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "gilhound.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["gilhound", "gilhound.*"]

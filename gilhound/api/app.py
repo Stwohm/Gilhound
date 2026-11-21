@@ -3,7 +3,6 @@
 import re
 from collections.abc import Awaitable, Callable
 from hmac import compare_digest
-from importlib.metadata import version
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -11,6 +10,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 
+from gilhound import __version__
 from gilhound.models import (
     AppInfo,
     PnLSummary,
@@ -38,7 +38,7 @@ def create_app(token: str) -> FastAPI:
     expected_token = token.encode("ascii")
     app = FastAPI(
         title="Gilhound API",
-        version=version("gilhound"),
+        version=__version__,
         docs_url=None,
         redoc_url=None,
         responses={
