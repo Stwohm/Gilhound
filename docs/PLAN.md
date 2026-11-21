@@ -81,6 +81,18 @@ user-configurable.
 - Discord message: item, HQ/NQ, world, price, qty, home median, profit, data
   age, `/li <world> market` line.
 
+### Retainer snipe (requested 2026-11-21)
+Input: a retainer name (e.g. "Hamsterie") and a world (default home world).
+Output: every item that retainer currently lists on that world (qty, ppu,
+HQ/NQ, data age), and for each item the cheapest current listing in the buy
+region (world, DC, ppu, qty) with the price gap and profit if bought there.
+Caveat: Universalis has no "listings by retainer" lookup (to be confirmed in
+F0-B); finding them means scanning listings across all marketable items on
+that world (bulk endpoint, up to 100 items/request) and filtering by
+`retainerName`. Results only include listings someone has uploaded, so data
+age is shown per row. Optional: save retainers to a watchlist and re-check.
+Retainer names are public market data but are never committed to fixtures.
+
 ## Privacy & repo hygiene
 - Real plugin data and Universalis buyer/retainer names are never committed.
   Fixtures go through `tools/anonymize.py` (names → hashes, amounts scaled).
