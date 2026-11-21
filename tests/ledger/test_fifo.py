@@ -74,7 +74,7 @@ def test_one_to_one_cross_source_sale() -> None:
             (S.CASHFLOW, 100, 202),
             (S.CASHFLOW, 100, 201),
             (S.RESTOCKY, 100, 202),
-            (S.ALLAGAN_MARKET, 401, 200),
+            (S.ALLAGAN_MARKET, 100 + 73 * 3600, 200),
         ]
     ]
     result = calculate(rows)
@@ -89,6 +89,88 @@ def test_exact_net_stacks_with_same_unit_price_are_distinct() -> None:
         event(S.RESTOCKY, K.SELL, item, 3, 11, 101),
     ])
     assert ledger.summary.sales_proceeds == 201
+
+
+def test_allagan_market_delayed_sale_enriches_cashflow() -> None:
+    item = item_ref(1000, True)
+    cashflow = event(S.CASHFLOW, K.SELL, item, 1, 100, 215)
+    observed = event(S.ALLAGAN_MARKET, K.SELL, item, 1, 100 + 3865, 216)
+    observed.details.gross = 227
+
+    ledger = calculate([observed, cashflow])
+
+    (sale,) = ledger.sales
+    assert (sale.ts, sale.net, sale.gross) == (100, 215, 227)
+    assert sale.sources == [S.CASHFLOW, S.ALLAGAN_MARKET]
+    assert ledger.summary.sales_proceeds == 215
+
+
+def test_allagan_market_matches_three_sales_observed_together() -> None:
+    item = item_ref(1000, True)
+    cashflow = [event(S.CASHFLOW, K.SELL, item, 2, ts, 215) for ts in (100, 118, 137)]
+    observed = [event(S.ALLAGAN_MARKET, K.SELL, item, 2, 950, 215) for _ in range(3)]
+
+    ledger = calculate([*cashflow, *observed])
+
+    assert [sale.ts for sale in ledger.sales] == [137, 118, 100]
+    assert all(sale.sources == [S.CASHFLOW, S.ALLAGAN_MARKET] for sale in ledger.sales)
+    assert ledger.summary.sales_proceeds == 645
+
+
+def test_allagan_market_prefers_nearest_earlier_sale() -> None:
+    item = item_ref(1000, True)
+    cashflow = [event(S.CASHFLOW, K.SELL, item, 2, ts, 215) for ts in (100, 950)]
+    observed = event(S.ALLAGAN_MARKET, K.SELL, item, 2, 1000, 215)
+
+    latest, oldest = calculate([*cashflow, observed]).sales
+
+    assert (latest.ts, latest.sources) == (950, [S.CASHFLOW, S.ALLAGAN_MARKET])
+    assert (oldest.ts, oldest.sources) == (100, [S.CASHFLOW])
+
+
+def test_allagan_market_keeps_sale_without_counterpart() -> None:
+    item = item_ref(1000, True)
+    observed = event(S.ALLAGAN_MARKET, K.SELL, item, 2, 950, 215)
+
+    (sale,) = calculate([observed]).sales
+
+    assert (sale.ts, sale.net, sale.sources) == (950, 215, [S.ALLAGAN_MARKET])
+
+
+def test_allagan_market_keeps_sale_outside_lookback() -> None:
+    item = item_ref(1000, True)
+    cashflow = event(S.CASHFLOW, K.SELL, item, 2, 100, 215)
+    observed = event(S.ALLAGAN_MARKET, K.SELL, item, 2, 100 + 73 * 3600, 215)
+
+    later, earlier = calculate([cashflow, observed]).sales
+
+    assert later.sources == [S.ALLAGAN_MARKET]
+    assert earlier.sources == [S.CASHFLOW]
+
+
+def test_allagan_market_reassigns_sale_needed_by_later_observation() -> None:
+    item = item_ref(1000, True)
+    cashflow = [event(S.CASHFLOW, K.SELL, item, 2, ts, 215) for ts in (100, 200)]
+    first = event(S.ALLAGAN_MARKET, K.SELL, item, 2, 950, 215)
+    first.details.gross = 226
+    last = event(S.ALLAGAN_MARKET, K.SELL, item, 2, 200 + 72 * 3600, 215)
+    last.details.gross = 227
+
+    later, earlier = calculate([last, *cashflow, first]).sales
+
+    assert (later.ts, later.gross) == (200, 227)
+    assert (earlier.ts, earlier.gross) == (100, 226)
+
+
+def test_allagan_market_falls_back_to_nearest_future_restocky_sale() -> None:
+    item = item_ref(1000, True)
+    restocky = [event(S.RESTOCKY, K.SELL, item, 2, ts, 215) for ts in (400, 401)]
+    observed = event(S.ALLAGAN_MARKET, K.SELL, item, 2, 100, 215)
+
+    later, nearer = calculate([*restocky, observed]).sales
+
+    assert (later.ts, later.sources) == (401, [S.RESTOCKY])
+    assert (nearer.ts, nearer.sources) == (400, [S.RESTOCKY, S.ALLAGAN_MARKET])
 
 
 def test_snapshot_overlap_and_remaining_cost() -> None:

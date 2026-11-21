@@ -71,6 +71,11 @@ CURRENCIES = {
 
 
 type ItemKey = tuple[int, bool]
+type SaleKey = tuple[int, bool, int]
+type Candidate = tuple[int, int, set[SourceName], LedgerEvent]
+
+AM_LOOKBACK = 72 * 60 * 60
+SALE_SKEW = 300
 
 
 @dataclass
@@ -118,41 +123,104 @@ def stack_total(row: LedgerEvent) -> int | None:
     return row.ppu * row.qty if row.ppu is not None else None
 
 
-def merge_events(
-    events: Iterable[LedgerEvent], enrichment: dict[int, Transaction] | None = None
-) -> list[LedgerEvent]:
-    """Match one sale per source per item/HQ/qty within 300s of the preferred sale.
+def _match_allagan_sales(
+    rows: Iterable[tuple[int, LedgerEvent]],
+    groups: dict[tuple[int, bool, int, int], list[Candidate]],
+) -> dict[int, Candidate]:
+    preferred: dict[SaleKey, list[Candidate]] = defaultdict(list)
+    for (item, hq, qty, _), candidates in groups.items():
+        preferred[item, hq, qty].extend(candidates)
 
-    Prefer CashFlow, then Restocky's net proceeds, then AllaganMarket's estimate.
-    Keep same-source repeats. For ambiguous candidates use the nearest timestamp.
-    """
-    priority = {SourceName.CASHFLOW: 0, SourceName.RESTOCKY: 1, SourceName.ALLAGAN_MARKET: 2}
-    type Candidate = tuple[int, int, set[SourceName], LedgerEvent]
-    groups: dict[tuple[int, bool, int, int], list[Candidate]] = defaultdict(list)
-    kept = []
-    for index, row in sorted(
-        enumerate(events), key=lambda pair: (priority.get(pair[1].source, 3), pair[1].ts)
-    ):
-        if row.kind == LedgerEventKind.SELL and row.source is not None:
-            key = row.item.id, row.item.hq, row.qty
-            bucket = row.ts // 300
+    observations: dict[SaleKey, dict[int, tuple[int, int]]] = defaultdict(dict)
+    for index, row in rows:
+        if row.source == SourceName.ALLAGAN_MARKET and row.kind == LedgerEventKind.SELL:
             total = stack_total(row)
             if total is None:
                 raise ValueError("Sale proceeds required")
-            # Exact net stacks must agree. AllaganMarket estimates tax from gross,
-            # so its net can differ by one gil at the rounding boundary.
-            tolerance = 1 if row.source == SourceName.ALLAGAN_MARKET else 0
-            nearby = (
-                (ts, sources, original)
-                for interval in range(bucket - 1, bucket + 2)
-                for ts, proceeds, sources, original in groups.get((*key, interval), ())
-                if row.source not in sources and abs(row.ts - ts) <= 300
-                and abs(total - proceeds) <= tolerance
-            )
-            match = min(nearby, key=lambda pair: abs(row.ts - pair[0]), default=None)
+            observations[row.item.id, row.item.hq, row.qty][index] = row.ts, total
+
+    matches: dict[int, Candidate] = {}
+    for key, sales in observations.items():
+        candidates = preferred.get(key, [])
+        assigned: dict[int, int] = {}
+        owners: dict[int, int] = {}
+        for index in sales:
+            if len(owners) == len(candidates):
+                break
+            # Visit observations in timestamp order. Take the best free sale first,
+            # then look for an alternating path that frees a sale by moving earlier
+            # matches. This preserves the greedy choice whenever it can add a match.
+            queue = deque([index])
+            reached_by: dict[int, int] = {}
+            while queue:
+                observation = queue.popleft()
+                observed, total = sales[observation]
+                choices = sorted(
+                    (ts > observed, abs(observed - ts), candidate)
+                    for candidate, (ts, proceeds, _, _) in enumerate(candidates)
+                    if candidate not in reached_by
+                    and observed - AM_LOOKBACK <= ts <= observed + SALE_SKEW
+                    and abs(total - proceeds) <= 1
+                )
+                for _, _, candidate in choices:
+                    reached_by[candidate] = observation
+                    owner = owners.get(candidate)
+                    if owner is not None:
+                        queue.append(owner)
+                        continue
+                    while True:
+                        observation = reached_by[candidate]
+                        owners[candidate] = observation
+                        previous = assigned.get(observation)
+                        assigned[observation] = candidate
+                        if previous is None:
+                            break
+                        candidate = previous
+                    queue.clear()
+                    break
+        matches.update((index, candidates[candidate]) for index, candidate in assigned.items())
+    return matches
+
+
+def merge_events(
+    events: Iterable[LedgerEvent], enrichment: dict[int, Transaction] | None = None
+) -> list[LedgerEvent]:
+    """Match one sale per source per item/HQ/qty.
+
+    CashFlow and Restocky match on exact proceeds within 300 seconds. AllaganMarket
+    records observation time, so look back up to 72 hours and allow one gil of
+    tax rounding. Prefer the nearest earlier sale, then the nearest future sale
+    within 300 seconds. Keep unmatched sales and same-source repeats.
+    """
+    priority = {SourceName.CASHFLOW: 0, SourceName.RESTOCKY: 1, SourceName.ALLAGAN_MARKET: 2}
+    groups: dict[tuple[int, bool, int, int], list[Candidate]] = defaultdict(list)
+    rows = sorted(enumerate(events), key=lambda pair: (priority.get(pair[1].source, 3), pair[1].ts))
+    allagan_matches: dict[int, Candidate] | None = None
+    kept = []
+    for index, row in rows:
+        if row.kind == LedgerEventKind.SELL and row.source is not None:
+            key = row.item.id, row.item.hq, row.qty
+            bucket = row.ts // SALE_SKEW
+            total = stack_total(row)
+            if total is None:
+                raise ValueError("Sale proceeds required")
+            if row.source == SourceName.ALLAGAN_MARKET:
+                if allagan_matches is None:
+                    # Source priority has already resolved CashFlow and Restocky.
+                    allagan_matches = _match_allagan_sales(rows, groups)
+                match = allagan_matches.get(index)
+            else:
+                nearby = (
+                    candidate
+                    for interval in range(bucket - 1, bucket + 2)
+                    for candidate in groups.get((*key, interval), ())
+                    if row.source not in candidate[2] and abs(row.ts - candidate[0]) <= SALE_SKEW
+                    and total == candidate[1]
+                )
+                match = min(nearby, key=lambda candidate: abs(row.ts - candidate[0]), default=None)
             if match is not None:
-                match[1].add(row.source)
-                original = match[2]
+                _, _, sources, original = match
+                sources.add(row.source)
                 if enrichment is not None and id(original) in enrichment and isinstance(
                     row, Transaction
                 ):
