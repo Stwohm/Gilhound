@@ -111,6 +111,7 @@ class Runtime:
                 marketable=self.items.marketable,
                 home_world=settings.home_world,
                 buy_region=settings.buy_region,
+                travel_cost=settings.travel_cost,
             )
 
             self.items.decorate((r.item for r in result.rows), settings.home_world, wait=True)
