@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { json } from "./api/client";
+import { api, mockMode } from "./api/client";
 import { Field, Section, errorMessage } from "./common";
 import type { Schema, Settings } from "./common";
 
@@ -59,11 +59,11 @@ export function PartnerSettings({draft, change, hasWebhook}: {draft: Omit<Settin
     try {
       if (action === "discord") {
         setPosting(true);
-        await json("/api/partner/discord","POST",request);
-        setMessage("Share code posted to Discord.");
+        await api.postPartner(request);
+        setMessage(mockMode ? "Discord post simulated." : "Share code posted to Discord.");
         return;
       }
-      const value = await json<string>("/api/partner/share","POST",request);
+      const value = await api.sharePartner(request);
       inspection.current++;
       setCode(value); setPreview(undefined);
       if (action === "file") {
@@ -78,7 +78,7 @@ export function PartnerSettings({draft, change, hasWebhook}: {draft: Omit<Settin
     const id = ++inspection.current;
     setPreview(undefined);
     try {
-      const result = await json<Share>("/api/partner/preview","POST",{code:value.trim()});
+      const result = await api.previewPartner(value.trim());
       if (id === inspection.current) {setPreview(result); setMessage("");}
     } catch(e) {if (id === inspection.current) setMessage(errorMessage(e));}
   }

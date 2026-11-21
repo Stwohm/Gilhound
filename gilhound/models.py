@@ -294,6 +294,8 @@ class ScanResult(BaseModel):
 
 class SnipeStatus(BaseModel):
     partner_age_min: int | None = None
+    partner_resolved_items: int | None = None
+    partner_requested_items: int | None = None
     running: bool = False
     next_run_ts: EpochSeconds | None = None
     last_run_ts: EpochSeconds | None = None

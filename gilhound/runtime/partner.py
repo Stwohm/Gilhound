@@ -9,6 +9,7 @@ import zlib
 from collections import defaultdict
 from collections.abc import Callable
 from concurrent.futures import Future
+from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
 
@@ -107,23 +108,32 @@ def scope(settings: UserSettings) -> str:
 type Stocks = dict[tuple[int, bool], tuple[int, int]]
 
 
-def collect(settings: UserSettings) -> Stocks:
+@dataclass
+class Sweep:
+    stock: Stocks
+    requested: set[int]
+    resolved: set[int]
+
+
+def collect(settings: UserSettings) -> Sweep:
     api = Universalis(HttpClient())
     worlds = {w.id: w.name for dc in api.data_centers() for w in dc.worlds}
     canonical = {name.casefold(): name for name in worlds.values()}
     ids = api.marketable()
+    resolved = set(ids)
     stock: Stocks = {}
     for world, names in targets(settings).items():
         if world not in canonical:
             raise ValueError("Unknown partner world")
-        for _, snapshots in batches(api, canonical[world], ids, worlds):
+        for group, snapshots in batches(api, canonical[world], ids, worlds):
+            resolved.difference_update(set(group) - snapshots.keys())
             for iid, item in snapshots.items():
                 for row in item.listings:
                     if (row.retainer_name or "").casefold() in names:
                         key = (iid, row.hq)
                         qty, seen = stock.get(key, (0, 0))
                         stock[key] = qty + row.qty, max(seen, row.last_review_ts)
-    return stock
+    return Sweep(stock, set(ids), resolved)
 
 
 class Partners:
@@ -142,35 +152,51 @@ class Partners:
                 CREATE TABLE IF NOT EXISTS partner_stock(
                     sweep INTEGER, item INTEGER, hq INTEGER, qty INTEGER, seen INTEGER,
                     PRIMARY KEY(sweep,item,hq));
+                CREATE TABLE IF NOT EXISTS partner_coverage(
+                    sweep INTEGER PRIMARY KEY, requested INTEGER, resolved INTEGER);
+                CREATE TABLE IF NOT EXISTS partner_unknown(
+                    sweep INTEGER, item INTEGER, PRIMARY KEY(sweep,item));
             """)
 
-    def record(self, settings: UserSettings, stock: Stocks, ts: int) -> None:
+    def record(self, settings: UserSettings, sweep: Sweep, ts: int) -> None:
         with self.history.connection() as db:
-            db.execute(
-                "DELETE FROM partner_stock WHERE sweep IN "
-                "(SELECT id FROM partner_sweep WHERE ts < ?)",
-                (ts - 91 * 86400,),
-            )
-            db.execute("DELETE FROM partner_sweep WHERE ts < ?", (ts - 91 * 86400,))
+            cutoff = ts - 91 * 86400
+            for table in ("partner_coverage", "partner_unknown", "partner_stock"):
+                db.execute(f"DELETE FROM {table} WHERE sweep IN "
+                           "(SELECT id FROM partner_sweep WHERE ts < ?)", (cutoff,))
+            db.execute("DELETE FROM partner_sweep WHERE ts < ?", (cutoff,))
             key = db.execute(
                 "INSERT INTO partner_sweep(scope,ts) VALUES (?,?)", (scope(settings), ts)
             ).lastrowid
             db.executemany(
                 "INSERT INTO partner_stock VALUES (?,?,?,?,?)",
-                ((key, iid, hq, qty, seen) for (iid, hq), (qty, seen) in stock.items()),
+                ((key, iid, hq, qty, seen) for (iid, hq), (qty, seen) in sweep.stock.items()),
             )
+            db.execute("INSERT INTO partner_coverage VALUES (?,?,?)",
+                       (key, len(sweep.requested), len(sweep.resolved)))
+            # A previously observed item can also disappear from the marketable catalog.
+            known = db.execute(
+                "SELECT DISTINCT item FROM partner_stock JOIN partner_sweep ON id=sweep "
+                "WHERE scope=?", (scope(settings),))
+            unknown = (sweep.requested | {row[0] for row in known}) - sweep.resolved
+            db.executemany("INSERT INTO partner_unknown VALUES (?,?)",
+                           ((key, iid) for iid in unknown))
 
     def status(self, settings: UserSettings) -> dict:
         with self.history.connection() as db:
-            last = db.execute(
-                "SELECT max(ts) FROM partner_sweep WHERE scope=?", (scope(settings),)
-            ).fetchone()[0]
+            latest = db.execute(
+                "SELECT ts,requested,resolved FROM partner_sweep LEFT JOIN partner_coverage "
+                "ON id=sweep WHERE scope=? ORDER BY id DESC LIMIT 1", (scope(settings),)
+            ).fetchone()
+        last, requested, resolved = latest or (None, None, None)
         age = None if last is None else max(0, int(time.time()) - last) // 60
         return {
             **snapshot_summary(settings.partner_manual),
             "retainers": len(settings.partner_retainers),
             "age_min": age,
-            "stale": age is None or age >= settings.partner_cache_min,
+            "requested_items": requested,
+            "resolved_items": resolved,
+            "stale": age is None or age >= settings.partner_cache_min or requested != resolved,
         }
 
     def refresh(self, force: bool = False) -> Future | None:
@@ -181,7 +207,8 @@ class Partners:
         with self.lock:
             if self.pending and not self.pending.done() and self.pending_scope == key:
                 return self.pending
-            if not force and not self.status(settings)["stale"]:
+            age = self.status(settings)["age_min"]
+            if not force and age is not None and age < settings.partner_cache_min:
                 return None
 
             def sweep() -> None:
@@ -198,10 +225,18 @@ class Partners:
         with self.history.connection() as db:
             latest = db.execute(
                 """
-                SELECT item,hq,qty,seen FROM partner_stock
-                WHERE sweep IN (SELECT id FROM partner_sweep WHERE scope=? ORDER BY id DESC LIMIT 4)
-                ORDER BY sweep""",
-                (key,),
+                WITH observations AS (
+                    SELECT item,hq,max(sweep) AS last FROM partner_stock
+                    JOIN partner_sweep ON id=sweep WHERE scope=? GROUP BY item,hq
+                )
+                SELECT s.item,s.hq,s.qty,s.seen FROM observations o
+                JOIN partner_stock s ON (s.sweep,s.item,s.hq)=(o.last,o.item,o.hq)
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM partner_sweep n WHERE n.scope=? AND n.id>o.last
+                    AND NOT EXISTS (SELECT 1 FROM partner_unknown u
+                                    WHERE u.sweep=n.id AND u.item=o.item)
+                    LIMIT 1 OFFSET 3)""",
+                (key, key),
             )
             recent = {(i, bool(h)): (q, t) for i, h, q, t in latest}
             regular = {

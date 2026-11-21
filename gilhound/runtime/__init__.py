@@ -74,14 +74,17 @@ class Runtime:
     def snipe_status(self) -> SnipeStatus:
         deadline = self.scheduler.next_run
         settings = self.settings.get()
-        age = self.partners.status(settings)["age_min"] if settings.partner_retainers else None
+        partner = self.partners.status(settings) if settings.partner_retainers else {}
         return self.history.last_run().model_copy(update={
-            "partner_age_min": age,
+            "partner_age_min": partner.get("age_min"),
+            "partner_resolved_items": partner.get("resolved_items"),
+            "partner_requested_items": partner.get("requested_items"),
             "running": self.scan_lock.locked(), "next_run_ts": int(deadline) if deadline else None,
         })
 
-    def save_settings(self, settings: UserSettings) -> UserSettings:
-        saved = self.settings.save(settings)
+    def save_settings(self, settings: UserSettings | dict) -> UserSettings:
+        saved = (self.settings.save(settings) if isinstance(settings, UserSettings)
+                 else self.settings.update(settings)[1])
         self.scheduler.configure()
         self.partners.refresh()
         return saved
@@ -105,9 +108,13 @@ class Runtime:
             for row in result.rows:
                 row.you_list = (row.item.id, row.item.hq) in listed
         if settings.partner_retainers:
-            age = self.partners.status(settings)["age_min"]
+            status = self.partners.status(settings)
+            age = status["age_min"]
             result.warnings.append("Partner data pending" if age is None else
                                    f"Partner data {age} min old")
+            if status["resolved_items"] != status["requested_items"]:
+                result.warnings.append(f"Partial partner sweep: {status['resolved_items']} of "
+                                       f"{status['requested_items']} items resolved")
 
     def archive_entry(self, key: int) -> ArchiveEntry:
         entry = self.history.entry(key)

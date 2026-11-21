@@ -124,3 +124,14 @@ def test_travel_recheck_uses_world_and_home_only(monkeypatch: pytest.MonkeyPatch
     market(monkeypatch, {1: []})
     empty = recheck(q, clock=lambda: NOW)
     assert empty.price is None and empty.qty == 0 and empty.age_h is None
+
+
+def test_safe_flip_chooses_eligible_stacks(monkeypatch: pytest.MonkeyPatch) -> None:
+    expensive_trip = offer(55).model_copy(update={"world": "Remote"})
+    market(monkeypatch, {1: [offer(50, 7200), expensive_trip, offer(60, 7200), offer(60)]})
+    params = ScanParams(home_world="Home", buy_region="Region", preset="safe_flip",
+                        min_history_sales=1, min_profit=1, min_units_day=0,
+                        min_distinct_buyers=1, min_days_with_sales=1, max_top_buyer_share=1,
+                        seller_tax=0.05, travel_cost={"Light": 10000})
+    rows = presets.run_scan(params, clock=lambda: NOW, world_dcs={"Remote": "Light"}).rows
+    assert [(r.buy_ppu, r.buy_stacks, r.data_age_h) for r in rows] == [(60, [100], 0)]

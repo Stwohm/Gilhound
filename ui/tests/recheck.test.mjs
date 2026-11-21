@@ -34,3 +34,11 @@ test("missing listings and transport errors cannot authorize travel",async () =>
     assert.fail,assert.fail),/offline/);
   assert.equal(await reviewQuotes([quote],"Home",async()=>fresh,()=>true,assert.fail),true);
 });
+
+test("two planned stacks cannot reuse one refreshed stack", async () => {
+  const check = stacks => reviewQuotes([quote, quote], "Home", async () => ({
+    ...fresh, price:10, qty:stacks.reduce((a,b) => a+b, 0), stacks,
+  }), message => /shortfall.*2 units/i.test(message), assert.fail);
+  assert.equal(await check([2]), true);
+  assert.equal(await check([2,2]), false);
+});

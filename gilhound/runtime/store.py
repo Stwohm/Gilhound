@@ -8,11 +8,11 @@ from collections.abc import Callable, Iterator
 from contextlib import closing, contextmanager
 from pathlib import Path
 from tempfile import NamedTemporaryFile
-from threading import RLock
 from typing import Literal
 
 from pydantic import BaseModel
 
+from gilhound.market.budget import try_lock
 from gilhound.models import (
     RetainerScanParams,
     RetainerScanResult,
@@ -49,33 +49,46 @@ def data_dir() -> Path:
 class SettingsStore:
     def __init__(self, path: Path) -> None:
         self.path = path
-        self.lock = RLock()
+
+    @contextmanager
+    def _locked(self) -> Iterator[None]:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        while (handle := try_lock(self.path.with_suffix(".lock"))) is None:
+            time.sleep(0.01)
+        with handle:
+            yield
 
     def get(self) -> UserSettings:
-        with self.lock:
-            try:
-                values = json.loads(self.path.read_bytes())
-                # Older releases allowed intervals above the current input range.
-                if isinstance(values, dict) and isinstance(values.get("scan_interval_min"), int):
-                    values["scan_interval_min"] = min(values["scan_interval_min"], 240)
-                return UserSettings.model_validate(values)
-            except FileNotFoundError:
-                return UserSettings(home_world="Cerberus", buy_region="Europe")
-            except ValueError:
-                raise ValueError(
-                    "Gilhound settings could not be read. Check settings.json."
-                ) from None
+        with self._locked():
+            return self._read()
+
+    def _read(self) -> UserSettings:
+        try:
+            values = json.loads(self.path.read_bytes())
+            # Older releases allowed intervals above the current input range.
+            if isinstance(values, dict) and isinstance(values.get("scan_interval_min"), int):
+                values["scan_interval_min"] = min(values["scan_interval_min"], 240)
+            return UserSettings.model_validate(values)
+        except FileNotFoundError:
+            return UserSettings(home_world="Cerberus", buy_region="Europe")
+        except ValueError:
+            raise ValueError("Gilhound settings could not be read. Check settings.json.") from None
 
     def save(self, settings: UserSettings) -> UserSettings:
-        with self.lock:
+        fields = dict(settings)
+        if "webhook_url" not in settings.model_fields_set:
+            fields.pop("webhook_url")
+        return self.update(fields)[1]
+
+    def update(self, fields: dict) -> tuple[UserSettings, UserSettings]:
+        with self._locked():
+            previous = self._read()
+            settings = UserSettings.model_validate({**dict(previous), **fields}, extra="forbid")
             secret = settings.webhook_url
-            if "webhook_url" not in settings.model_fields_set or (
-                secret and secret.get_secret_value() == "**********"
-            ):
-                secret = self.get().webhook_url
+            if secret and secret.get_secret_value() == "**********":
+                secret = previous.webhook_url
             values = settings.model_dump()
             values["webhook_url"] = secret.get_secret_value() if secret else None
-            self.path.parent.mkdir(parents=True, exist_ok=True)
             with NamedTemporaryFile(dir=self.path.parent, delete=False) as temporary:
                 tmp = Path(temporary.name)
             try:
@@ -83,7 +96,7 @@ class SettingsStore:
                 tmp.replace(self.path)
             finally:
                 tmp.unlink(missing_ok=True)
-            return settings.model_copy(update={"webhook_url": secret})
+            return previous, settings.model_copy(update={"webhook_url": secret})
 
 
 class History:

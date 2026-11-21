@@ -36,8 +36,11 @@ function SettingsForm({ settings, onSaved }: { settings: Settings; onSaved: (set
       const buy_region = draft.buy_region.trim();
       if (!home_world || !buy_region) throw new Error("Enter a home world and buy region.");
       const url = webhook.current?.value.trim();
+      const values = {...draft, home_world, buy_region, travel_cost: travelCosts(travel)};
+      const changes = Object.fromEntries(Object.entries(values).filter(([k,v]) =>
+        JSON.stringify(v) !== JSON.stringify(editable[k as keyof typeof editable])));
       const next = await api.saveSettings({
-        ...draft, home_world, buy_region, travel_cost: travelCosts(travel),
+        ...changes,
         ...(clearWebhook ? { webhook_url: null } : url ? { webhook_url: url } : {}),
       });
       if (webhook.current) webhook.current.value = "";

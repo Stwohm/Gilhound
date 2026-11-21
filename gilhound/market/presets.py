@@ -106,6 +106,32 @@ def _opportunities(
     below_sell = sum(r.qty for r in home.listings if r.ppu < sell)
     trend = 100 * (med / median(previous) - 1) if previous else None
     results = []
+    if preset == ScanPreset.SAFE_FLIP:
+        eligible = []
+        reasons = set()
+        for listing in cheap:
+            capped = sellable_qty(listing.qty, velocity, params.sellable_days)
+            if params.max_data_age_h is not None and (
+                now - listing.last_review_ts >= params.max_data_age_h * 3600
+            ):
+                reasons.add("Buy quote age")
+            elif listing.ppu < params.min_ppu:
+                reasons.add("Minimum buy price")
+            elif not capped:
+                reasons.add("No sellable units")
+            else:
+                gain = profit_per_unit(
+                    sell, listing.ppu, seller_tax=params.seller_tax, buyer_tax=params.buyer_tax,
+                    travel_cost=params.travel_cost.get(dcs.get(listing.world, "?"), 0), qty=capped,
+                )
+                if gain > 0 and gain >= params.min_profit:
+                    eligible.append(listing)
+                else:
+                    reasons.add("Net profit floor")
+        if not eligible:
+            reject(*sorted(reasons))
+            return []
+        cheap = eligible
     for index, first in enumerate(cheap if snipe and not legacy else cheap[:1]):
         next_price = cheap[index + 1].ppu if index + 1 < len(cheap) else None
         same_price = [first] if snipe else [

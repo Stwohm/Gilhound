@@ -93,8 +93,7 @@ export default function Snipes({ resource }: { resource: ReturnType<typeof useRe
     setSaving(true);
     setRunError("");
     try {
-      const { webhook_url: _mask, ...editable } = settings;
-      resource.setData(await api.saveSettings({ ...editable, ...change }));
+      resource.setData(await api.saveSettings(change));
     } catch (error) {
       setRunError(errorMessage(error));
     } finally {
@@ -149,7 +148,8 @@ export default function Snipes({ resource }: { resource: ReturnType<typeof useRe
       <small>{state} · {status?.last_run_ts
         ? `Last run ${time(status.last_run_ts)} · ${status.fresh} fresh · ${status.stale} stale · ${status.notified} notified`
         : "No completed run yet"}</small>
-      {!!settings.partner_retainers?.length && <small>{status?.partner_age_min == null ? "Partner data pending" : `Partner data ${status.partner_age_min} min old`}</small>}
+      {!!settings.partner_retainers?.length && <small>{status?.partner_age_min == null ? "Partner data pending" : `Partner data ${status.partner_age_min} min old`}
+        {status?.partner_requested_items != null && ` · ${status.partner_resolved_items} of ${status.partner_requested_items} items resolved`}</small>}
       {statusError && <Notice tone="error">{statusError}</Notice>}
     </section> : <ResourceState error={resource.error} retry={resource.retry} loading="Loading snipe controls…" />}
     <Section title="Snipe rules"><ProfileEditor library="snipes" /></Section>

@@ -464,7 +464,8 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /** Patch Settings */
+        patch: operations["patch_settings_api_settings_patch"];
         trace?: never;
     };
     "/api/settings/discord/test": {
@@ -1772,6 +1773,10 @@ export interface components {
             notified: number;
             /** Partner Age Min */
             partner_age_min?: number | null;
+            /** Partner Requested Items */
+            partner_requested_items?: number | null;
+            /** Partner Resolved Items */
+            partner_resolved_items?: number | null;
             /**
              * Running
              * @default false
@@ -3540,6 +3545,60 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["UserSettings-Input"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserSettings-Output"];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_settings_api_settings_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    [key: string]: unknown;
+                };
             };
         };
         responses: {

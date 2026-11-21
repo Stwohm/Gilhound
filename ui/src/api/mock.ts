@@ -6,6 +6,27 @@ type ScanParams = components["schemas"]["ScanParams"];
 type ScanRow = components["schemas"]["ScanRow"];
 type Settings = components["schemas"]["UserSettings-Output"];
 type SnipeHit = components["schemas"]["SnipeHit"];
+type Share = components["schemas"]["PartnerShare"];
+
+function validateShare(share: Share) {
+  const validItem = (item: {id:number; hq:boolean}) =>
+    Number.isInteger(item.id) && item.id > 0 && item.id <= 2147483647 && typeof item.hq === "boolean";
+  const text = (value: unknown, max: number) => typeof value === "string" && value.length <= max;
+  const {items, listings = [], retainers = []} = share;
+  if (!text(share.sender,80) || !Number.isSafeInteger(share.created_ts) ||
+      share.created_ts < 0 || share.created_ts > 253402300799 ||
+      !Array.isArray(items) || items.length > 500 ||
+      !items.every(i => validItem(i) && (i.note === undefined || text(i.note,160))) ||
+      new Set(items.map(i => i.id + "/" + i.hq)).size !== items.length ||
+      !Array.isArray(retainers) || retainers.length > 64 ||
+      !retainers.every(r => text(r.name,64) && r.name.trim() && (r.world === undefined || text(r.world,64))) ||
+      !Array.isArray(listings) || !listings.every(i => validItem(i) && Number.isInteger(i.qty) &&
+        i.qty > 0 && (i.ppu == null || (Number.isInteger(i.ppu) && i.ppu >= 0)))) {
+    throw new Error("Invalid partner share data");
+  }
+  if (share.version === 1 && listings.length) throw new Error("GH1 shares cannot contain listings.");
+  if (share.version === 2 && listings.length + items.length > 200) throw new Error("Share exceeds 200 items.");
+}
 
 export const demoRetainer = "Demo Retainer 01";
 const now = () => Math.floor(Date.now() / 1000);
@@ -165,6 +186,42 @@ function record(result: Entry["result"], profile?:string) {
     result,description:[]});
 }
 export const mockApi: Api = {
+  async sharePartner(draft) {
+    const listings = marketRows(mockParams.Flip).filter(row => row.you_list).map(row => ({
+      id: row.item.id, hq: row.item.hq, qty: row.sellable_qty, ppu: row.home_lowest,
+    }));
+    const share: Share = {...draft, version:2, created_ts:now(), listings};
+    validateShare(share);
+    const stream = new Blob([JSON.stringify(share)]).stream().pipeThrough(new CompressionStream("deflate"));
+    const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
+    return "GH2." + btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(""))
+      .replaceAll("+","-").replaceAll("/","_").replace(/=+$/, "");
+  },
+  async previewPartner(code) {
+    try {
+      if (code.length > 256000 || !/^GH[12]\.[A-Za-z0-9_-]+$/.test(code)) throw new Error();
+      const binary = atob(code.slice(4).replaceAll("-","+").replaceAll("_","/"));
+      const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+      const reader = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate")).getReader();
+      const chunks: BlobPart[] = [];
+      let length = 0;
+      for (;;) {
+        const {done,value} = await reader.read();
+        if (done) break;
+        length += value.length;
+        if (length > 512000) { await reader.cancel(); throw new Error(); }
+        chunks.push(new Uint8Array(value));
+      }
+      const share: Share = JSON.parse(await new Blob(chunks).text());
+      if (share.version !== Number(code[2])) throw new Error();
+      validateShare(share);
+      return share;
+    } catch { throw new Error("Invalid partner share code"); }
+  },
+  async postPartner(draft) {
+    await mockApi.sharePartner(draft);
+    return true;
+  },
   async bridge() { return { status: "not_running", mb_search_name: false }; },
   async go() { return { status: "unavailable", reason: "Restocky not running" }; },
   async history(q){return [...archive.values()].reverse().filter(e=>
@@ -314,9 +371,9 @@ export const mockApi: Api = {
     await pause();
     const { webhook_url, ...fields } = input;
     if (!settings.auto_snipe_enabled && fields.auto_snipe_enabled) nextRun = now();
-    else if (settings.scan_interval_min !== fields.scan_interval_min) nextRun = now() + (fields.scan_interval_min ?? 5) * 60;
+    else if (fields.scan_interval_min !== undefined && settings.scan_interval_min !== fields.scan_interval_min) nextRun = now() + fields.scan_interval_min * 60;
     settings = {
-      ...fields,
+      ...settings, ...fields,
       webhook_url: webhook_url === undefined ? settings.webhook_url : webhook_url ? "**********" : null,
     };
     return structuredClone(settings);

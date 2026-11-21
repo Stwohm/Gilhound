@@ -15,6 +15,7 @@ export async function reviewQuotes(
 ): Promise<boolean> {
   const lines: string[] = [];
   let missing = false;
+  const available = new Map<string, number[]>();
   const snapshots = new Map<string, components["schemas"]["QuoteSnapshot"]>();
   for (const q of quotes) {
     const query = {item_id: q.item.id, hq: q.item.hq, buy_world: q.buy_world,
@@ -27,14 +28,16 @@ export async function reviewQuotes(
     if (fresh.price == null) { lines.push("Listing disappeared."); missing = true; }
     else {
       if (q.plannedStacks) {
-        const remaining = [...fresh.stacks];
-        const changed = q.plannedStacks.some(n => {
+        const pool = JSON.stringify([q.item.id, q.item.hq, q.buy_world.toLowerCase(), q.buy_ppu]);
+        const remaining = available.get(pool) ?? (fresh.price === q.buy_ppu ? [...fresh.stacks] : []);
+        available.set(pool, remaining);
+        let shortfall = 0;
+        for (const n of q.plannedStacks) {
           const index = remaining.indexOf(n);
-          if (index < 0) return true;
-          remaining.splice(index,1);
-          return false;
-        });
-        if (changed) lines.push("Stack sizes changed · now " + fresh.stacks.join(" + "));
+          if (index < 0) shortfall += n;
+          else remaining.splice(index, 1);
+        }
+        if (shortfall) lines.push(`Stack sizes changed · shortfall of ${shortfall} units at ${q.buy_ppu} gil.`);
       }
       if (fresh.price > q.buy_ppu) lines.push("Previous price disappeared.");
       lines.push("Price " + fmt(q.buy_ppu) + " → " + fmt(fresh.price) + " gil · qty " + q.buy_qty_at_price + " → " + fresh.qty,

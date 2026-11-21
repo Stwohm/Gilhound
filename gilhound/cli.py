@@ -57,6 +57,10 @@ def report(runtime: Runtime, args: argparse.Namespace) -> dict:
             return {"code": encode(current_share(share, runtime.plugins))}
         if args.action == "import":
             share = decode(args.code)
+            if not args.preview:
+                settings, _ = runtime.settings.update({
+                    "partner_manual": share.model_copy(update={"retainers": []}),
+                })
             previous = settings.partner_manual
             before = {(i.id, i.hq) for i in previous.items} if previous else set()
             after = {(i.id, i.hq) for i in share.items}
@@ -64,9 +68,6 @@ def report(runtime: Runtime, args: argparse.Namespace) -> dict:
                        "created_ts": share.created_ts, **snapshot_summary(share)}
             if args.preview:
                 return changes
-            runtime.settings.save(settings.model_copy(update={
-                "partner_manual": share.model_copy(update={"retainers": []}),
-            }))
             return {**changes, "imported": len(share.items)}
         if args.action == "sweep":
             task = runtime.partners.refresh(force=True)

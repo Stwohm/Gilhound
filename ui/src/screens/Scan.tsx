@@ -177,7 +177,10 @@ export function ScanResults({ result, archived = false, retry, edit }: { result:
     return () => window.removeEventListener("keydown", close);
   }, []);
   const [skippedStacks, setSkippedStacks] = useState<Set<string>>(new Set());
-  const chosen = sorted.filter(entry => selected.includes(entry.i));
+  const selectedIds = new Set(selected);
+  const chosen = sorted.filter(row => selectedIds.has(row.i));
+  const all = chosen.length > 0 && chosen.length === sorted.length;
+  const mixed = chosen.length > 0 && !all;
   const {preview, purchases, travel, outlay, net, bandFailed} = purchasePlan(chosen, result.params, skippedStacks);
   const quote = (r: Row) => ({...r, home, maxAge: result.params.max_data_age_h ?? undefined, historyEntries: result.params.history_entries});
   const [checking, setChecking] = useState(false);
@@ -265,7 +268,7 @@ export function ScanResults({ result, archived = false, retry, edit }: { result:
           {result.rejected.map((r,i) => <p key={i}>{r.item.name} {r.item.hq ? "HQ" : "NQ"} {r.buy_world} · {r.reasons.join(", ")}</p>)}</details>}
         <div className="form-actions">
           <button disabled={!purchases.length} onClick={() => void copy(false)}>
-            Copy results ({selected.length})
+            Copy results ({chosen.length})
           </button>
           <button disabled={checking || !purchases.length} onClick={() => void copy(true)}>
             Copy route
@@ -285,9 +288,15 @@ export function ScanResults({ result, archived = false, retry, edit }: { result:
               <th className="select-column">
                 <input
                   type="checkbox"
-                  aria-label="Select all results"
-                  checked={selected.length === sorted.length}
-                  onChange={(e) => setSelected(e.target.checked ? sorted.map((x) => x.i) : [])}
+                  aria-label={`Select all visible results (${chosen.length} of ${sorted.length} selected)`}
+                  checked={all}
+                  ref={input => { if (input) input.indeterminate = mixed; }}
+                  onChange={e => {
+                    const checked = e.target.checked;
+                    const visibleIds = new Set(sorted.map(row => row.i));
+                    setSelected(previous => checked ? [...new Set([...previous, ...visibleIds])]
+                      : previous.filter(id => !visibleIds.has(id)));
+                  }}
                 />
               </th>
               {columns.map((c) => (
@@ -317,7 +326,7 @@ export function ScanResults({ result, archived = false, retry, edit }: { result:
                     <input
                       type="checkbox"
                       aria-label={`Select ${row.item.name}`}
-                      checked={selected.includes(i)}
+                      checked={selectedIds.has(i)}
                       onChange={(e) =>
                         setSelected(e.target.checked ? [...selected, i] : selected.filter((v) => v !== i))
                       }

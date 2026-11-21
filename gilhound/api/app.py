@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from gilhound import __version__
 from gilhound.api.jobs import Job, Jobs
@@ -205,6 +205,13 @@ def create_app(
     @app.put("/api/settings")
     def put_settings(settings: UserSettings) -> UserSettings:
         return runtime.save_settings(settings)
+
+    @app.patch("/api/settings")
+    def patch_settings(fields: dict[str, Any]) -> UserSettings:
+        try:
+            return runtime.save_settings(fields)
+        except ValidationError as exc:
+            raise HTTPException(422, "Check the supplied settings fields.") from exc
 
     @app.get("/api/profiles/{library}")
     def get_profiles(library: Library) -> ProfileList:

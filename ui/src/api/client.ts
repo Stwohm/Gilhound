@@ -12,6 +12,9 @@ type JsonBody<K extends keyof operations> = operations[K] extends {
 export type Library = "scan" | "snipes";
 type Schema = components["schemas"];
 export interface Api {
+  sharePartner(draft: Schema["PartnerShareDraft"]): Promise<string>;
+  previewPartner(code: string): Promise<Schema["PartnerShare"]>;
+  postPartner(draft: Schema["PartnerShareDraft"]): Promise<boolean>;
   getProfiles(library: Library): Promise<Schema["ProfileList"]>;
   changeProfile(library: Library, change: Schema["ProfileChange"]): Promise<Schema["ProfileList"]>;
   getSales(): Promise<Schema["RealisedSale"][]>;
@@ -35,7 +38,7 @@ export interface Api {
   getPositions(): Promise<JsonResult<"get_positions_api_positions_get">>;
   getPnl(): Promise<JsonResult<"get_pnl_api_pnl_get">>;
   getSettings(): Promise<JsonResult<"get_settings_api_settings_get">>;
-  saveSettings(settings: JsonBody<"put_settings_api_settings_put">): Promise<JsonResult<"put_settings_api_settings_put">>;
+  saveSettings(settings: Partial<JsonBody<"put_settings_api_settings_put">>): Promise<JsonResult<"put_settings_api_settings_put">>;
   getInfo(): Promise<JsonResult<"get_info_api_info_get">>;
   checkUpdate(): Promise<JsonResult<"check_update_api_update_check_post">>;
   applyUpdate(progress: (done: number, total?: number | null) => void): Promise<void>;
@@ -108,6 +111,9 @@ async function job<T>(path: string, params?: unknown): Promise<T> {
 }
 
 const realApi: Api = {
+  sharePartner: draft => json("/api/partner/share", "POST", draft),
+  previewPartner: code => json("/api/partner/preview", "POST", {code}),
+  postPartner: draft => json("/api/partner/discord", "POST", draft),
   getProfiles: library => json("/api/profiles/" + library),
   changeProfile: (library, change) => json("/api/profiles/" + library, "POST", change),
   getSales: () => json("/api/sales"),
@@ -131,7 +137,7 @@ const realApi: Api = {
   setCost: async (cost) => { await request("/api/positions/cost", "PUT", cost); },
   getPnl: () => json("/api/pnl"),
   getSettings: () => json("/api/settings"),
-  saveSettings: (settings) => json("/api/settings", "PUT", settings),
+  saveSettings: (settings) => json("/api/settings", "PATCH", settings),
   getInfo: () => json("/api/info"),
   checkUpdate: () => json("/api/update/check", "POST"),
   async applyUpdate(progress) {
