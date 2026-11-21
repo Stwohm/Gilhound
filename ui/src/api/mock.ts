@@ -1,4 +1,5 @@
-import type { Api } from "./client";
+import { mockParams } from "./mockProfiles";
+import type { Api, Library } from "./client";
 import type { components } from "./types";
 
 type ScanParams = components["schemas"]["ScanParams"];
@@ -39,11 +40,22 @@ const inventory = [
   { name: "Duskmere Silk", hq: true, world: "Odin", dc: "Light", price: 59000, qty: 4, median: 93000, velocity: 2.2, buyers: 11, age: 4.5, sale: 6.4 },
 ];
 
+type Catalog = components["schemas"]["ProfileList"];
+const catalogs = {} as Record<Library, Catalog>;
+for (const library of ["scan", "snipes"] as const) {
+  const defaults = Object.fromEntries(Object.entries(mockParams)
+    .filter(([name]) => library === "scan" || name === "Snipe")
+    .map(([name, params]) => [name, { params: { ...params, travel_cost: settings.travel_cost,
+      snipe_rule: settings.snipe_rule, freshness_tiers: settings.freshness_tiers } }]));
+  catalogs[library] = { defaults, profiles: structuredClone(defaults), active: library === "scan" ? "Flip" : "Snipe" };
+}
+const hidden = new Map<string, components["schemas"]["ItemRef"]>();
+
 function marketRows(params: Pick<ScanParams, "buyer_tax" | "seller_tax" | "sellable_days" | "travel_cost">): ScanRow[] {
   return inventory.map((entry, index): ScanRow => {
     const sellable = Math.min(entry.qty, Math.floor(entry.velocity * (params.sellable_days ?? 3)));
     const profit = entry.median * (1 - params.seller_tax) -
-      entry.price * (1 + (params.buyer_tax ?? 0.05)) - (params.travel_cost?.[entry.dc] ?? 0);
+      entry.price * (1 + (params.buyer_tax ?? 0.05)) - (params.travel_cost?.[entry.dc] ?? 0) / entry.qty;
     return {
       item: { id: 91001 + index, name: entry.name, hq: entry.hq,
         universalis_url: `https://universalis.app/market/${91001 + index}?server=${encodeURIComponent(settings.home_world)}`,
@@ -66,20 +78,24 @@ function scanRows(params: ScanParams): ScanRow[] {
     row.buy_world !== params.home_world &&
     ["europe", row.buy_dc.toLowerCase()].includes(params.buy_region.trim().toLowerCase()) &&
     row.buy_ppu >= (params.min_ppu ?? 0) && row.profit_per_unit >= (params.min_profit ?? 0) &&
-    (params.preset !== "snipe" || row.buy_ppu <= row.home_median_7d * 0.5) &&
-    (params.preset !== "volume" || row.volume_proof.units_per_day >= 10) &&
-    (params.preset !== "high_margin" || row.profit_per_unit >= 15000)
+    (params.quality === "both" || row.item.hq === (params.quality === "hq")) &&
+    row.volume_proof.distinct_buyers_7d >= params.min_distinct_buyers &&
+    row.volume_proof.days_with_sales >= params.min_days_with_sales &&
+    row.volume_proof.units_per_day >= params.min_units_day &&
+    row.volume_proof.top_buyer_share <= params.max_top_buyer_share &&
+    (params.max_data_age_h == null || row.data_age_h < params.max_data_age_h)
   ));
 }
 
 function snipeHits(): SnipeHit[] {
   const ts = now();
-  return scanRows({
-    preset: "snipe", home_world: settings.home_world, buy_region: settings.buy_region,
-    buyer_tax: 0.05, seller_tax: 0.05, travel_cost: settings.travel_cost,
-    min_ppu: 0, min_profit: 5000, sellable_days: 3,
-  }).flatMap((row, index) => {
-    const tier = settings.freshness_tiers?.find((entry) => row.data_age_h < entry.max_age_h);
+  const active = catalogs.snipes.profiles[catalogs.snipes.active];
+  const rule = active.params.snipe_rule!;
+  return scanRows(active.params).filter(row => row.buy_ppu <= row.home_median_7d * rule.max_home_median_ratio &&
+    row.profit_per_unit >= rule.min_profit && row.volume_proof.distinct_buyers_7d >= rule.min_distinct_buyers_7d &&
+    row.volume_proof.top_buyer_share <= rule.max_top_buyer_share &&
+    (row.volume_proof.last_sale_age_h ?? Infinity) < rule.max_last_sale_age_h).flatMap((row, index) => {
+    const tier = active.params.freshness_tiers?.find((entry) => row.data_age_h < entry.max_age_h);
     return tier ? [{
       ...row, tier, listing_key: `${row.item.id}-${row.buy_world}`, first_seen_ts: ts - 180 - index * 150,
       notified_ts: settings.discord_notifier && tier.send_discord ? ts - 120 - index * 150 : null,
@@ -92,6 +108,29 @@ let lastRun = now();
 let nextRun = lastRun + 300;
 
 export const mockApi: Api = {
+  async getProfiles(library) { return structuredClone(catalogs[library]); },
+  async changeProfile(library, { action, name, new_name, profile }) {
+    const state = catalogs[library];
+    const target = action === "rename" ? new_name! : name;
+    if (["rename", "create"].includes(action) && Object.keys(state.profiles).some(n => n.toLowerCase() === target.toLowerCase()))
+      throw new Error("Choose a unique profile name.");
+    if (action === "rename") { state.profiles[target] = state.profiles[name]; delete state.profiles[name]; }
+    if (action === "delete") delete state.profiles[name];
+    if (action === "save" || action === "create") state.profiles[name] = structuredClone(profile!);
+    if (action === "reset") state.profiles[name] = structuredClone(Object.values(state.defaults)
+      .find(p => p.params.preset === state.profiles[name].params.preset)!);
+    if (library === "snipes") state.active = action === "delete" ? "Snipe" : target;
+    return structuredClone(state);
+  },
+  async getHidden() { return [...hidden.values()]; },
+  async setPersonal(change) {
+    const key = change.item_id + "-" + change.hq;
+    if (!change.personal) hidden.delete(key);
+    else {
+      const item = marketRows(mockParams.Flip).find(r => r.item.id === change.item_id && r.item.hq === change.hq)?.item;
+      if (item) hidden.set(key, item);
+    }
+  },
   async scan(params) {
     const started_ts = now();
     await pause(800);
@@ -165,11 +204,17 @@ export const mockApi: Api = {
       cost_known: index !== 3 || costs.has(`${row.item.id}-${row.item.hq}`),
       known_capital: index === 4 ? 0 : (row.sellable_qty + 3) * (index === 3 ? costs.get(`${row.item.id}-${row.item.hq}`) ?? 0 : row.buy_ppu),
       listed_qty: index === 4 ? 0 : row.sellable_qty, realised_profit: index === 3 ? 0 : 42500 + index * 16700,
-    }));
+    })).filter(r => !hidden.has(r.item.id + "-" + r.item.hq));
   },
   async getPnl() {
     await pause();
-    return { realised_profit: 303600, sales_proceeds: 987200, known_cost_of_goods_sold: 626700, unknown_cost_qty_sold: 5 };
+    const rows = await mockApi.getPositions();
+    const known = rows.filter(r => r.cost_known);
+    const cost = known.reduce((sum, r) => sum + (r.avg_cost ?? 0), 0);
+    const profit = known.reduce((sum, r) => sum + r.realised_profit, 0);
+    const unknown = rows.length - known.length;
+    return { realised_profit: profit, known_cost_of_goods_sold: cost,
+      sales_proceeds: profit + cost + unknown * 1000, unknown_cost_qty_sold: unknown };
   },
   async getSettings() {
     await pause();

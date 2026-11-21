@@ -2,6 +2,7 @@
 
 import argparse
 import json
+import sys
 from collections.abc import Sequence
 from typing import Any
 
@@ -37,13 +38,23 @@ def report(runtime: Runtime, args: argparse.Namespace) -> dict:
     fields = [s.strip() for s in args.fields.split(",") if s.strip()]
     result = {"command": args.command}
     if args.command == "scan":
-        scan = runtime.scan(runtime.params(ScanPreset(args.preset.replace("-", "_"))))
+        if args.profile:
+            profiles = runtime.profiles.list("scan", runtime.settings.get())
+            params = profiles.profiles[args.profile].params
+        else:
+            params = runtime.params(ScanPreset(args.preset.replace("-", "_")))
+        scan = runtime.scan(params)
         rows = scan.rows
         result.update(
             started_ts=scan.started_ts,
             finished_ts=scan.finished_ts,
             warning_count=len(scan.warnings),
         )
+    elif args.command == "profiles":
+        profiles = runtime.profiles.list("scan", runtime.settings.get())
+        return {**result, "total": len(profiles.profiles), "rows": [
+            {"name": name, "strategy": profile.params.preset}
+            for name, profile in profiles.profiles.items()]}
     elif args.command == "retainer":
         listing = runtime.retainer(RetainerScanParams(retainer_name=args.name, world=args.world))
         rows = listing.rows
@@ -55,7 +66,10 @@ def report(runtime: Runtime, args: argparse.Namespace) -> dict:
     elif args.command == "snipes":
         rows = runtime.run_snipes() if args.run else runtime.history.hits()
     elif args.command == "positions":
-        rows = [p for p in runtime.ledger().positions if (p.qty_open == 0) == args.closed]
+        ledger = runtime.ledger()
+        for warning in ledger.warnings:
+            print(warning, file=sys.stderr)
+        rows = [p for p in ledger.positions if (p.qty_open == 0) == args.closed]
     elif args.command == "sources":
         rows = runtime.sources()
     else:
@@ -87,7 +101,10 @@ def main(argv: Sequence[str] | None = None) -> int:
     common.add_argument("--top", type=int, default=20)
     common.add_argument("--fields", default="")
     scan = commands.add_parser("scan", parents=[common])
-    scan.add_argument("--preset", choices=[*ScanPreset, "high-margin"], default="flip")
+    strategy = scan.add_mutually_exclusive_group()
+    strategy.add_argument("--profile")
+    commands.add_parser("profiles", parents=[common])
+    strategy.add_argument("--preset", choices=[*ScanPreset, "high-margin"], default="flip")
     retainer = commands.add_parser("retainer", parents=[common])
     retainer.add_argument("name")
     retainer.add_argument("--world")

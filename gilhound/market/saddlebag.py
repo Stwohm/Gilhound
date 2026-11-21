@@ -1,35 +1,29 @@
 from gilhound.market.http import HttpClient
-from gilhound.models import ItemRef, ScanParams, ScanPreset
+from gilhound.models import ItemRef, ScanParams
 
 URL = "https://api.saddlebagexchange.com/api/scan"
 
 
 def candidates(params: ScanParams, http: HttpClient) -> list[ItemRef]:
-    preset = params.preset
-    floor = {ScanPreset.FLIP: 1500, ScanPreset.HIGH_MARGIN: 5000}.get(preset, 3000)
-    profit = 1000 if preset == ScanPreset.FLIP else floor
-    windows = [(floor, profit, 24, 5, 40)]
-    if preset != ScanPreset.FLIP:
-        windows.append((floor, profit, 72, 3, 40))
-    if preset == ScanPreset.SNIPE:
-        windows.append((5000, 4000, 168, 3, 100))
     items = {}
     for hq in (False, True):
-        for ppu, gain, hours, sales, roi in windows:
+        if params.quality != "both" and hq != (params.quality == "hq"):
+            continue
+        for window in params.windows:
             # Keep insertion order stable for the existing POST replay keys.
             body = dict(
-                preferred_roi=roi,
-                min_profit_amount=params.min_profit or gain,
-                min_desired_avg_ppu=params.min_ppu or ppu,
-                min_stack_size=1,
-                hours_ago=hours,
-                min_sales=sales,
+                preferred_roi=window.preferred_roi,
+                min_profit_amount=window.min_profit_amount,
+                min_desired_avg_ppu=window.min_desired_avg_ppu,
+                min_stack_size=params.min_stack_size,
+                hours_ago=window.hours_ago,
+                min_sales=window.min_sales,
                 hq=hq,
                 home_server=params.home_world,
-                filters=[0],
-                region_wide=True,
-                include_vendor=False,
-                show_out_stock=False,
+                filters=params.filters,
+                region_wide=params.region_wide,
+                include_vendor=params.include_vendor,
+                show_out_stock=params.show_out_stock,
             )
             raw = http.request(URL, body)
             for row in raw.get("data", []) if isinstance(raw, dict) else raw:

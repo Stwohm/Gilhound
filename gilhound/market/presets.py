@@ -31,24 +31,33 @@ def _opportunity(
 ) -> tuple[float, MarketRow] | None:
     preset = params.preset
     flip, snipe = preset == ScanPreset.FLIP, preset == ScanPreset.SNIPE
-    home_limit, region_limit = (50, 5) if flip else (5, 12) if snipe else (20, 8)
     home = api.current(
-        params.home_world, [item.id], listings=home_limit, entries=100 if flip else 0, hq=item.hq
+        params.home_world,
+        [item.id],
+        listings=params.home_listings,
+        entries=params.home_entries,
+        hq=item.hq,
     ).get(item.id)
-    region = api.current(params.buy_region, [item.id], listings=region_limit, hq=item.hq).get(
-        item.id
-    )
+    region = api.current(
+        params.buy_region, [item.id], listings=params.region_listings, hq=item.hq
+    ).get(item.id)
     if not home or not region:
         return None
-    sales = home.sales if flip else api.history(params.home_world, item.id, min_price=not snipe)
+    sales = (
+        home.sales
+        if flip
+        else api.history(
+            params.home_world, item.id, min_price=not snipe, entries=params.history_entries
+        )
+    )
     sales = recent([s for s in sales if s.hq == item.hq], now)
     cheap = [r for r in region.listings if r.world.casefold() != params.home_world.casefold()]
-    if not cheap or len(sales) < (3 if flip or snipe else 4):
+    if not cheap or len(sales) < params.min_history_sales:
         return None
     first = cheap[0]
     med = median(s.ppu for s in sales)
     low = min((r.ppu for r in home.listings), default=None)
-    sell = min(med, low - 1) if snipe and low is not None else med
+    sell = min(med, low - params.undercut_gil) if snipe and low is not None else med
     proof = volume_proof(sales, now)
     velocity = proof.units_per_day
     qty = (
@@ -75,9 +84,18 @@ def _opportunity(
     if gain <= 0 or gain < params.min_profit or first.ppu < params.min_ppu:
         return None
     buyers, days = proof.distinct_buyers_7d, proof.days_with_sales
-    if preset == ScanPreset.HIGH_MARGIN and (gain < 12000 or buyers < 4 or days < 3):
-        return None
-    if preset == ScanPreset.VOLUME and (gain < 6000 or buyers < 8 or days < 4 or velocity < 2.5):
+    age = max(0, now - first.last_review_ts) / 3600
+    if (
+        buyers < params.min_distinct_buyers
+        or days < params.min_days_with_sales
+        or velocity < params.min_units_day
+        or proof.top_buyer_share > params.max_top_buyer_share
+        or (params.max_data_age_h is not None and age >= params.max_data_age_h)
+        or (
+            params.max_sale_age_h is not None
+            and (proof.last_sale_age_h is None or proof.last_sale_age_h >= params.max_sale_age_h)
+        )
+    ):
         return None
     # A second regional price was the old alert benchmark. Live alert rules
     # compare with the home median and are applied by snipe.evaluate.
@@ -102,7 +120,7 @@ def _opportunity(
         total_profit_capped=gain * capped,
         est_wait_days=wait_days(rival, qty, velocity),
         volume_proof=proof,
-        data_age_h=max(0, now - first.last_review_ts) / 3600,
+        data_age_h=age,
     )
     score = gain * capped
     if legacy:
@@ -146,12 +164,9 @@ def run_scan(
         elif result:
             ranked.append(result)
     ranked.sort(key=lambda pair: (pair[0], pair[1].item.name, pair[1].item.hq), reverse=True)
-    limit = {ScanPreset.FLIP: 30, ScanPreset.HIGH_MARGIN: 60, ScanPreset.VOLUME: 60}.get(
-        params.preset
-    )
     return ScanResult(
         params=params,
-        rows=[row for _, row in ranked[:limit]],
+        rows=[row for _, row in ranked[: params.result_limit]],
         started_ts=int(start),
         finished_ts=int(clock()),
         warnings=warnings,

@@ -19,6 +19,7 @@ from gilhound.api.jobs import Job, Jobs
 from gilhound.api.updates import Updates
 from gilhound.models import (
     AppInfo,
+    ItemRef,
     PnLSummary,
     Position,
     RetainerScanParams,
@@ -32,6 +33,7 @@ from gilhound.models import (
 )
 from gilhound.runtime import Runtime
 from gilhound.runtime.discord import DeliveryError
+from gilhound.runtime.profiles import Library, ProfileChange, ProfileList
 
 LOCAL_HOST = re.compile(r"(?:localhost|127\.0\.0\.1)(?::([0-9]{1,5}))?", re.ASCII | re.I)
 UI_ICONS = ("/favicon.ico", "/favicon.png", "/apple-touch-icon.png")
@@ -41,6 +43,12 @@ class PositionCost(BaseModel):
     item_id: int = Field(gt=0)
     hq: bool
     unit_cost: int = Field(ge=0)
+
+
+class PositionPersonal(BaseModel):
+    item_id: int = Field(gt=0)
+    hq: bool
+    personal: bool
 
 
 class ApiError(BaseModel):
@@ -147,6 +155,17 @@ def create_app(
     def put_settings(settings: UserSettings) -> UserSettings:
         return runtime.save_settings(settings)
 
+    @app.get("/api/profiles/{library}")
+    def get_profiles(library: Library) -> ProfileList:
+        return runtime.profiles.list(library, runtime.settings.get())
+
+    @app.post("/api/profiles/{library}")
+    def change_profile(library: Library, change: ProfileChange) -> ProfileList:
+        try:
+            return runtime.profiles.change(library, change, runtime.settings.get())
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
     @app.post("/api/scan")
     def run_scan(params: ScanParams) -> ScanResult:
         return runtime.scan(params)
@@ -179,6 +198,17 @@ def create_app(
                 if view == "all" or (p.qty_open > 0) == (view == "open")]
         runtime.items.decorate((r.item for r in rows), runtime.settings.get().home_world)
         return rows
+
+    @app.get("/api/positions/hidden")
+    def hidden_positions() -> list[ItemRef]:
+        rows = runtime.hidden()
+        runtime.items.decorate(rows, runtime.settings.get().home_world)
+        return rows
+
+    @app.put("/api/positions/personal", status_code=204)
+    def set_personal(change: PositionPersonal) -> Response:
+        runtime.set_personal(change.item_id, change.hq, change.personal)
+        return Response(status_code=204)
 
     @app.put("/api/positions/cost", status_code=204)
     def set_position_cost(cost: PositionCost) -> Response:

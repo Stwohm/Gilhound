@@ -9,7 +9,13 @@ type JsonBody<K extends keyof operations> = operations[K] extends {
   requestBody: { content: { "application/json": infer Data } };
 } ? Data : never;
 
+export type Library = "scan" | "snipes";
+type Schema = components["schemas"];
 export interface Api {
+  getProfiles(library: Library): Promise<Schema["ProfileList"]>;
+  changeProfile(library: Library, change: Schema["ProfileChange"]): Promise<Schema["ProfileList"]>;
+  getHidden(): Promise<Schema["ItemRef"][]>;
+  setPersonal(change: Schema["PositionPersonal"]): Promise<void>;
   scan(params: JsonBody<"run_scan_api_scan_post">): Promise<JsonResult<"run_scan_api_scan_post">>;
   retainerScan(params: JsonBody<"run_retainer_scan_api_retainer_scan_post">): Promise<JsonResult<"run_retainer_scan_api_retainer_scan_post">>;
   getSnipeStatus(): Promise<JsonResult<"get_snipe_status_api_snipes_status_get">>;
@@ -57,6 +63,7 @@ async function request(path: string, method = "GET", body?: unknown): Promise<Re
 
   if (response.status === 401) throw new Error("Your session could not be authenticated. Reopen Gilhound.");
   if (response.status === 422) throw new Error("The API rejected one or more fields. Check your input.");
+  if (response.status === 400) throw new Error((await response.json()).detail);
   if (!response.ok) throw new Error(`Gilhound API request failed (HTTP ${response.status}).`);
   return response;
 }
@@ -88,6 +95,10 @@ async function job<T>(path: string, params?: unknown): Promise<T> {
 }
 
 const realApi: Api = {
+  getProfiles: library => json("/api/profiles/" + library),
+  changeProfile: (library, change) => json("/api/profiles/" + library, "POST", change),
+  getHidden: () => json("/api/positions/hidden"),
+  setPersonal: async change => { await request("/api/positions/personal", "PUT", change); },
   scan: (params) => job("/api/jobs/scan", params),
   retainerScan: (params) => job("/api/jobs/retainer", params),
   getSnipeStatus: () => json("/api/snipes/status"),

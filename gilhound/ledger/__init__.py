@@ -3,6 +3,7 @@
 from collections import defaultdict
 from collections.abc import Iterable
 
+from gilhound.ingest.allagan_tools import SELLABLE
 from gilhound.ingest.common import Source, Stock, event
 from gilhound.models import ItemRef, LedgerEventKind, SourceName
 
@@ -50,10 +51,14 @@ def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | Non
     listed: dict[ItemKey, int] = defaultdict(int)
     costs: dict[ItemKey, list[Stock]] = defaultdict(list)
     items: dict[ItemKey, ItemRef] = {}
+    sellable: dict[ItemKey, int] = defaultdict(int)
     for source in inputs:
         for stock in source.records.inventory or []:
             key = stock.item.id, stock.item.hq
-            if stock.container != 12002 and key in manual_costs:
+            if stock.container not in SELLABLE:
+                continue
+            sellable[key] += stock.qty
+            if key in manual_costs:
                 inventory[key] += stock.qty
                 items[key] = stock.item
         for stock in source.records.remaining_costs:
@@ -94,4 +99,15 @@ def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | Non
             history.append(
                 event(latest.status.name, LedgerEventKind.LIST, item, listed[key], ts, None)
             )
-    return calculate(history, manual)
+    limits = None
+    if any(
+        s.status.name == SourceName.ALLAGAN_TOOLS and s.records.inventory is not None
+        for s in inputs
+    ):
+        limits = {key: sellable[key] + listed[key] for key in set(sellable) | set(listed)}
+    ledger = calculate(history, manual, limits)
+    if limits is None:
+        ledger.warnings.append(
+            "Allagan Tools inventory unavailable. Using purchase history and listings."
+        )
+    return ledger

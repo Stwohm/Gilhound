@@ -97,7 +97,11 @@ def test_positions_require_flip_evidence() -> None:
     bag, listed, bought, sold = (item_ref(i, False) for i in range(1000, 1004))
     excluded = [item_ref(i, False) for i in (1, 2, 8, 19, 28, 21072)]
     records = Records(
-        inventory=[Stock(bag, 90), Stock(listed, 99)],
+        inventory=[
+            Stock(bag, 90, container=0),
+            Stock(listed, 99, container=1000),
+            Stock(bought, 2, container=10006),
+        ],
         listings=[Stock(listed, 3), *(Stock(i, 50) for i in excluded)],
         events=[
             event(S.CASHFLOW, K.BUY, bought, 2, 1, 30),
@@ -114,3 +118,51 @@ def test_positions_require_flip_evidence() -> None:
     assert opened[bought.id].listed_qty == 0
     assert opened[bought.id].known_capital == 30
     assert [(p.item.id, p.realised_profit) for p in positions if not p.qty_open] == [(sold.id, 3)]
+
+
+def test_sorted_storage_caps_only_open_purchases(tmp_path: Path) -> None:
+    from gilhound.ingest import allagan_tools
+
+    containers = [
+        0,
+        1,
+        2,
+        3,
+        4000,
+        4001,
+        4100,
+        4101,
+        *range(10000, 10007),
+        1000,
+        11000,
+        3202,
+        3300,
+        2500,
+        2501,
+        12002,
+    ]
+    rows = []
+    events = []
+    for i, container in enumerate(containers):
+        item = item_ref(1000 + i, False)
+        row = ["0"] * 25 + ["", ""]
+        # Virtual wardrobe slots are exported with raw Container 0.
+        row[0] = str(container if container not in (2500, 2501) else 0)
+        row[2], row[3], row[20] = str(item.id), "2", str(container)
+        rows.append(",".join(row))
+        events.append(event(S.CASHFLOW, K.BUY, item, 5, 1, 50))
+    absent = item_ref(2000, False)
+    events.append(event(S.CASHFLOW, K.BUY, absent, 1, 1, 10))
+    (tmp_path / "inventories.csv").write_text("\n".join(rows))
+    cash = Source(
+        SourceStatus(name=S.CASHFLOW, found=True, recognised=True), Records(events=events)
+    )
+    ledger = build_ledger([cash, allagan_tools.read(tmp_path)])
+    assert {p.item.id for p in ledger.positions} == {
+        1000 + i for i in [*range(15), len(containers) - 1]
+    }
+    assert all(p.qty_open == 2 and p.known_capital == 20 for p in ledger.positions)
+    assert not ledger.warnings
+    fallback = build_ledger([cash, allagan_tools.read(tmp_path / "missing")])
+    assert len(fallback.positions) == len(events)
+    assert fallback.warnings

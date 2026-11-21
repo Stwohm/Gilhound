@@ -13,6 +13,7 @@ from gilhound.market.presets import run_scan
 from gilhound.market.retainer import run_retainer_scan
 from gilhound.market.snipe import evaluate
 from gilhound.models import (
+    ItemRef,
     RetainerScanParams,
     RetainerScanResult,
     ScanParams,
@@ -26,6 +27,7 @@ from gilhound.models import (
 
 from .diagnostics import LOG, archive, start_logging
 from .discord import Discord
+from .profiles import Profiles
 from .scheduler import Scheduler
 from .store import History, SettingsStore, data_dir
 
@@ -33,6 +35,7 @@ from .store import History, SettingsStore, data_dir
 class Runtime:
     def __init__(self, root: Path | None = None, plugins: Path | None = None) -> None:
         self.root = root or data_dir()
+        self.profiles = Profiles(self.root)
         self.plugins = plugins
         self.items = ItemCatalog(self.root)
         self.adjustment_lock = Lock()
@@ -84,7 +87,7 @@ class Runtime:
                 return result
         result = run_scan(params, clock=time.time)
         self.items.decorate(
-            (r.item for r in result.rows), self.settings.get().home_world, wait=True
+            (r.item for r in result.rows), params.home_world, wait=True
         )
         self.history.save_scan(result)
         LOG.info("Scan completed")
@@ -112,11 +115,13 @@ class Runtime:
         result = run_scan(params, clock=time.time)
         hits = evaluate(
             result.rows,
-            settings.snipe_rule,
-            settings.freshness_tiers,
+            params.snipe_rule or settings.snipe_rule,
+            params.freshness_tiers
+            if params.freshness_tiers is not None
+            else settings.freshness_tiers,
             result.finished_ts,
         )
-        self.items.decorate((r.item for r in hits), settings.home_world, wait=True)
+        self.items.decorate((r.item for r in hits), params.home_world, wait=True)
         result.rows = list(hits)
         self.history.save_scan(result)
         LOG.info("Scan completed")
@@ -125,10 +130,12 @@ class Runtime:
     def run_snipes(self) -> list[SnipeHit]:
         with self.scan_lock:
             settings = self.settings.get()
-            _, hits = self._snipe_scan(self.params(ScanPreset.SNIPE), settings)
+            profiles = self.profiles.list("snipes", settings)
+            active = profiles.profiles[profiles.active]
+            _, hits = self._snipe_scan(active.params, settings)
             self.history.record_hits(hits)
             current = self.history.hits(current=True)
-            config = self.settings.get().model_copy(update={"home_world": settings.home_world})
+            config = self.settings.get().model_copy(update={"home_world": active.params.home_world})
             if config.discord_notifier and config.webhook_url:
                 self.items.decorate_icons([hit.item for hit in current if hit.tier.send_discord])
             notified = self.discord.notify_many(config, current, self.history)
@@ -147,6 +154,19 @@ class Runtime:
 
     def ledger(self) -> Ledger:
         return build_ledger(read_plugins(self.plugins), ManualAdjustments.load(self.root))
+
+    def hidden(self) -> list[ItemRef]:
+        return [a.item for a in ManualAdjustments.load(self.root).items if a.personal]
+
+    def set_personal(self, iid: int, hq: bool, personal: bool) -> None:
+        with self.adjustment_lock:
+            manual = ManualAdjustments.load(self.root)
+            entry = next((a for a in manual.items if (a.item.id, a.item.hq) == (iid, hq)), None)
+            if entry is None:
+                entry = ItemAdjustment(item=item_ref(iid, hq))
+                manual.items.append(entry)
+            entry.personal = personal
+            manual.save(self.root)
 
     def set_cost(self, iid: int, hq: bool, unit_cost: int) -> None:
         with self.adjustment_lock:

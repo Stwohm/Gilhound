@@ -1,9 +1,9 @@
 """Shared market, scan, ledger and settings contracts."""
 
 from enum import StrEnum
-from typing import Annotated
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, SecretStr, field_serializer
+from pydantic import BaseModel, Field, SecretStr, field_serializer, model_validator
 
 EpochSeconds = Annotated[int, Field(strict=True, ge=0)]
 Fraction = Annotated[float, Field(ge=0, le=1)]
@@ -68,10 +68,70 @@ class ScanPreset(StrEnum):
     SNIPE = "snipe"
 
 
+class SnipeRule(BaseModel):
+    max_home_median_ratio: Fraction = Field(
+        default=0.5, description="Maximum listing price as a fraction of the home-world median."
+    )
+    min_profit: GilCost = Field(default=5_000, description="Minimum net profit in gil per unit.")
+    min_distinct_buyers_7d: int = Field(
+        default=3, ge=0, description="Minimum seven-day buyer count."
+    )
+    max_last_sale_age_h: float = Field(default=24, gt=0, description="Exclusive sale age limit.")
+    max_top_buyer_share: Fraction = Field(
+        default=0.5, description="Maximum share held by the largest buyer (default 0.5, or 50%)."
+    )
+
+
+class FreshnessTier(BaseModel):
+    name: str = Field(description="Display name for the freshness tier.")
+    max_age_h: float = Field(gt=0, description="Exclusive upper limit on listing age in hours.")
+    send_discord: bool = Field(description="Whether this tier can trigger Discord notifications.")
+
+
+class CandidateWindow(BaseModel):
+    preferred_roi: int = Field(default=40, ge=0, description="Requested return on investment (%).")
+    min_profit_amount: GilCost = Field(default=1000, description="Minimum candidate profit (gil).")
+    min_desired_avg_ppu: GilCost = Field(default=1500, description="Minimum average unit price.")
+    hours_ago: int = Field(default=24, gt=0, description="Candidate sales lookback in hours.")
+    min_sales: int = Field(default=5, ge=0, description="Minimum sales in this window.")
+
+
 class ScanParams(BaseModel):
+    snipe_rule: SnipeRule | None = Field(default=None, description="Rules for snipe strategy.")
+    freshness_tiers: list[FreshnessTier] | None = Field(
+        default=None, description="Snipe alert tiers. Omit to use configured tiers."
+    )
+
+    windows: list[CandidateWindow] = Field(
+        default_factory=list, min_length=1, description="Saddlebag searches to combine."
+    )
+    quality: Literal["both", "hq", "nq"] = Field(default="both", description="Qualities to search.")
+    min_stack_size: int = Field(default=1, ge=1, description="Minimum candidate stack size.")
+    filters: list[int] = Field(default_factory=lambda: [0], description="Saddlebag filter IDs.")
+    region_wide: bool = Field(default=True, description="Search the full buy region.")
+    include_vendor: bool = Field(default=False, description="Include vendor items.")
+    show_out_stock: bool = Field(default=False, description="Include out-of-stock candidates.")
+    min_distinct_buyers: int = Field(default=0, ge=0, description="Minimum unique weekly buyers.")
+    min_days_with_sales: int = Field(default=0, ge=0, le=7, description="Minimum active sale days.")
+    min_units_day: float = Field(default=0, ge=0, description="Minimum average daily volume.")
+    max_data_age_h: float | None = Field(default=None, gt=0, description="Listing age limit (h).")
+    max_sale_age_h: float | None = Field(default=None, gt=0, description="Latest sale age limit.")
+    max_top_buyer_share: Fraction = Field(default=1, description="Largest allowed buyer fraction.")
+    history_entries: int = Field(
+        default=80, ge=1, description="Seven-day sales to fetch from history."
+    )
+    undercut_gil: GilCost = Field(
+        default=1, description="Gil below lowest home listing for snipes."
+    )
+    min_history_sales: int = Field(default=3, gt=0, description="Minimum weekly sales to price.")
+    home_listings: int = Field(default=50, gt=0, le=100, description="Home listings fetched.")
+    region_listings: int = Field(default=5, gt=0, le=100, description="Regional listings fetched.")
+    home_entries: int = Field(default=100, ge=0, le=100, description="Home sale entries fetched.")
+    result_limit: int | None = Field(default=30, gt=0, description="Maximum returned rows.")
+
     preset: ScanPreset = Field(default=ScanPreset.FLIP, description="Scan strategy.")
-    home_world: str = Field(description="World where items will be resold.")
-    buy_region: str = Field(description="Market region to search for purchases.")
+    home_world: str = Field(pattern=r"\S", description="World where items will be resold.")
+    buy_region: str = Field(pattern=r"\S", description="Market region to search for purchases.")
     min_ppu: GilCost = Field(default=0, description="Minimum purchase price in gil per unit.")
     min_profit: GilCost = Field(default=0, description="Minimum net profit in gil per unit.")
     buyer_tax: Fraction = Field(default=0.05, description="Buyer tax as a fraction of the price.")
@@ -80,6 +140,42 @@ class ScanParams(BaseModel):
         default_factory=dict, description="Travel cost in gil keyed by data centre name."
     )
     sellable_days: float = Field(default=3, gt=0, description="Days of sales used to cap quantity.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def strategy_defaults(cls, values: object) -> object:
+        if not isinstance(values, dict):
+            return values
+        preset = values.get("preset", "flip")
+        flip, margin, volume = preset == "flip", preset == "high_margin", preset == "volume"
+        floor = 1500 if flip else 5000 if margin else 3000
+        windows = [(floor, 1000 if flip else floor, 24, 5, 40)]
+        if not flip:
+            windows.append((floor, floor, 72, 3, 40))
+        if preset == "snipe":
+            windows.append((5000, 4000, 168, 3, 100))
+        defaults = dict(
+            windows=[
+                dict(
+                    min_desired_avg_ppu=values.get("min_ppu") or price,
+                    min_profit_amount=values.get("min_profit") or gain,
+                    hours_ago=hours,
+                    min_sales=sales,
+                    preferred_roi=roi,
+                )
+                for price, gain, hours, sales, roi in windows
+            ],
+            min_profit=12000 if margin else 6000 if volume else 0,
+            min_distinct_buyers=4 if margin else 8 if volume else 0,
+            min_days_with_sales=3 if margin else 4 if volume else 0,
+            min_units_day=2.5 if volume else 0,
+            min_history_sales=4 if margin or volume else 3,
+            home_listings=50 if flip else 5 if preset == "snipe" else 20,
+            region_listings=5 if flip else 12 if preset == "snipe" else 8,
+            home_entries=100 if flip else 0,
+            result_limit=30 if flip else None if preset == "snipe" else 60,
+        )
+        return defaults | values
 
 
 class ScanRow(BaseModel):
@@ -113,26 +209,6 @@ class SnipeStatus(BaseModel):
     fresh: int = 0
     stale: int = 0
     notified: int = 0
-
-
-class SnipeRule(BaseModel):
-    max_home_median_ratio: Fraction = Field(
-        default=0.5, description="Maximum listing price as a fraction of the home-world median."
-    )
-    min_profit: GilCost = Field(default=5_000, description="Minimum net profit in gil per unit.")
-    min_distinct_buyers_7d: int = Field(
-        default=3, ge=0, description="Minimum seven-day buyer count."
-    )
-    max_last_sale_age_h: float = Field(default=24, gt=0, description="Exclusive sale age limit.")
-    max_top_buyer_share: Fraction = Field(
-        default=0.5, description="Maximum share held by the largest buyer (default 0.5, or 50%)."
-    )
-
-
-class FreshnessTier(BaseModel):
-    name: str = Field(description="Display name for the freshness tier.")
-    max_age_h: float = Field(gt=0, description="Exclusive upper limit on listing age in hours.")
-    send_discord: bool = Field(description="Whether this tier can trigger Discord notifications.")
 
 
 class SnipeHit(ScanRow):

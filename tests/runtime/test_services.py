@@ -7,6 +7,7 @@ from pathlib import Path
 
 from pydantic import SecretStr
 
+from gilhound import __version__
 from gilhound.market.snipe import discord_embed, embed_length
 from gilhound.models import ScanPreset, ScanResult, SnipeHit, UserSettings
 from gilhound.runtime import Runtime
@@ -205,7 +206,7 @@ def test_embed_and_batch_snapshots(tmp_path: Path) -> None:
         "url": "https://universalis.app/market/1?server=Cerberus",
         "description": "```\n/li World market\n```",
         "color": 0x2ECC71,
-        "footer": {"text": "Gilhound v0.1.2 · fresh"},
+        "footer": {"text": f"Gilhound v{__version__} · fresh"},
         "timestamp": "1970-01-01T00:00:05+00:00",
         "fields": [
             {"name": name, "value": value, "inline": True}

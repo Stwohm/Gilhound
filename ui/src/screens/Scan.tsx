@@ -1,23 +1,17 @@
 import { useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { api } from "../api/client";
 import {
-  Badge, Field, Item, Loading, Notice, Numeric, PageTitle, Section, Table, TravelEditor,
-  age, ageTone, errorMessage, gil, number, time, travelCosts, travelEntries,
+  Badge, Item, Notice, PageTitle, Section, Table,
+  age, ageTone, errorMessage, gil, number, time,
 } from "../common";
 import type { Schema, Settings } from "../common";
 
 type Params = Schema<"ScanParams">;
-type Preset = Schema<"ScanPreset">;
+import ProfileEditor from "./ProfileEditor";
 type Row = Schema<"ScanRow">;
 type Column = { label: string; sort: (row: Row) => string | number | null; render?: (row: Row) => ReactNode };
 
-const presets: { id: Preset; name: string; detail: string }[] = [
-  { id: "flip", name: "Flip", detail: "Balanced profit and sales" },
-  { id: "high_margin", name: "High margin", detail: "Higher profit per unit" },
-  { id: "volume", name: "Volume", detail: "Faster-selling items" },
-  { id: "snipe", name: "Snipe", detail: "Deep listing discounts" },
-];
 
 const columns: Column[] = [
   { label: "Item", sort: (r) => r.item.name, render: (r) => <Item item={r.item} showQuality={false} /> },
@@ -40,8 +34,6 @@ const columns: Column[] = [
 const marketCommand = (world: string) => `/li ${world.toLowerCase()} market`;
 
 export default function Scan({ settings }: { settings: Settings }) {
-  const [draft, setDraft] = useState<Partial<Params>>({});
-  const [travelDraft, setTravelDraft] = useState<ReturnType<typeof travelEntries>>();
   const [result, setResult] = useState<Schema<"ScanResult">>();
   const [running, setRunning] = useState(false);
   const [error, setError] = useState("");
@@ -49,27 +41,12 @@ export default function Scan({ settings }: { settings: Settings }) {
   const [sort, setSort] = useState({ column: 9, descending: true });
   const [copyState, setCopyState] = useState({ message: "", fallback: "" });
 
-  const params: Params = {
-    home_world: settings.home_world, buy_region: settings.buy_region,
-    preset: "flip", min_ppu: 0, min_profit: 5000, buyer_tax: 0.05, seller_tax: 0.05,
-    sellable_days: 3, ...draft,
-  };
-  const travel = travelDraft ?? travelEntries(settings.travel_cost);
-
-  function update<K extends keyof Params>(key: K, value: Params[K]) {
-    setDraft((current) => ({ ...current, [key]: value }));
-  }
-
-  async function run(event: FormEvent) {
-    event.preventDefault();
+  async function run(params: Params) {
     setError("");
     setCopyState({ message: "", fallback: "" });
     setRunning(true);
     try {
-      const home_world = params.home_world.trim();
-      const buy_region = params.buy_region.trim();
-      if (!home_world || !buy_region) throw new Error("Enter a home world and buy region.");
-      const next = await api.scan({ ...params, home_world, buy_region, travel_cost: travelCosts(travel) });
+      const next = await api.scan(params);
       setResult(next);
       setSelected(new Set());
       setCopyState({ message: "", fallback: "" });
@@ -125,33 +102,7 @@ export default function Scan({ settings }: { settings: Settings }) {
   return <>
     <PageTitle title="Market scan" description="Find regional listings you can resell on your home world." />
     <Section title="Scan parameters">
-      <form className="panel-body" onSubmit={run}>
-        <fieldset disabled={running}>
-          <legend className="sr-only">Scan parameters</legend>
-          <div className="preset-grid" role="group" aria-label="Scan preset">
-            {presets.map((preset) => <button key={preset.id} className="preset" type="button"
-              aria-pressed={params.preset === preset.id} onClick={() => update("preset", preset.id)}>
-              <span>{preset.name}</span><small>{preset.detail}</small>
-            </button>)}
-          </div>
-          <div className="fields scan-fields">
-            <Field label="Home world"><input required value={params.home_world} onChange={(e) => update("home_world", e.target.value)} /></Field>
-            <Field label="Buy region"><input required value={params.buy_region} onChange={(e) => update("buy_region", e.target.value)} /></Field>
-            <Field label="Minimum buy price (gil)"><Numeric value={params.min_ppu ?? 0} onValue={(value) => update("min_ppu", value)} /></Field>
-            <Field label="Minimum profit / unit (gil)"><Numeric value={params.min_profit ?? 0} onValue={(value) => update("min_profit", value)} /></Field>
-            <Field label="Buyer tax (%)"><Numeric max={100} step="any" value={Number(((params.buyer_tax ?? 0.05) * 100).toFixed(10))} onValue={(value) => update("buyer_tax", value / 100)} /></Field>
-            <Field label="Seller tax (%)"><Numeric max={100} step="any" value={Number((params.seller_tax * 100).toFixed(10))} onValue={(value) => update("seller_tax", value / 100)} /></Field>
-            <Field label="Sellable days"><Numeric min={0.01} step="any" value={params.sellable_days ?? 3} onValue={(value) => update("sellable_days", value)} /></Field>
-          </div>
-          <details className="travel-details" onInvalidCapture={(event) => { event.currentTarget.open = true; }}><summary>Travel costs <small>{travel.length} data centres</small></summary>
-            <TravelEditor entries={travel} onChange={setTravelDraft} />
-          </details>
-          <div className="form-actions">
-            <button className="primary" type="submit">{running ? "Scanning…" : "Run scan"}</button>
-            {running && <Loading>Checking regional listings…</Loading>}
-          </div>
-        </fieldset>
-      </form>
+      <ProfileEditor key={JSON.stringify([settings.home_world, settings.buy_region, settings.travel_cost])} library="scan" running={running} onRun={run} />
     </Section>
     {error && <Notice tone="error">{error}</Notice>}
     <Section title="Scan results" detail={result ? `${result.rows.length} matches · ${time(result.finished_ts)}` : undefined}

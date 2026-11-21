@@ -22,7 +22,7 @@ function subscribe(onChange: () => void) {
 }
 
 function currentPage() {
-  return pages.find((page) => `#${page.id}` === window.location.hash) ?? pages[0];
+  return pages.find((page) => `#${page.id}` === window.location.hash.split("/")[0]) ?? pages[0];
 }
 
 function UpdateBanner() {

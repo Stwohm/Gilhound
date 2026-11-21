@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import ProfileEditor from "./ProfileEditor";
 import { api } from "../api/client";
 import {
   Badge, Item, Loading, Notice, PageTitle, Section, Table, ResourceState, useResource, age, ageTone, epoch, errorMessage, gil, time,
@@ -142,6 +143,7 @@ export default function Snipes({ resource }: { resource: ReturnType<typeof useRe
         : "No completed run yet"}</small>
       {statusError && <Notice tone="error">{statusError}</Notice>}
     </section> : <ResourceState error={resource.error} retry={resource.retry} loading="Loading snipe controls…" />}
+    <details open={window.location.hash === "#snipes/rules" || undefined} className="panel panel-body"><summary>Snipe rules</summary><ProfileEditor library="snipes" /></details>
     {runError && <Notice tone="error">{runError}</Notice>}
     <Section title="Live listings" detail={lastChecked == null ? "Refreshes every 15 seconds" : `Last checked ${time(lastChecked)} · Refreshes every 15 seconds`}>
       {pollError && <Notice tone="error">{pollError}</Notice>}

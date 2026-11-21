@@ -70,6 +70,7 @@ class Ledger:
     positions: list[Position]
     summary: PnLSummary
     per_item: dict[ItemKey, PnLSummary]
+    warnings: list[str] = field(default_factory=list)
 
 
 def merge_events(events: Iterable[LedgerEvent]) -> list[LedgerEvent]:
@@ -107,6 +108,7 @@ class Lot:
     qty: int
     total: int | None
     used: int = 0
+    purchased: bool = False
 
     def take(self, qty: int) -> int | None:
         before = self.used
@@ -130,10 +132,12 @@ class Holding:
     listed: int = 0
     pnl: PnLSummary = field(default_factory=empty_summary)
 
-    def acquire(self, qty: int, total: int | None, override: int | None) -> None:
+    def acquire(
+        self, qty: int, total: int | None, override: int | None, purchased: bool = False
+    ) -> None:
         if total is None and override is not None:
             total = qty * override
-        self.lots.append(Lot(qty, total))
+        self.lots.append(Lot(qty, total, purchased=purchased))
         self.qty += qty
 
     def apply(self, row: LedgerEvent, adjustment: ItemAdjustment | None) -> None:
@@ -142,7 +146,7 @@ class Holding:
         if total is None and row.ppu is not None:
             total = row.ppu * row.qty
         if row.kind in (LedgerEventKind.BUY, LedgerEventKind.OPENING, LedgerEventKind.TRADE_IN):
-            self.acquire(row.qty, total, override)
+            self.acquire(row.qty, total, override, row.kind == LedgerEventKind.BUY)
         elif row.kind == LedgerEventKind.LIST:
             self.listed += row.qty
             if self.listed > self.qty:
@@ -174,6 +178,15 @@ class Holding:
             self.qty -= row.qty
             self.listed = max(0, self.listed - row.qty)
 
+    def reconcile(self, available: int) -> None:
+        excess = max(0, self.qty - available)
+        for lot in self.lots:
+            if lot.purchased and excess:
+                removed = min(excess, lot.qty - lot.used)
+                lot.take(removed)
+                self.qty -= removed
+                excess -= removed
+
     def position(self) -> Position:
         known = all(lot.total is not None for lot in self.lots)
         remaining = sum(
@@ -193,7 +206,9 @@ class Holding:
 
 
 def calculate(
-    events: Iterable[LedgerEvent], adjustments: ManualAdjustments | None = None
+    events: Iterable[LedgerEvent],
+    adjustments: ManualAdjustments | None = None,
+    available: dict[ItemKey, int] | None = None,
 ) -> Ledger:
     manual = adjustments or ManualAdjustments()
     overrides = {(a.item.id, a.item.hq): a for a in manual.items}
@@ -210,10 +225,18 @@ def calculate(
     summary = PnLSummary(
         **{k: sum(getattr(p, k) for p in per_item.values()) for k in PnLSummary.model_fields}
     )
+    absent = set()
+    if available is not None:
+        for key, holding in holdings.items():
+            if holding.qty:
+                holding.reconcile(available.get(key, 0))
+                if not holding.qty:
+                    absent.add(key)
     positions = [
         h.position()
         for key, h in holdings.items()
-        if h.item.id >= 100
+        if key not in absent
+        and h.item.id >= 100
         and h.item.id not in CURRENCIES
         and not (key in overrides and overrides[key].personal)
     ]

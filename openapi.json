@@ -47,6 +47,47 @@
         "title": "AppInfo",
         "type": "object"
       },
+      "CandidateWindow": {
+        "properties": {
+          "hours_ago": {
+            "default": 24,
+            "description": "Candidate sales lookback in hours.",
+            "exclusiveMinimum": 0.0,
+            "title": "Hours Ago",
+            "type": "integer"
+          },
+          "min_desired_avg_ppu": {
+            "default": 1500,
+            "description": "Minimum average unit price.",
+            "minimum": 0.0,
+            "title": "Min Desired Avg Ppu",
+            "type": "integer"
+          },
+          "min_profit_amount": {
+            "default": 1000,
+            "description": "Minimum candidate profit (gil).",
+            "minimum": 0.0,
+            "title": "Min Profit Amount",
+            "type": "integer"
+          },
+          "min_sales": {
+            "default": 5,
+            "description": "Minimum sales in this window.",
+            "minimum": 0.0,
+            "title": "Min Sales",
+            "type": "integer"
+          },
+          "preferred_roi": {
+            "default": 40,
+            "description": "Requested return on investment (%).",
+            "minimum": 0.0,
+            "title": "Preferred Roi",
+            "type": "integer"
+          }
+        },
+        "title": "CandidateWindow",
+        "type": "object"
+      },
       "FreshnessTier": {
         "properties": {
           "max_age_h": {
@@ -316,6 +357,121 @@
         "title": "PositionCost",
         "type": "object"
       },
+      "PositionPersonal": {
+        "properties": {
+          "hq": {
+            "title": "Hq",
+            "type": "boolean"
+          },
+          "item_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Item Id",
+            "type": "integer"
+          },
+          "personal": {
+            "title": "Personal",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "item_id",
+          "hq",
+          "personal"
+        ],
+        "title": "PositionPersonal",
+        "type": "object"
+      },
+      "Profile": {
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/ScanParams"
+          }
+        },
+        "required": [
+          "params"
+        ],
+        "title": "Profile",
+        "type": "object"
+      },
+      "ProfileChange": {
+        "properties": {
+          "action": {
+            "enum": [
+              "create",
+              "save",
+              "rename",
+              "delete",
+              "reset",
+              "activate"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "new_name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Name"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Profile"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "action",
+          "name"
+        ],
+        "title": "ProfileChange",
+        "type": "object"
+      },
+      "ProfileList": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "string"
+          },
+          "defaults": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Profile"
+            },
+            "title": "Defaults",
+            "type": "object"
+          },
+          "profiles": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Profile"
+            },
+            "title": "Profiles",
+            "type": "object"
+          }
+        },
+        "required": [
+          "profiles",
+          "defaults",
+          "active"
+        ],
+        "title": "ProfileList",
+        "type": "object"
+      },
       "Result": {
         "anyOf": [
           {
@@ -531,6 +687,7 @@
         "properties": {
           "buy_region": {
             "description": "Market region to search for purchases.",
+            "pattern": "\\S",
             "title": "Buy Region",
             "type": "string"
           },
@@ -542,10 +699,119 @@
             "title": "Buyer Tax",
             "type": "number"
           },
+          "filters": {
+            "description": "Saddlebag filter IDs.",
+            "items": {
+              "type": "integer"
+            },
+            "title": "Filters",
+            "type": "array"
+          },
+          "freshness_tiers": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FreshnessTier"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Snipe alert tiers. Omit to use configured tiers.",
+            "title": "Freshness Tiers"
+          },
+          "history_entries": {
+            "default": 80,
+            "description": "Seven-day sales to fetch from history.",
+            "minimum": 1.0,
+            "title": "History Entries",
+            "type": "integer"
+          },
+          "home_entries": {
+            "default": 100,
+            "description": "Home sale entries fetched.",
+            "maximum": 100.0,
+            "minimum": 0.0,
+            "title": "Home Entries",
+            "type": "integer"
+          },
+          "home_listings": {
+            "default": 50,
+            "description": "Home listings fetched.",
+            "exclusiveMinimum": 0.0,
+            "maximum": 100.0,
+            "title": "Home Listings",
+            "type": "integer"
+          },
           "home_world": {
             "description": "World where items will be resold.",
+            "pattern": "\\S",
             "title": "Home World",
             "type": "string"
+          },
+          "include_vendor": {
+            "default": false,
+            "description": "Include vendor items.",
+            "title": "Include Vendor",
+            "type": "boolean"
+          },
+          "max_data_age_h": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Listing age limit (h).",
+            "title": "Max Data Age H"
+          },
+          "max_sale_age_h": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Latest sale age limit.",
+            "title": "Max Sale Age H"
+          },
+          "max_top_buyer_share": {
+            "default": 1,
+            "description": "Largest allowed buyer fraction.",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Max Top Buyer Share",
+            "type": "number"
+          },
+          "min_days_with_sales": {
+            "default": 0,
+            "description": "Minimum active sale days.",
+            "maximum": 7.0,
+            "minimum": 0.0,
+            "title": "Min Days With Sales",
+            "type": "integer"
+          },
+          "min_distinct_buyers": {
+            "default": 0,
+            "description": "Minimum unique weekly buyers.",
+            "minimum": 0.0,
+            "title": "Min Distinct Buyers",
+            "type": "integer"
+          },
+          "min_history_sales": {
+            "default": 3,
+            "description": "Minimum weekly sales to price.",
+            "exclusiveMinimum": 0.0,
+            "title": "Min History Sales",
+            "type": "integer"
           },
           "min_ppu": {
             "default": 0,
@@ -561,10 +827,63 @@
             "title": "Min Profit",
             "type": "integer"
           },
+          "min_stack_size": {
+            "default": 1,
+            "description": "Minimum candidate stack size.",
+            "minimum": 1.0,
+            "title": "Min Stack Size",
+            "type": "integer"
+          },
+          "min_units_day": {
+            "default": 0,
+            "description": "Minimum average daily volume.",
+            "minimum": 0.0,
+            "title": "Min Units Day",
+            "type": "number"
+          },
           "preset": {
             "$ref": "#/components/schemas/ScanPreset",
             "default": "flip",
             "description": "Scan strategy."
+          },
+          "quality": {
+            "default": "both",
+            "description": "Qualities to search.",
+            "enum": [
+              "both",
+              "hq",
+              "nq"
+            ],
+            "title": "Quality",
+            "type": "string"
+          },
+          "region_listings": {
+            "default": 5,
+            "description": "Regional listings fetched.",
+            "exclusiveMinimum": 0.0,
+            "maximum": 100.0,
+            "title": "Region Listings",
+            "type": "integer"
+          },
+          "region_wide": {
+            "default": true,
+            "description": "Search the full buy region.",
+            "title": "Region Wide",
+            "type": "boolean"
+          },
+          "result_limit": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 30,
+            "description": "Maximum returned rows.",
+            "title": "Result Limit"
           },
           "sellable_days": {
             "default": 3,
@@ -580,6 +899,23 @@
             "title": "Seller Tax",
             "type": "number"
           },
+          "show_out_stock": {
+            "default": false,
+            "description": "Include out-of-stock candidates.",
+            "title": "Show Out Stock",
+            "type": "boolean"
+          },
+          "snipe_rule": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SnipeRule"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Rules for snipe strategy."
+          },
           "travel_cost": {
             "additionalProperties": {
               "minimum": 0.0,
@@ -588,6 +924,22 @@
             "description": "Travel cost in gil keyed by data centre name.",
             "title": "Travel Cost",
             "type": "object"
+          },
+          "undercut_gil": {
+            "default": 1,
+            "description": "Gil below lowest home listing for snipes.",
+            "minimum": 0.0,
+            "title": "Undercut Gil",
+            "type": "integer"
+          },
+          "windows": {
+            "description": "Saddlebag searches to combine.",
+            "items": {
+              "$ref": "#/components/schemas/CandidateWindow"
+            },
+            "minItems": 1,
+            "title": "Windows",
+            "type": "array"
           }
         },
         "required": [
@@ -1315,7 +1667,7 @@
   },
   "info": {
     "title": "Gilhound API",
-    "version": "0.1.2"
+    "version": "0.1.3"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -1828,6 +2180,261 @@
           }
         },
         "summary": "Set Position Cost"
+      }
+    },
+    "/api/positions/hidden": {
+      "get": {
+        "operationId": "hidden_positions_api_positions_hidden_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ItemRef"
+                  },
+                  "title": "Response Hidden Positions Api Positions Hidden Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Hidden Positions"
+      }
+    },
+    "/api/positions/personal": {
+      "put": {
+        "operationId": "set_personal_api_positions_personal_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PositionPersonal"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Personal"
+      }
+    },
+    "/api/profiles/{library}": {
+      "get": {
+        "operationId": "get_profiles_api_profiles__library__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "library",
+            "required": true,
+            "schema": {
+              "enum": [
+                "scan",
+                "snipes"
+              ],
+              "title": "Library",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Profiles"
+      },
+      "post": {
+        "operationId": "change_profile_api_profiles__library__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "library",
+            "required": true,
+            "schema": {
+              "enum": [
+                "scan",
+                "snipes"
+              ],
+              "title": "Library",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Change Profile"
       }
     },
     "/api/retainer-scan": {

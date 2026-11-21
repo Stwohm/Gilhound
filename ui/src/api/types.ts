@@ -157,6 +157,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/positions/hidden": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Hidden Positions */
+        get: operations["hidden_positions_api_positions_hidden_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/positions/personal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set Personal */
+        put: operations["set_personal_api_positions_personal_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/profiles/{library}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Profiles */
+        get: operations["get_profiles_api_profiles__library__get"];
+        put?: never;
+        /** Change Profile */
+        post: operations["change_profile_api_profiles__library__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/retainer-scan": {
         parameters: {
             query?: never;
@@ -341,6 +393,39 @@ export interface components {
              */
             version: string;
         };
+        /** CandidateWindow */
+        CandidateWindow: {
+            /**
+             * Hours Ago
+             * @description Candidate sales lookback in hours.
+             * @default 24
+             */
+            hours_ago: number;
+            /**
+             * Min Desired Avg Ppu
+             * @description Minimum average unit price.
+             * @default 1500
+             */
+            min_desired_avg_ppu: number;
+            /**
+             * Min Profit Amount
+             * @description Minimum candidate profit (gil).
+             * @default 1000
+             */
+            min_profit_amount: number;
+            /**
+             * Min Sales
+             * @description Minimum sales in this window.
+             * @default 5
+             */
+            min_sales: number;
+            /**
+             * Preferred Roi
+             * @description Requested return on investment (%).
+             * @default 40
+             */
+            preferred_roi: number;
+        };
         /** FreshnessTier */
         FreshnessTier: {
             /**
@@ -475,6 +560,45 @@ export interface components {
             /** Unit Cost */
             unit_cost: number;
         };
+        /** PositionPersonal */
+        PositionPersonal: {
+            /** Hq */
+            hq: boolean;
+            /** Item Id */
+            item_id: number;
+            /** Personal */
+            personal: boolean;
+        };
+        /** Profile */
+        Profile: {
+            params: components["schemas"]["ScanParams"];
+        };
+        /** ProfileChange */
+        ProfileChange: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "create" | "save" | "rename" | "delete" | "reset" | "activate";
+            /** Name */
+            name: string;
+            /** New Name */
+            new_name?: string | null;
+            profile?: components["schemas"]["Profile"] | null;
+        };
+        /** ProfileList */
+        ProfileList: {
+            /** Active */
+            active: string;
+            /** Defaults */
+            defaults: {
+                [key: string]: components["schemas"]["Profile"];
+            };
+            /** Profiles */
+            profiles: {
+                [key: string]: components["schemas"]["Profile"];
+            };
+        };
         Result: components["schemas"]["ScanResult"] | components["schemas"]["RetainerScanResult"] | components["schemas"]["SnipeHit"][];
         /** RetainerItemRow */
         RetainerItemRow: {
@@ -583,10 +707,78 @@ export interface components {
              */
             buyer_tax: number;
             /**
+             * Filters
+             * @description Saddlebag filter IDs.
+             */
+            filters?: number[];
+            /**
+             * Freshness Tiers
+             * @description Snipe alert tiers. Omit to use configured tiers.
+             */
+            freshness_tiers?: components["schemas"]["FreshnessTier"][] | null;
+            /**
+             * History Entries
+             * @description Seven-day sales to fetch from history.
+             * @default 80
+             */
+            history_entries: number;
+            /**
+             * Home Entries
+             * @description Home sale entries fetched.
+             * @default 100
+             */
+            home_entries: number;
+            /**
+             * Home Listings
+             * @description Home listings fetched.
+             * @default 50
+             */
+            home_listings: number;
+            /**
              * Home World
              * @description World where items will be resold.
              */
             home_world: string;
+            /**
+             * Include Vendor
+             * @description Include vendor items.
+             * @default false
+             */
+            include_vendor: boolean;
+            /**
+             * Max Data Age H
+             * @description Listing age limit (h).
+             */
+            max_data_age_h?: number | null;
+            /**
+             * Max Sale Age H
+             * @description Latest sale age limit.
+             */
+            max_sale_age_h?: number | null;
+            /**
+             * Max Top Buyer Share
+             * @description Largest allowed buyer fraction.
+             * @default 1
+             */
+            max_top_buyer_share: number;
+            /**
+             * Min Days With Sales
+             * @description Minimum active sale days.
+             * @default 0
+             */
+            min_days_with_sales: number;
+            /**
+             * Min Distinct Buyers
+             * @description Minimum unique weekly buyers.
+             * @default 0
+             */
+            min_distinct_buyers: number;
+            /**
+             * Min History Sales
+             * @description Minimum weekly sales to price.
+             * @default 3
+             */
+            min_history_sales: number;
             /**
              * Min Ppu
              * @description Minimum purchase price in gil per unit.
@@ -600,10 +792,47 @@ export interface components {
              */
             min_profit: number;
             /**
+             * Min Stack Size
+             * @description Minimum candidate stack size.
+             * @default 1
+             */
+            min_stack_size: number;
+            /**
+             * Min Units Day
+             * @description Minimum average daily volume.
+             * @default 0
+             */
+            min_units_day: number;
+            /**
              * @description Scan strategy.
              * @default flip
              */
             preset: components["schemas"]["ScanPreset"];
+            /**
+             * Quality
+             * @description Qualities to search.
+             * @default both
+             * @enum {string}
+             */
+            quality: "both" | "hq" | "nq";
+            /**
+             * Region Listings
+             * @description Regional listings fetched.
+             * @default 5
+             */
+            region_listings: number;
+            /**
+             * Region Wide
+             * @description Search the full buy region.
+             * @default true
+             */
+            region_wide: boolean;
+            /**
+             * Result Limit
+             * @description Maximum returned rows.
+             * @default 30
+             */
+            result_limit: number | null;
             /**
              * Sellable Days
              * @description Days of sales used to cap quantity.
@@ -616,12 +845,31 @@ export interface components {
              */
             seller_tax: number;
             /**
+             * Show Out Stock
+             * @description Include out-of-stock candidates.
+             * @default false
+             */
+            show_out_stock: boolean;
+            /** @description Rules for snipe strategy. */
+            snipe_rule?: components["schemas"]["SnipeRule"] | null;
+            /**
              * Travel Cost
              * @description Travel cost in gil keyed by data centre name.
              */
             travel_cost?: {
                 [key: string]: number;
             };
+            /**
+             * Undercut Gil
+             * @description Gil below lowest home listing for snipes.
+             * @default 1
+             */
+            undercut_gil: number;
+            /**
+             * Windows
+             * @description Saddlebag searches to combine.
+             */
+            windows?: components["schemas"]["CandidateWindow"][];
         };
         /**
          * ScanPreset
@@ -1431,6 +1679,199 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    hidden_positions_api_positions_hidden_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemRef"][];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    set_personal_api_positions_personal_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PositionPersonal"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_profiles_api_profiles__library__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                library: "scan" | "snipes";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileList"];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_profile_api_profiles__library__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                library: "scan" | "snipes";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileList"];
+                };
             };
             /** @description Invalid Host header */
             400: {
