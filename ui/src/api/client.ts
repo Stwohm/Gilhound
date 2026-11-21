@@ -1,9 +1,9 @@
 import { mockApi } from "./mock";
-import type { operations } from "./types";
+import type { components, operations } from "./types";
 
-type JsonResult<K extends keyof operations> = operations[K]["responses"][200] extends {
+type JsonResult<K extends keyof operations> = operations[K]["responses"] extends { 200: {
   content: { "application/json": infer Data };
-} ? Data : never;
+} } ? Data : never;
 
 type JsonBody<K extends keyof operations> = operations[K] extends {
   requestBody: { content: { "application/json": infer Data } };
@@ -30,11 +30,11 @@ declare global {
   }
 }
 
-const urlToken = new URLSearchParams(window.location.search).get("token");
+
 
 async function request(path: string, method = "GET", body?: unknown): Promise<Response> {
   const headers = new Headers();
-  const token = window.__GILHOUND__?.token || urlToken;
+  const token = window.__GILHOUND__?.token;
   if (token) headers.set("Authorization", `Bearer ${token}`);
   if (body !== undefined) headers.set("Content-Type", "application/json");
 
@@ -51,7 +51,7 @@ async function request(path: string, method = "GET", body?: unknown): Promise<Re
     throw new Error("Could not reach the Gilhound API. Check that the app is running.");
   }
 
-  if (response.status === 501) throw new Error("This feature is not implemented yet.");
+
   if (response.status === 401) throw new Error("Your session could not be authenticated. Reopen Gilhound.");
   if (response.status === 422) throw new Error("The API rejected one or more fields. Check your input.");
   if (!response.ok) throw new Error(`Gilhound API request failed (HTTP ${response.status}).`);
@@ -67,11 +67,22 @@ async function json<T>(path: string, method?: string, body?: unknown): Promise<T
   }
 }
 
+async function job<T>(path: string, params?: unknown): Promise<T> {
+  type Job = components["schemas"]["Job"];
+  let current = await json<Job>(path, "POST", params);
+  while (current.state === "queued" || current.state === "running") {
+    await new Promise(resolve => window.setTimeout(resolve, 400));
+    current = await json<Job>(`/api/jobs/${current.id}`);
+  }
+  if (current.state !== "complete" || current.result == null) throw new Error("Market scan failed. Please retry.");
+  return current.result as T;
+}
+
 const realApi: Api = {
-  scan: (params) => json("/api/scan", "POST", params),
-  retainerScan: (params) => json("/api/retainer-scan", "POST", params),
+  scan: (params) => job("/api/jobs/scan", params),
+  retainerScan: (params) => job("/api/jobs/retainer", params),
   getSnipes: () => json("/api/snipes"),
-  runSnipes: () => json("/api/snipes/run", "POST"),
+  runSnipes: () => job("/api/jobs/snipes"),
   getSources: () => json("/api/sources"),
   getPositions: () => json("/api/positions"),
   getPnl: () => json("/api/pnl"),
@@ -80,10 +91,10 @@ const realApi: Api = {
   getInfo: () => json("/api/info"),
   exportDiagnostics: async () => (await request("/api/diagnostics/export", "POST")).blob(),
   testDiscord: async () => {
-    throw new Error("Discord testing is not implemented yet.");
+    await request("/api/settings/discord/test", "POST");
   },
 };
 
 const mode = import.meta.env.VITE_API_MODE;
-export const mockMode = mode === "mock" || (mode !== "real" && import.meta.env.DEV);
+export const mockMode = import.meta.env.DEV && mode !== "real";
 export const api = mockMode ? mockApi : realApi;

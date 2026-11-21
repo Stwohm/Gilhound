@@ -1,16 +1,21 @@
 """FastAPI contracts for the loopback-only desktop API."""
 
+import json
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable
+from contextlib import asynccontextmanager
 from hmac import compare_digest
+from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from gilhound import __version__
+from gilhound.api.jobs import Job, Jobs
 from gilhound.models import (
     AppInfo,
     PnLSummary,
@@ -23,6 +28,8 @@ from gilhound.models import (
     SourceStatus,
     UserSettings,
 )
+from gilhound.runtime import Runtime
+from gilhound.runtime.discord import DeliveryError
 
 LOCAL_HOST = re.compile(r"(?:localhost|127\.0\.0\.1)(?::([0-9]{1,5}))?", re.ASCII | re.I)
 
@@ -31,12 +38,36 @@ class ApiError(BaseModel):
     detail: str = Field(description="Explanation of the request failure.")
 
 
-def create_app(token: str) -> FastAPI:
+def create_app(
+    token: str,
+    runtime: Runtime | None = None,
+    *,
+    dist: Path | None = None,
+    schedule: bool = True,
+    serve_ui: bool = True,
+) -> FastAPI:
     """Create an API bound to a caller-generated session token."""
     if not token or any(character.isspace() for character in token) or not token.isascii():
         raise ValueError("A non-empty ASCII bearer token without whitespace is required.")
     expected_token = token.encode("ascii")
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        nonlocal runtime
+        runtime = runtime or Runtime()
+        if schedule:
+            runtime.scheduler.start()
+        try:
+            yield
+        finally:
+            runtime.discord.stopped.set()
+            runtime.scheduler.stop()
+            jobs.close()
+            runtime.close()
+
+    jobs = Jobs()
     app = FastAPI(
+        lifespan=lifespan,
         title="Gilhound API",
         version=__version__,
         docs_url=None,
@@ -48,7 +79,6 @@ def create_app(token: str) -> FastAPI:
                 "description": "Missing or invalid bearer token",
                 "headers": {"WWW-Authenticate": {"schema": {"type": "string"}}},
             },
-            501: {"model": ApiError, "description": "Not implemented"},
         },
     )
 
@@ -61,6 +91,8 @@ def create_app(token: str) -> FastAPI:
         if not host or (host[1] is not None and not 1 <= int(host[1]) <= 65535):
             return JSONResponse({"detail": "Invalid Host header"}, status_code=400)
 
+        if serve_ui and (request.url.path == "/" or request.url.path.startswith("/assets/")):
+            return await call_next(request)
         auth = request.headers.getlist("authorization")
         scheme, _, credentials = auth[0].partition(" ") if len(auth) == 1 else ("", "", "")
         if scheme.lower() != "bearer" or not compare_digest(
@@ -73,9 +105,9 @@ def create_app(token: str) -> FastAPI:
             )
         return await call_next(request)
 
-    @app.exception_handler(NotImplementedError)
-    async def handle_stub(_request: Request, _exc: NotImplementedError) -> JSONResponse:
-        return JSONResponse({"detail": "Not implemented"}, status_code=501)
+    @app.exception_handler(DeliveryError)
+    async def delivery_error(_request: Request, exc: DeliveryError) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=502)
 
     @app.exception_handler(RequestValidationError)
     async def handle_validation(_request: Request, exc: RequestValidationError) -> JSONResponse:
@@ -84,44 +116,44 @@ def create_app(token: str) -> FastAPI:
         return JSONResponse({"detail": errors}, status_code=422)
 
     @app.get("/api/info")
-    async def get_info() -> AppInfo:
-        raise NotImplementedError
+    def get_info() -> AppInfo:
+        return AppInfo(version=__version__, update_available=False)
 
     @app.get("/api/settings")
-    async def get_settings() -> UserSettings:
-        raise NotImplementedError
+    def get_settings() -> UserSettings:
+        return runtime.settings.get()
 
     @app.put("/api/settings")
-    async def put_settings(settings: UserSettings) -> UserSettings:
-        raise NotImplementedError
+    def put_settings(settings: UserSettings) -> UserSettings:
+        return runtime.save_settings(settings)
 
     @app.post("/api/scan")
-    async def run_scan(params: ScanParams) -> ScanResult:
-        raise NotImplementedError
+    def run_scan(params: ScanParams) -> ScanResult:
+        return runtime.scan(params)
 
     @app.post("/api/retainer-scan")
-    async def run_retainer_scan(params: RetainerScanParams) -> RetainerScanResult:
-        raise NotImplementedError
+    def run_retainer_scan(params: RetainerScanParams) -> RetainerScanResult:
+        return runtime.retainer(params)
 
     @app.get("/api/snipes")
-    async def get_snipes() -> list[SnipeHit]:
-        raise NotImplementedError
+    def get_snipes() -> list[SnipeHit]:
+        return runtime.history.hits(current=True)
 
     @app.post("/api/snipes/run")
-    async def run_snipes() -> list[SnipeHit]:
-        raise NotImplementedError
+    def run_snipes() -> list[SnipeHit]:
+        return runtime.run_snipes()
 
     @app.get("/api/sources")
-    async def get_sources() -> list[SourceStatus]:
-        raise NotImplementedError
+    def get_sources() -> list[SourceStatus]:
+        return runtime.sources()
 
     @app.get("/api/positions")
-    async def get_positions() -> list[Position]:
-        raise NotImplementedError
+    def get_positions() -> list[Position]:
+        return runtime.ledger().positions
 
     @app.get("/api/pnl")
-    async def get_pnl() -> PnLSummary:
-        raise NotImplementedError
+    def get_pnl() -> PnLSummary:
+        return runtime.ledger().summary
 
     @app.post(
         "/api/diagnostics/export",
@@ -133,8 +165,57 @@ def create_app(token: str) -> FastAPI:
             }
         },
     )
-    async def export_diagnostics() -> Response:
-        raise NotImplementedError
+    def export_diagnostics() -> Response:
+        return Response(
+            runtime.diagnostics(),
+            media_type="application/zip",
+            headers={"Content-Disposition": 'attachment; filename="gilhound-diagnostics.zip"'},
+        )
+
+    @app.post("/api/settings/discord/test", status_code=204)
+    def test_discord() -> Response:
+        runtime.discord.test(runtime.settings.get())
+        return Response(status_code=204)
+
+    @app.post("/api/jobs/scan", status_code=202)
+    def submit_scan(params: ScanParams) -> Job:
+        return jobs.submit(lambda _: runtime.scan(params))
+
+    @app.post("/api/jobs/retainer", status_code=202)
+    def submit_retainer(params: RetainerScanParams) -> Job:
+        return jobs.submit(lambda progress: runtime.retainer(params, progress))
+
+    @app.post("/api/jobs/snipes", status_code=202)
+    def submit_snipes() -> Job:
+        return jobs.submit(lambda _: runtime.run_snipes())
+
+    @app.get("/api/jobs/{key}")
+    def get_job(key: str) -> Job:
+        return jobs.get(key)
+
+    dist = dist or Path(__file__).resolve().parents[2] / "ui" / "dist"
+    if serve_ui:
+
+        @app.get("/", include_in_schema=False)
+        def index() -> HTMLResponse:
+            try:
+                page = (dist / "index.html").read_text(encoding="utf-8")
+            except FileNotFoundError:
+                raise HTTPException(503, "Build the Gilhound UI before opening the app.") from None
+            encoded = json.dumps({"token": token}).replace("<", "\\u003c")
+            bootstrap = f"<script>window.__GILHOUND__ = {encoded};</script>"
+            return HTMLResponse(
+                page.replace("<head>", "<head>" + bootstrap, 1),
+                headers={
+                    "Cache-Control": "no-store",
+                    "X-Frame-Options": "DENY",
+                    "X-Content-Type-Options": "nosniff",
+                    "Referrer-Policy": "no-referrer",
+                },
+            )
+
+        if (dist / "assets").is_dir():
+            app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")
 
     generate_schema = app.openapi
 
