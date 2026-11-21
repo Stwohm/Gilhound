@@ -75,6 +75,9 @@ def test_delivery_retry_tiers_and_persistent_cooldown(tmp_path: Path) -> None:
     sender.notify_many(config.model_copy(update={"discord_notifier": False}), [row], db)
     muted = row.model_copy(update={"tier": row.tier.model_copy(update={"send_discord": False})})
     sender.notify_many(config, [muted], db)
+    partner = row.model_copy(update={"partner": "manual"})
+    assert sender.notify_many(config, [partner], db) == 0
+    assert "🤝 partner item" in discord_embed(partner, "Cerberus", "🪙")["description"]
     assert not calls
     assert sender.notify_many(config, [row], db) == 0
     assert db.hits()[0].notified_ts is None

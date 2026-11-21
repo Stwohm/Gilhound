@@ -81,7 +81,7 @@ async function request(path: string, method = "GET", body?: unknown): Promise<Re
   return response;
 }
 
-async function json<T>(path: string, method?: string, body?: unknown): Promise<T> {
+export async function json<T>(path: string, method?: string, body?: unknown): Promise<T> {
   const response = await request(path, method, body);
   try {
     return await response.json() as T;

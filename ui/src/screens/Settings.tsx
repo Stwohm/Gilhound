@@ -1,3 +1,4 @@
+import { PartnerSettings } from "../Partner";
 import { BridgeIndicator } from "../Travel";
 import { useRef, useState } from "react";
 import type { FormEvent } from "react";
@@ -79,6 +80,7 @@ function SettingsForm({ settings, onSaved }: { settings: Settings; onSaved: (set
         </div>
       </fieldset>
     </Section>
+    <PartnerSettings draft={draft} change={v => setDraft(d => ({...d,...v}))} />
     <Section title="Discord notifications">
       <fieldset className="panel-body editor" disabled={saving}>
         <legend className="sr-only">Discord notifications</legend>

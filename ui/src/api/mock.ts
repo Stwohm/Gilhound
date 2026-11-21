@@ -15,6 +15,8 @@ const pause = (ms = 150) => new Promise<void>((resolve) => window.setTimeout(res
 const costs = new Map<string, number>();
 
 let settings: Settings = {
+  partner_cache_min: 45, partner_regular_days: 5, partner_window_days: 14,
+  suppress_partner_discord: true, share_sender: "",
   min_net_multiple: 1,
   history_days: 90,
   snipe_rule: { max_home_median_ratio: 0.5, max_last_sale_age_h: 24, max_top_buyer_share: 0.5,
@@ -85,6 +87,8 @@ function marketRows(params: Pick<ScanParams, "buyer_tax" | "seller_tax" | "sella
     const profit = entry.median * (1 - params.seller_tax) -
       entry.price * (1 + (params.buyer_tax ?? 0.05)) - (params.travel_cost?.[entry.dc] ?? 0) / Math.max(1,sellable);
     return {
+      you_list: index === 1, partner: index === 0 ? "regular" : null,
+      partner_detail: index === 0 ? "Partner regular: seen 5 of 14 days" : null,
       item: { id: 91001 + index, name: entry.name, hq: entry.hq,
         universalis_url: `https://universalis.app/market/${91001 + index}?server=${encodeURIComponent(settings.home_world)}`,
         saddlebag_url: `https://saddlebagexchange.com/queries/item-data/${91001 + index}` },
@@ -214,6 +218,7 @@ export const mockApi: Api = {
         ? pricedListings.slice(0, 4).map((row, index) => {
           const cheapest = index === 3 ? undefined : regional.find((candidate) => candidate.item.id === row.item.id);
           return {
+            partner: row.partner, partner_detail: row.partner_detail, you_list: row.you_list,
             item: row.item, their_ppu: row.home_median_7d, qty: index + 2, data_age_h: 0.22 + index * 0.8,
             cheapest_world: cheapest?.buy_world ?? null, cheapest_dc: cheapest?.buy_dc ?? null,
             cheapest_ppu: cheapest?.buy_ppu ?? null, cheapest_qty: cheapest?.buy_qty_at_price ?? null,

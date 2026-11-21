@@ -142,9 +142,10 @@ def discord_embed(hit: SnipeHit, home: str, coin: str) -> dict:
         ("📈 Sells", f"{sales} · {last} · top buyer {proof.top_buyer_share:.0%}"),
         ("🕒 Buy listing last seen", f"{hit.data_age_h * 60:,.0f} min ({tier})"),
     ]
+    partner_line = "\n🤝 partner item" if hit.partner else ""
     embed = {
         "title": clip(hit.item.name, 253) + (" HQ" if hit.item.hq else ""),
-        "description": f"```\n/li {world} market\n```",
+        "description": f"```\n/li {world} market\n```" + partner_line,
         "color": 0x2ECC71 if tier.casefold() == "fresh" else 0xF1A52B,
         "fields": [
             {"name": clip(k, 256), "value": clip(v, 512), "inline": True} for k, v in fields

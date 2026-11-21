@@ -3,13 +3,15 @@
 import argparse
 import json
 import sys
+import time
 from collections.abc import Sequence
 from contextlib import closing
 from typing import Any
 
 from gilhound.ledger.fifo import rollup_sales
-from gilhound.models import RetainerScanParams, ScanPreset
+from gilhound.models import PartnerShare, RetainerScanParams, ScanPreset
 from gilhound.runtime import Runtime
+from gilhound.runtime.partner import decode, encode
 from gilhound.runtime.profiles import BUILTINS
 
 
@@ -46,6 +48,31 @@ def report(runtime: Runtime, args: argparse.Namespace) -> dict:
                   "volume_proof.last_sale_age_h", "volume_proof.top_buyer_share", "data_age_h"]
     result = {"command": args.command}
     total = None
+    if args.command == "partner":
+        settings = runtime.settings.get()
+        if args.action == "share":
+            share = PartnerShare(version=1, sender=settings.share_sender,
+                                 created_ts=int(time.time()), items=settings.own_avoid,
+                                 retainers=settings.own_retainers if args.include_retainers else [])
+            return {"code": encode(share)}
+        if args.action == "import":
+            share = decode(args.code)
+            previous = settings.partner_manual
+            before = {(i.id, i.hq) for i in previous.items} if previous else set()
+            after = {(i.id, i.hq) for i in share.items}
+            changes = {"adds": sorted(after - before), "removes": sorted(before - after),
+                       "created_ts": share.created_ts}
+            if args.preview:
+                return changes
+            runtime.settings.save(settings.model_copy(update={
+                "partner_manual": share.model_copy(update={"retainers": []}),
+            }))
+            return {**changes, "imported": len(share.items)}
+        if args.action == "sweep":
+            task = runtime.partners.refresh(force=True)
+            if task:
+                task.result()
+        return runtime.partners.status(settings)
     if args.command == "scan":
         if args.profile:
             profiles = runtime.profiles.list("scan", runtime.settings.get())
@@ -58,7 +85,7 @@ def report(runtime: Runtime, args: argparse.Namespace) -> dict:
         scan = runtime.scan(params, profile)
         if not fields:
             fields = ["item.name", "item.hq", "buy_world", "buy_ppu", "sellable_qty",
-                      "profit_per_unit", "total_profit_capped"]
+                      "profit_per_unit", "total_profit_capped", "partner"]
         rows = scan.rows
         result.update(
             started_ts=scan.started_ts,
@@ -67,7 +94,7 @@ def report(runtime: Runtime, args: argparse.Namespace) -> dict:
         )
     elif args.command == "history":
         if args.action == "show":
-            return runtime.history.entry(args.id).model_dump()
+            return runtime.archive_entry(args.id).model_dump()
         rows, total = runtime.history.entry_page(kind=args.kind, limit=args.top)
     elif args.command == "profiles":
         profiles = runtime.profiles.list(args.library, runtime.settings.get())
@@ -87,6 +114,7 @@ def report(runtime: Runtime, args: argparse.Namespace) -> dict:
         )
     elif args.command == "snipes":
         rows = runtime.run_snipes() if args.run else runtime.history.hits()
+        runtime.partners.mark(rows, runtime.settings.get())
     elif args.command == "sales":
         rows = runtime.ledger().filtered_sales(args.since, args.until, args.item, args.retainer)
         if args.rollup:
@@ -139,6 +167,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     show = history.add_subparsers(dest="action").add_parser("show")
     show.add_argument("id", type=int)
     show.add_argument("--json", action="store_true")
+    partner = commands.add_parser("partner", parents=[common])
+    actions = partner.add_subparsers(dest="action", required=True)
+    actions.add_parser("status")
+    actions.add_parser("sweep")
+    actions.add_parser("share").add_argument("--include-retainers", action="store_true")
+    incoming = actions.add_parser("import")
+    incoming.add_argument("code")
+    incoming.add_argument("--preview", action="store_true", help="Show changes before importing")
     retainer = commands.add_parser("retainer", parents=[common])
     retainer.add_argument("name")
     retainer.add_argument("--world")

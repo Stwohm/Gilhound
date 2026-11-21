@@ -185,6 +185,33 @@
         "title": "ArchiveSummary",
         "type": "object"
       },
+      "AvoidItem": {
+        "additionalProperties": false,
+        "properties": {
+          "hq": {
+            "title": "Hq",
+            "type": "boolean"
+          },
+          "id": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 2147483647.0,
+            "title": "Id",
+            "type": "integer"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 160,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "hq"
+        ],
+        "title": "AvoidItem",
+        "type": "object"
+      },
       "BridgeGo": {
         "properties": {
           "world": {
@@ -461,6 +488,74 @@
           "retainer"
         ],
         "type": "string"
+      },
+      "PartnerRetainer": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "\\S",
+            "title": "Name",
+            "type": "string"
+          },
+          "world": {
+            "default": "",
+            "maxLength": 64,
+            "title": "World",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "PartnerRetainer",
+        "type": "object"
+      },
+      "PartnerShare": {
+        "additionalProperties": false,
+        "properties": {
+          "created_ts": {
+            "maximum": 253402300799.0,
+            "minimum": 0.0,
+            "title": "Created Ts",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AvoidItem"
+            },
+            "maxItems": 500,
+            "title": "Items",
+            "type": "array"
+          },
+          "retainers": {
+            "items": {
+              "$ref": "#/components/schemas/PartnerRetainer"
+            },
+            "maxItems": 64,
+            "title": "Retainers",
+            "type": "array"
+          },
+          "sender": {
+            "maxLength": 80,
+            "title": "Sender",
+            "type": "string"
+          },
+          "version": {
+            "const": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "sender",
+          "created_ts",
+          "items"
+        ],
+        "title": "PartnerShare",
+        "type": "object"
       },
       "PnLSummary": {
         "properties": {
@@ -1215,6 +1310,33 @@
             "$ref": "#/components/schemas/ItemRef",
             "description": "Item and quality variant."
           },
+          "partner": {
+            "anyOf": [
+              {
+                "enum": [
+                  "now",
+                  "regular",
+                  "manual"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partner"
+          },
+          "partner_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partner Detail"
+          },
           "profit_per_unit": {
             "anyOf": [
               {
@@ -1251,6 +1373,11 @@
             "exclusiveMinimum": 0.0,
             "title": "Their Ppu",
             "type": "integer"
+          },
+          "you_list": {
+            "default": false,
+            "title": "You List",
+            "type": "boolean"
           }
         },
         "required": [
@@ -2045,6 +2172,33 @@
             ],
             "title": "Next Listing Gap"
           },
+          "partner": {
+            "anyOf": [
+              {
+                "enum": [
+                  "now",
+                  "regular",
+                  "manual"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partner"
+          },
+          "partner_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partner Detail"
+          },
           "profit_per_day": {
             "anyOf": [
               {
@@ -2163,6 +2317,11 @@
               }
             ],
             "title": "Whole Stack Outlay"
+          },
+          "you_list": {
+            "default": false,
+            "title": "You List",
+            "type": "boolean"
           }
         },
         "required": [
@@ -2181,6 +2340,20 @@
           "data_age_h"
         ],
         "title": "ScanRow",
+        "type": "object"
+      },
+      "ShareCode": {
+        "properties": {
+          "code": {
+            "maxLength": 256000,
+            "title": "Code",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "ShareCode",
         "type": "object"
       },
       "SnipeHit": {
@@ -2497,6 +2670,33 @@
             "description": "Last notification in UTC epoch seconds, if sent.",
             "title": "Notified Ts"
           },
+          "partner": {
+            "anyOf": [
+              {
+                "enum": [
+                  "now",
+                  "regular",
+                  "manual"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partner"
+          },
+          "partner_detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partner Detail"
+          },
           "profit_per_day": {
             "anyOf": [
               {
@@ -2619,6 +2819,11 @@
               }
             ],
             "title": "Whole Stack Outlay"
+          },
+          "you_list": {
+            "default": false,
+            "title": "You List",
+            "type": "boolean"
           }
         },
         "required": [
@@ -2720,6 +2925,17 @@
             "default": 0,
             "title": "Notified",
             "type": "integer"
+          },
+          "partner_age_min": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Partner Age Min"
           },
           "running": {
             "default": false,
@@ -2867,6 +3083,61 @@
             "title": "Min Net Multiple",
             "type": "number"
           },
+          "own_avoid": {
+            "items": {
+              "$ref": "#/components/schemas/AvoidItem"
+            },
+            "maxItems": 500,
+            "title": "Own Avoid",
+            "type": "array"
+          },
+          "own_retainers": {
+            "items": {
+              "$ref": "#/components/schemas/PartnerRetainer"
+            },
+            "maxItems": 64,
+            "title": "Own Retainers",
+            "type": "array"
+          },
+          "partner_cache_min": {
+            "default": 45,
+            "maximum": 1440.0,
+            "minimum": 1.0,
+            "title": "Partner Cache Min",
+            "type": "integer"
+          },
+          "partner_manual": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PartnerShare"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "partner_regular_days": {
+            "default": 5,
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Partner Regular Days",
+            "type": "integer"
+          },
+          "partner_retainers": {
+            "items": {
+              "$ref": "#/components/schemas/PartnerRetainer"
+            },
+            "maxItems": 64,
+            "title": "Partner Retainers",
+            "type": "array"
+          },
+          "partner_window_days": {
+            "default": 14,
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Partner Window Days",
+            "type": "integer"
+          },
           "scan_interval_min": {
             "default": 5,
             "description": "Minutes between snipe scans.",
@@ -2875,8 +3146,19 @@
             "title": "Scan Interval Min",
             "type": "integer"
           },
+          "share_sender": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Share Sender",
+            "type": "string"
+          },
           "snipe_rule": {
             "$ref": "#/components/schemas/SnipeRule"
+          },
+          "suppress_partner_discord": {
+            "default": true,
+            "title": "Suppress Partner Discord",
+            "type": "boolean"
           },
           "travel_cost": {
             "additionalProperties": {
@@ -2981,6 +3263,61 @@
             "title": "Min Net Multiple",
             "type": "number"
           },
+          "own_avoid": {
+            "items": {
+              "$ref": "#/components/schemas/AvoidItem"
+            },
+            "maxItems": 500,
+            "title": "Own Avoid",
+            "type": "array"
+          },
+          "own_retainers": {
+            "items": {
+              "$ref": "#/components/schemas/PartnerRetainer"
+            },
+            "maxItems": 64,
+            "title": "Own Retainers",
+            "type": "array"
+          },
+          "partner_cache_min": {
+            "default": 45,
+            "maximum": 1440.0,
+            "minimum": 1.0,
+            "title": "Partner Cache Min",
+            "type": "integer"
+          },
+          "partner_manual": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PartnerShare"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "partner_regular_days": {
+            "default": 5,
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Partner Regular Days",
+            "type": "integer"
+          },
+          "partner_retainers": {
+            "items": {
+              "$ref": "#/components/schemas/PartnerRetainer"
+            },
+            "maxItems": 64,
+            "title": "Partner Retainers",
+            "type": "array"
+          },
+          "partner_window_days": {
+            "default": 14,
+            "maximum": 90.0,
+            "minimum": 1.0,
+            "title": "Partner Window Days",
+            "type": "integer"
+          },
           "scan_interval_min": {
             "default": 5,
             "description": "Minutes between snipe scans.",
@@ -2989,8 +3326,19 @@
             "title": "Scan Interval Min",
             "type": "integer"
           },
+          "share_sender": {
+            "default": "",
+            "maxLength": 80,
+            "title": "Share Sender",
+            "type": "string"
+          },
           "snipe_rule": {
             "$ref": "#/components/schemas/SnipeRule"
+          },
+          "suppress_partner_discord": {
+            "default": true,
+            "title": "Suppress Partner Discord",
+            "type": "boolean"
           },
           "travel_cost": {
             "additionalProperties": {
@@ -3122,7 +3470,7 @@
   },
   "info": {
     "title": "Gilhound API",
-    "version": "0.2.0"
+    "version": "0.2.1"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -3883,6 +4231,184 @@
           }
         },
         "summary": "Get Job"
+      }
+    },
+    "/api/partner/preview": {
+      "post": {
+        "operationId": "preview_share_api_partner_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ShareCode"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerShare"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Share"
+      }
+    },
+    "/api/partner/share": {
+      "post": {
+        "operationId": "partner_share_api_partner_share_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartnerShare"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Partner Share Api Partner Share Post",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Partner Share"
+      }
+    },
+    "/api/partner/status": {
+      "get": {
+        "operationId": "partner_status_api_partner_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Partner Status Api Partner Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Partner Status"
       }
     },
     "/api/pnl": {

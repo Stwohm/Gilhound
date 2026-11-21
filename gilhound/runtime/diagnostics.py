@@ -69,6 +69,7 @@ def archive(root: Path, settings: UserSettings, sources: list[SourceStatus]) -> 
     for key, names in (("home_world", {"Cerberus"}), ("buy_region", {"Europe", "Chaos", "Light"})):
         if data[key] not in names:
             data[key] = "[custom]"
+    data["partner_retainer_count"] = len(settings.partner_retainers)
     data["travel_cost"] = {
         k if k in {"Chaos", "Light"} else f"custom-{i}": v
         for i, (k, v) in enumerate(settings.travel_cost.items())

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import ProfileEditor from "./ProfileEditor";
+import { PartnerBadge, usePartnerFilter, visiblePartnerRow } from "../Partner";
 import { api } from "../api/client";
 import {
   Badge, Item, Loading, Notice, PageTitle, Section, Table, ResourceState, useResource, age, ageTone, epoch, errorMessage, gil, time,
@@ -10,6 +11,7 @@ type Hit = Schema<"SnipeHit">;
 const sessionHistory = new Map<string, Hit>();
 
 export default function Snipes({ resource }: { resource: ReturnType<typeof useResource<Settings>> }) {
+  const {hide,control} = usePartnerFilter();
   const settings = resource.data;
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<Schema<"SnipeStatus">>();
@@ -147,18 +149,20 @@ export default function Snipes({ resource }: { resource: ReturnType<typeof useRe
       <small>{state} · {status?.last_run_ts
         ? `Last run ${time(status.last_run_ts)} · ${status.fresh} fresh · ${status.stale} stale · ${status.notified} notified`
         : "No completed run yet"}</small>
+      {!!settings.partner_retainers?.length && <small>{status?.partner_age_min == null ? "Partner data pending" : `Partner data ${status.partner_age_min} min old`}</small>}
       {statusError && <Notice tone="error">{statusError}</Notice>}
     </section> : <ResourceState error={resource.error} retry={resource.retry} loading="Loading snipe controls…" />}
     <Section title="Snipe rules"><ProfileEditor library="snipes" /></Section>
     {runError && <Notice tone="error">{runError}</Notice>}
     <Section title="Live listings" detail={lastChecked == null ? "Refreshes every 15 seconds" : `Last checked ${time(lastChecked)} · Refreshes every 15 seconds`}>
+      {control}
       {pollError && <Notice tone="error">{pollError}</Notice>}
       {hits === undefined && !pollError && <Loading>Loading snipe listings…</Loading>}
       {hits?.length === 0 && <Notice>No current listings match your snipe rules.</Notice>}
       {!!hits?.length && <Table label="Live snipe listings">
         <thead><tr>{["Item", "Buy world / DC", "Buy price", "Qty at price", "Home median", "Profit / unit", "Demand (7d)", "Tier / buy listing last seen", "Discord"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
-        <tbody>{hits.map((hit) => <tr key={hit.listing_key}>
-          <td><Item quote={quote(hit)} buyWorld={hit.buy_world} item={hit.item} /></td><td>{hit.buy_world} <small>{hit.buy_dc}</small></td>
+        <tbody>{hits.filter(h => visiblePartnerRow(h, hide)).map((hit) => <tr key={hit.listing_key}>
+          <td><PartnerBadge row={hit}/><Item quote={quote(hit)} buyWorld={hit.buy_world} item={hit.item} /></td><td>{hit.buy_world} <small>{hit.buy_dc}</small></td>
           <td>{gil(hit.buy_ppu)}</td><td>{gil(hit.buy_qty_at_price)}</td><td>{gil(hit.home_median_7d)}</td>
           <td><strong className={hit.profit_per_unit >= 0 ? "profit" : "loss"}>{gil(hit.profit_per_unit)}</strong></td>
           <td>{hit.volume_proof.units_per_day.toFixed(1)} units/day · {hit.volume_proof.distinct_buyers_7d} buyers<br/>
@@ -171,8 +175,8 @@ export default function Snipes({ resource }: { resource: ReturnType<typeof useRe
     <Section title="Snipe history" detail="Listings observed during this session">
       {history.length ? <Table label="Snipe history">
         <thead><tr>{["First seen", "Item", "Buy world", "Buy price", "Tier / buy listing last seen at scan time", "Last notified"].map((label) => <th key={label} scope="col">{label}</th>)}</tr></thead>
-        <tbody>{[...history].sort((a, b) => b.first_seen_ts - a.first_seen_ts).map((hit) => <tr key={hit.listing_key}>
-          <td>{time(hit.first_seen_ts)}</td><td><Item quote={quote(hit)} buyWorld={hit.buy_world} item={hit.item} /></td><td>{hit.buy_world}</td><td>{gil(hit.buy_ppu)}</td>
+        <tbody>{history.filter(h => visiblePartnerRow(h, hide)).sort((a, b) => b.first_seen_ts - a.first_seen_ts).map((hit) => <tr key={hit.listing_key}>
+          <td>{time(hit.first_seen_ts)}</td><td><PartnerBadge row={hit}/><Item quote={quote(hit)} buyWorld={hit.buy_world} item={hit.item} /></td><td>{hit.buy_world}</td><td>{gil(hit.buy_ppu)}</td>
           <td><Badge tone={ageTone(hit.data_age_h)}>{hit.tier.name} · {age(hit.data_age_h)}</Badge></td>
           <td>{hit.notified_ts == null ? "Not notified" : time(hit.notified_ts)}</td>
         </tr>)}</tbody>

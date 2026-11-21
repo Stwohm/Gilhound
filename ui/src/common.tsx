@@ -7,6 +7,8 @@ import type { components } from "./api/types";
 export type Schema<K extends keyof components["schemas"]> = components["schemas"][K];
 export type Settings = Schema<"UserSettings-Output">;
 export const defaults: Settings = {
+  partner_cache_min: 45, partner_regular_days: 5, partner_window_days: 14,
+  suppress_partner_discord: true, share_sender: "",
   min_net_multiple: 1,
   history_days: 90,
   home_world: "Cerberus",

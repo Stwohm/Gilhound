@@ -29,6 +29,8 @@ from gilhound.updater._layout import (
     write_pointer,
 )
 
+from .motw import unblock
+
 FEED = "https://api.github.com/repos/Stwohm/Gilhound/releases/latest"
 
 
@@ -141,6 +143,7 @@ def download_and_stage(
                 try:
                     with ZipFile(temp) as archive:
                         _extract(archive, partial, version)
+                    unblock(partial)
                     partial.rename(folder)
                     (folder / "READY").touch()
                 finally:

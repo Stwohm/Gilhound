@@ -201,7 +201,13 @@ class ScanParams(BaseModel):
         return defaults | values
 
 
-class ScanRow(BaseModel):
+class PartnerMark(BaseModel):
+    partner: Literal["now", "regular", "manual"] | None = None
+    partner_detail: str | None = None
+    you_list: bool = False
+
+
+class ScanRow(PartnerMark):
     ask_exit_ppu: float | None = None
     ask_profit_per_unit: float | None = None
     ask_profit_capped: float | None = None
@@ -279,6 +285,7 @@ class ScanResult(BaseModel):
 
 
 class SnipeStatus(BaseModel):
+    partner_age_min: int | None = None
     running: bool = False
     next_run_ts: EpochSeconds | None = None
     last_run_ts: EpochSeconds | None = None
@@ -306,7 +313,7 @@ class RetainerScanParams(BaseModel):
     )
 
 
-class RetainerItemRow(BaseModel):
+class RetainerItemRow(PartnerMark):
     item: ItemRef = Field(description="Item and quality variant.")
     their_ppu: int = Field(gt=0, description="Retainer's listed gil per unit.")
     qty: int = Field(gt=0, description="Units in the retainer's listing.")
@@ -448,7 +455,48 @@ class PnLSummary(BaseModel):
     unknown_cost_qty_sold: int = Field(ge=0, description="Sold units with unknown cost basis.")
 
 
+class PartnerRetainer(BaseModel, extra="forbid"):
+    name: str = Field(min_length=1, max_length=64, pattern=r"\S")
+    world: str = Field(default="", max_length=64)
+
+
+class AvoidItem(BaseModel, extra="forbid"):
+    id: int = Field(gt=0, le=2147483647)
+    hq: bool
+    note: str = Field(default="", max_length=160)
+
+
+class PartnerShare(BaseModel, extra="forbid"):
+    version: Literal[1]
+    sender: str = Field(max_length=80)
+    created_ts: int = Field(ge=0, le=253402300799)
+    items: list[AvoidItem] = Field(max_length=500)
+    retainers: list[PartnerRetainer] = Field(default_factory=list, max_length=64)
+
+    @model_validator(mode="after")
+    def unique_items(self) -> "PartnerShare":
+        if len({(i.id, i.hq) for i in self.items}) != len(self.items):
+            raise ValueError("Duplicate item and quality")
+        return self
+
+
 class UserSettings(BaseModel):
+    partner_retainers: list[PartnerRetainer] = Field(default_factory=list, max_length=64)
+    partner_cache_min: int = Field(default=45, ge=1, le=1440)
+    partner_window_days: int = Field(default=14, ge=1, le=90)
+    partner_regular_days: int = Field(default=5, ge=1, le=90)
+    suppress_partner_discord: bool = True
+    share_sender: str = Field(default="", max_length=80)
+    own_avoid: list[AvoidItem] = Field(default_factory=list, max_length=500)
+    own_retainers: list[PartnerRetainer] = Field(default_factory=list, max_length=64)
+    partner_manual: PartnerShare | None = None
+
+    @model_validator(mode="after")
+    def valid_partner_window(self) -> "UserSettings":
+        if self.partner_regular_days > self.partner_window_days:
+            raise ValueError("Partner regular days must fit within the history window")
+        return self
+
     large_buy_gil: GilCost | None = Field(
         default=None, description="Large-buy taxed outlay threshold."
     )

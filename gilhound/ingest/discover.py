@@ -17,8 +17,12 @@ def plugin_config_root() -> Path:
 def read_plugins(root: Path | None = None, *, local_tz: tzinfo | None = None) -> list[Source]:
     if root is None:
         root = plugin_config_root()
+    return [cashflow.read(root / "CashFlow"), *listing_sources(root, local_tz)]
+
+
+def listing_sources(root: Path | None = None, local_tz: tzinfo | None = None) -> list[Source]:
+    root = root or plugin_config_root()
     return [
-        cashflow.read(root / "CashFlow"),
         allagan_market.read(root / "AllaganMarket", local_tz),
         allagan_tools.read(root / "InventoryTools"),
         restocky.read(root / "Restocky"),

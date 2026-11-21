@@ -21,6 +21,13 @@ __all__ = [
 ]
 
 
+def latest_listing_source(sources: Iterable[Source]) -> Source | None:
+    listings = (s for s in sources if s.status.recognised and s.records.listings is not None)
+    rank = {SourceName.ALLAGAN_MARKET: 2, SourceName.ALLAGAN_TOOLS: 1}
+    return max(listings, key=lambda s: (s.records.listings_mtime or 0, rank.get(s.status.name, 0)),
+               default=None)
+
+
 def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | None = None) -> Ledger:
     """Replay history then reconcile current stock as a lower bound on holdings.
 
@@ -35,13 +42,7 @@ def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | Non
     replay = calculate(history, manual)
     existing = {(p.item.id, p.item.hq): p.qty_open for p in replay.positions}
     ts = max([0, *(e.ts for e in replay.events), *(s.status.last_update_ts or 0 for s in inputs)])
-    listings = [s for s in inputs if s.records.listings is not None]
-    rank = {SourceName.ALLAGAN_MARKET: 2, SourceName.ALLAGAN_TOOLS: 1}
-    latest = max(
-        listings,
-        key=lambda s: (s.records.listings_mtime or 0, rank.get(s.status.name, 0)),
-        default=None,
-    )
+    latest = latest_listing_source(inputs)
     manual_costs = {
         (a.item.id, a.item.hq)
         for a in manual.items

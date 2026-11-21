@@ -18,6 +18,7 @@ import uvicorn
 
 from gilhound import __version__
 from gilhound.api.app import create_app
+from gilhound.runtime.diagnostics import LOG
 from gilhound.updater._layout import acknowledge_startup
 
 
@@ -45,6 +46,33 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--launcher-pid", type=int, help=argparse.SUPPRESS)
     parser.add_argument("--ready-marker", type=Path, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if sys.platform == "win32":
+        try:
+            if getattr(sys, "frozen", False):
+                from gilhound.updater.motw import unblock
+
+                folder = Path(sys.executable).parent
+                count = unblock(folder)
+                if count:
+                    with (folder.parent / "launcher.log").open("a", encoding="utf-8") as log:
+                        log.write(f"Desktop removed download marks from {count} files.\n")
+            import clr  # noqa: F401 -- initialise pythonnet before starting the API
+        except (ImportError, OSError, RuntimeError):
+            folder_arg = str(Path(sys.executable).parent).replace("'", "''")
+            ctypes.windll.user32.MessageBoxW(
+                None,
+                "Gilhound could not load its Windows desktop runtime. Install or repair "
+                "Microsoft Edge WebView2 Runtime and .NET Framework 4.8. Close Gilhound, "
+                "then unblock the installed release in PowerShell and reopen it:\n\n"
+                f"Get-ChildItem -LiteralPath '{folder_arg}' "
+                "-File -Recurse | Unblock-File",
+                "Gilhound", 0x10,
+            )
+            return 1
+    return _window(args)
+
+
+def _window(args: argparse.Namespace) -> int:
     import webview
 
     if sys.platform == "win32" and not webview2_available(Path(webview.__file__).parent / "lib"):
@@ -81,6 +109,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 def acknowledge() -> None:
                     if worker.is_alive() and not server.should_exit:
                         acknowledge_startup(__version__, args.ready_marker)
+                        LOG.info("Desktop ready")
 
                 window.events.shown += acknowledge
             icon = Path(__file__).resolve().parents[1] / "assets" / "gilhound.ico"
