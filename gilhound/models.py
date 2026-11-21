@@ -23,6 +23,8 @@ class DataCenter(BaseModel):
 
 
 class ItemRef(BaseModel):
+    universalis_url: str | None = None
+    saddlebag_url: str | None = None
     id: int = Field(gt=0, description="Item ID.")
     name: str = Field(description="Item display name.")
     hq: bool = Field(description="Whether this is the high-quality variant.")
@@ -202,6 +204,7 @@ class LedgerEvent(BaseModel):
 
 class Position(BaseModel):
     item: ItemRef = Field(description="Item and quality variant held.")
+    known_capital: int = Field(default=0, ge=0, description="Cost of remaining known FIFO lots.")
     qty_open: int = Field(ge=0, description="Units still held, including listed units.")
     avg_cost: float | None = Field(description="Average open cost in gil, if known.")
     cost_known: bool = Field(description="Whether all open units have a known cost basis.")

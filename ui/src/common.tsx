@@ -87,7 +87,18 @@ export function Badge({ children, tone = "muted" }: { children: ReactNode; tone?
 }
 
 export function Item({ item, showQuality = true }: { item: Schema<"ItemRef">; showQuality?: boolean }) {
-  return <span className="item-name">{item.name}{showQuality && <Badge tone={item.hq ? "gold" : "muted"}>{item.hq ? "HQ" : "NQ"}</Badge>}</span>;
+  const world = item.universalis_url && new URL(item.universalis_url).searchParams.get("server");
+  const links = [
+    { url: item.universalis_url, label: `Open on Universalis (${world})`, badge: "U" },
+    { url: item.saddlebag_url, label: "Open on Saddlebag Exchange", badge: "S" },
+  ];
+  return <span className="item-name">{item.name}{links.map(({ url, label, badge }) => url &&
+    <a key={badge} href={url} target="_blank" rel="noopener noreferrer" title={label} aria-label={label}>
+      <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
+        <rect x="1" y="1" width="16" height="16" rx="3" fill="none" stroke="currentColor" />
+        <text x="9" y="13" textAnchor="middle" fill="currentColor" fontSize="12">{badge}</text>
+      </svg>
+    </a>)}{showQuality && <Badge tone={item.hq ? "gold" : "muted"}>{item.hq ? "HQ" : "NQ"}</Badge>}</span>;
 }
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {

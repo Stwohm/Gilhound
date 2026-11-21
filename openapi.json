@@ -104,6 +104,28 @@
             "description": "Item display name.",
             "title": "Name",
             "type": "string"
+          },
+          "saddlebag_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Saddlebag Url"
+          },
+          "universalis_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Universalis Url"
           }
         },
         "required": [
@@ -222,6 +244,13 @@
             "$ref": "#/components/schemas/ItemRef",
             "description": "Item and quality variant held."
           },
+          "known_capital": {
+            "default": 0,
+            "description": "Cost of remaining known FIFO lots.",
+            "minimum": 0.0,
+            "title": "Known Capital",
+            "type": "integer"
+          },
           "listed_qty": {
             "description": "Open units currently listed.",
             "minimum": 0.0,
@@ -249,6 +278,31 @@
           "realised_profit"
         ],
         "title": "Position",
+        "type": "object"
+      },
+      "PositionCost": {
+        "properties": {
+          "hq": {
+            "title": "Hq",
+            "type": "boolean"
+          },
+          "item_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Item Id",
+            "type": "integer"
+          },
+          "unit_cost": {
+            "minimum": 0.0,
+            "title": "Unit Cost",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "item_id",
+          "hq",
+          "unit_cost"
+        ],
+        "title": "PositionCost",
         "type": "object"
       },
       "Result": {
@@ -1174,7 +1228,7 @@
   },
   "info": {
     "title": "Gilhound API",
-    "version": "0.1.1"
+    "version": "0.1.2"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -1558,6 +1612,23 @@
     "/api/positions": {
       "get": {
         "operationId": "get_positions_api_positions_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "view",
+            "required": false,
+            "schema": {
+              "default": "open",
+              "enum": [
+                "open",
+                "closed",
+                "all"
+              ],
+              "title": "View",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -1599,9 +1670,77 @@
                 }
               }
             }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
         "summary": "Get Positions"
+      }
+    },
+    "/api/positions/cost": {
+      "put": {
+        "operationId": "set_position_cost_api_positions_cost_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PositionCost"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Position Cost"
       }
     },
     "/api/retainer-scan": {

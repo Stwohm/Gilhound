@@ -30,6 +30,7 @@ def run_retainer_scan(
     progress: Callable[[int, int], None] | None = None,
     home_world: str = "Cerberus",
     buy_region: str = "Europe",
+    marketable: Callable[[], Iterable[int]] | None = None,
     item_names: Mapping[int, str] | None = None,
     http: HttpClient | None = None,
 ) -> RetainerScanResult:
@@ -39,7 +40,7 @@ def run_retainer_scan(
     centers = api.data_centers()
     names = {w.id: w.name for dc in centers for w in dc.worlds}
     dcs = {w.name: w.dc for dc in centers for w in dc.worlds}
-    ids = sorted(set(api.marketable()))
+    ids = sorted(set((marketable or api.marketable)()))
     matched: dict[int, list[Listing]] = {}
     done = checked = 0
     warnings = []

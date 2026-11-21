@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from hmac import compare_digest
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -34,6 +34,12 @@ from gilhound.runtime.discord import DeliveryError
 
 LOCAL_HOST = re.compile(r"(?:localhost|127\.0\.0\.1)(?::([0-9]{1,5}))?", re.ASCII | re.I)
 UI_ICONS = ("/favicon.ico", "/favicon.png", "/apple-touch-icon.png")
+
+
+class PositionCost(BaseModel):
+    item_id: int = Field(gt=0)
+    hq: bool
+    unit_cost: int = Field(ge=0)
 
 
 class ApiError(BaseModel):
@@ -150,7 +156,9 @@ def create_app(
 
     @app.get("/api/snipes")
     def get_snipes() -> list[SnipeHit]:
-        return runtime.history.hits(current=True)
+        hits = runtime.history.hits(current=True)
+        runtime.items.decorate((r.item for r in hits), runtime.settings.get().home_world)
+        return hits
 
     @app.post("/api/snipes/run")
     def run_snipes() -> list[SnipeHit]:
@@ -161,8 +169,16 @@ def create_app(
         return runtime.sources()
 
     @app.get("/api/positions")
-    def get_positions() -> list[Position]:
-        return runtime.ledger().positions
+    def get_positions(view: Literal["open", "closed", "all"] = "open") -> list[Position]:
+        rows = [p for p in runtime.ledger().positions
+                if view == "all" or (p.qty_open > 0) == (view == "open")]
+        runtime.items.decorate((r.item for r in rows), runtime.settings.get().home_world)
+        return rows
+
+    @app.put("/api/positions/cost", status_code=204)
+    def set_position_cost(cost: PositionCost) -> Response:
+        runtime.set_cost(cost.item_id, cost.hq, cost.unit_cost)
+        return Response(status_code=204)
 
     @app.get("/api/pnl")
     def get_pnl() -> PnLSummary:

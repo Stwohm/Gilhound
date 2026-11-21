@@ -8,8 +8,18 @@ from fastapi.testclient import TestClient
 
 from gilhound import __version__
 from gilhound.api.app import create_app
-from gilhound.models import RetainerScanParams, RetainerScanResult, ScanParams, ScanResult
+from gilhound.ingest.common import Records, Source, Stock, event, item_ref
+from gilhound.models import (
+    LedgerEventKind,
+    RetainerScanParams,
+    RetainerScanResult,
+    ScanParams,
+    ScanResult,
+    SourceName,
+    SourceStatus,
+)
 from gilhound.runtime import Runtime
+from gilhound.sources.fixtures import install
 
 
 def test_local_integration(tmp_path: Path, token: str, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -84,3 +94,45 @@ def test_local_integration(tmp_path: Path, token: str, monkeypatch: pytest.Monke
             time.sleep(0.01)
         assert state["result"]["items_scanned"] == 8
         assert client.get("/api/jobs/unknown").status_code == 404
+
+
+def test_position_views_and_cost(
+    tmp_path: Path, token: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    runtime = Runtime(tmp_path, tmp_path / "empty")
+    listed, sold = item_ref(5056, False), item_ref(5333, True)
+    records = Records(
+        listings=[Stock(listed, 3)],
+        events=[
+            event(SourceName.CASHFLOW, LedgerEventKind.BUY, sold, 1, 1, 6),
+            event(SourceName.CASHFLOW, LedgerEventKind.SELL, sold, 1, 2, 9),
+        ],
+    )
+    source = Source(
+        SourceStatus(name=SourceName.ALLAGAN_MARKET, found=True, recognised=True), records
+    )
+    monkeypatch.setattr("gilhound.runtime.read_plugins", lambda _: [source])
+    fixtures = Path(__file__).resolve().parents[1] / "fixtures" / "market"
+    with install("replay", fixtures / "items"):
+        runtime.items.decorate([listed, sold], "Cerberus", wait=True)
+        with TestClient(
+            create_app(token, runtime, schedule=False), base_url="http://localhost"
+        ) as client:
+            client.headers.update({"Authorization": f"Bearer {token}"})
+            (position,) = client.get("/api/positions").json()
+            assert position["item"]["name"] == "Bronze Ingot" and position["avg_cost"] is None
+            (closed,) = client.get("/api/positions?view=closed").json()
+            assert closed["item"]["name"] == "Hempen Yarn" and closed["realised_profit"] == 3
+            assert (
+                client.put(
+                    "/api/positions/cost",
+                    json={
+                        "item_id": 5056,
+                        "hq": False,
+                        "unit_cost": 7,
+                    },
+                ).status_code
+                == 204
+            )
+            (updated,) = client.get("/api/positions").json()
+            assert updated["avg_cost"] == 7 and updated["known_capital"] == 21

@@ -53,8 +53,12 @@ class HttpClient:
         *,
         clock: Callable[[], float] = time.monotonic,
         limiter: RateLimiter = _LIMITER,
+        timeout: float = 120,
+        attempts: int = 4,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
+        self.timeout = timeout
+        self.attempts = attempts
         self.ttl = ttl
         self.clock = clock
         self.limiter = limiter
@@ -73,11 +77,11 @@ class HttpClient:
             data=None if body is None else json.dumps(body).encode(),
             headers={"User-Agent": USER_AGENT, "Content-Type": "application/json"},
         )
-        for attempt in range(4):
+        for attempt in range(self.attempts):
             try:
                 with _CONNECTIONS:
                     self.limiter.acquire()
-                    with urllib.request.urlopen(req, timeout=120) as response:
+                    with urllib.request.urlopen(req, timeout=self.timeout) as response:
                         payload = json.load(response)
                 break
             except (OSError, HTTPException, json.JSONDecodeError) as exc:
@@ -85,7 +89,7 @@ class HttpClient:
                     isinstance(exc, urllib.error.HTTPError)
                     and exc.code not in {408, 429}
                     and exc.code < 500
-                ) or attempt == 3:
+                ) or attempt + 1 == self.attempts:
                     raise
                 self.sleep(2 * (attempt + 1))
         if body is None and self.ttl > 0:

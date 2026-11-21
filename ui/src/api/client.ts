@@ -15,6 +15,7 @@ export interface Api {
   getSnipes(): Promise<JsonResult<"get_snipes_api_snipes_get">>;
   runSnipes(): Promise<JsonResult<"run_snipes_api_snipes_run_post">>;
   getSources(): Promise<JsonResult<"get_sources_api_sources_get">>;
+  setCost(cost: JsonBody<"set_position_cost_api_positions_cost_put">): Promise<void>;
   getPositions(): Promise<JsonResult<"get_positions_api_positions_get">>;
   getPnl(): Promise<JsonResult<"get_pnl_api_pnl_get">>;
   getSettings(): Promise<JsonResult<"get_settings_api_settings_get">>;
@@ -91,7 +92,8 @@ const realApi: Api = {
   getSnipes: () => json("/api/snipes"),
   runSnipes: () => job("/api/jobs/snipes"),
   getSources: () => json("/api/sources"),
-  getPositions: () => json("/api/positions"),
+  getPositions: () => json("/api/positions?view=all"),
+  setCost: async (cost) => { await request("/api/positions/cost", "PUT", cost); },
   getPnl: () => json("/api/pnl"),
   getSettings: () => json("/api/settings"),
   saveSettings: (settings) => json("/api/settings", "PUT", settings),

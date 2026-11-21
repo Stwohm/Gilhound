@@ -6,7 +6,9 @@ from pathlib import Path
 from threading import Lock
 
 from gilhound.ingest import discover, read_plugins
-from gilhound.ledger import Ledger, build_ledger
+from gilhound.ingest.common import item_ref
+from gilhound.ledger import ItemAdjustment, Ledger, ManualAdjustments, build_ledger
+from gilhound.market.items import ItemCatalog
 from gilhound.market.presets import run_scan
 from gilhound.market.retainer import run_retainer_scan
 from gilhound.market.snipe import evaluate
@@ -31,6 +33,8 @@ class Runtime:
     def __init__(self, root: Path | None = None, plugins: Path | None = None) -> None:
         self.root = root or data_dir()
         self.plugins = plugins
+        self.items = ItemCatalog(self.root)
+        self.adjustment_lock = Lock()
         self.settings = SettingsStore(self.root / "settings.json")
         self.history = History(self.root / "gilhound.db")
         self.discord = Discord()
@@ -44,6 +48,7 @@ class Runtime:
     def close(self) -> None:
         self.discord.stopped.set()
         self.scheduler.stop()
+        self.items.close()
         LOG.info("Runtime stopped")
         LOG.removeHandler(self.handler)
         self.handler.close()
@@ -69,6 +74,9 @@ class Runtime:
                 result, _ = self._snipe_scan(params, self.settings.get())
                 return result
         result = run_scan(params, clock=time.time)
+        self.items.decorate(
+            (r.item for r in result.rows), self.settings.get().home_world, wait=True
+        )
         self.history.save_scan(result)
         LOG.info("Scan completed")
         return result
@@ -77,13 +85,17 @@ class Runtime:
         self, params: RetainerScanParams, progress: Callable[[int, int], None] | None = None
     ) -> RetainerScanResult:
         settings = self.settings.get()
-        return run_retainer_scan(
+        result = run_retainer_scan(
             params,
             clock=time.time,
             progress=progress,
+            marketable=self.items.marketable,
             home_world=settings.home_world,
             buy_region=settings.buy_region,
         )
+
+        self.items.decorate((r.item for r in result.rows), settings.home_world, wait=True)
+        return result
 
     def _snipe_scan(
         self, params: ScanParams, settings: UserSettings
@@ -95,6 +107,7 @@ class Runtime:
             settings.freshness_tiers,
             result.finished_ts,
         )
+        self.items.decorate((r.item for r in hits), settings.home_world, wait=True)
         result.rows = list(hits)
         self.history.save_scan(result)
         LOG.info("Scan completed")
@@ -116,7 +129,20 @@ class Runtime:
         return discover(self.plugins)
 
     def ledger(self) -> Ledger:
-        return build_ledger(read_plugins(self.plugins))
+        return build_ledger(read_plugins(self.plugins), ManualAdjustments.load(self.root))
+
+    def set_cost(self, iid: int, hq: bool, unit_cost: int) -> None:
+        with self.adjustment_lock:
+            manual = ManualAdjustments.load(self.root)
+            for entry in manual.items:
+                if (entry.item.id, entry.item.hq) == (iid, hq):
+                    entry.unknown_unit_cost = unit_cost
+                    break
+            else:
+                manual.items.append(
+                    ItemAdjustment(item=item_ref(iid, hq), unknown_unit_cost=unit_cost)
+                )
+            manual.save(self.root)
 
     def diagnostics(self) -> bytes:
         return archive(self.root / "logs", self.settings.get(), self.sources())

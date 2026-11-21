@@ -28,9 +28,10 @@ def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | Non
     Remaining Restocky purchases overlap historical lots; only uncovered units
     create new lots. Snapshots cannot supply a historical cost for past sales.
     """
+    manual = adjustments or ManualAdjustments()
     inputs = [s for s in sources if s.status.recognised]
     history = [e for s in inputs for e in s.records.events]
-    replay = calculate(history, adjustments)
+    replay = calculate(history, manual)
     existing = {(p.item.id, p.item.hq): p.qty_open for p in replay.positions}
     ts = max([0, *(e.ts for e in replay.events), *(s.status.last_update_ts or 0 for s in inputs)])
     listings = [s for s in inputs if s.records.listings is not None]
@@ -40,14 +41,19 @@ def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | Non
         key=lambda s: (s.records.listings_mtime or 0, rank.get(s.status.name, 0)),
         default=None,
     )
+    manual_costs = {
+        (a.item.id, a.item.hq)
+        for a in manual.items
+        if a.unknown_unit_cost is not None and not a.personal
+    }
     inventory: dict[ItemKey, int] = defaultdict(int)
     listed: dict[ItemKey, int] = defaultdict(int)
     costs: dict[ItemKey, list[Stock]] = defaultdict(list)
     items: dict[ItemKey, ItemRef] = {}
     for source in inputs:
         for stock in source.records.inventory or []:
-            if stock.container != 12002:
-                key = stock.item.id, stock.item.hq
+            key = stock.item.id, stock.item.hq
+            if stock.container != 12002 and key in manual_costs:
                 inventory[key] += stock.qty
                 items[key] = stock.item
         for stock in source.records.remaining_costs:
@@ -62,11 +68,12 @@ def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | Non
     for key, item in items.items():
         held = existing.get(key, 0)
         # Prefer the newest remaining lots when older units already have a basis.
+        target = listed[key] + inventory[key]
         overlap = held
         for stock in sorted(costs[key], key=lambda s: s.ts):
             covered = min(overlap, stock.qty)
             overlap -= covered
-            more = stock.qty - covered
+            more = min(stock.qty - covered, max(0, target - held))
             if more:
                 history.append(
                     event(
@@ -79,7 +86,7 @@ def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | Non
                     )
                 )
                 held += more
-        missing = inventory[key] + listed[key] - held
+        missing = target - held
         if missing > 0:
             source_name = SourceName.ALLAGAN_TOOLS if inventory[key] else latest.status.name
             history.append(event(source_name, LedgerEventKind.OPENING, item, missing, ts, None))
@@ -87,4 +94,4 @@ def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | Non
             history.append(
                 event(latest.status.name, LedgerEventKind.LIST, item, listed[key], ts, None)
             )
-    return calculate(history, adjustments)
+    return calculate(history, manual)

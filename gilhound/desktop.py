@@ -53,6 +53,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             0x10,
         )
         return 1
+    webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
     webview.settings["ALLOW_DOWNLOADS"] = True
     with socket.socket() as listener:
         listener.bind(("127.0.0.1", 0))

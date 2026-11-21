@@ -140,6 +140,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/positions/cost": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set Position Cost */
+        put: operations["set_position_cost_api_positions_cost_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/retainer-scan": {
         parameters: {
             query?: never;
@@ -347,6 +364,10 @@ export interface components {
              * @description Item display name.
              */
             name: string;
+            /** Saddlebag Url */
+            saddlebag_url?: string | null;
+            /** Universalis Url */
+            universalis_url?: string | null;
         };
         /** Job */
         Job: {
@@ -405,6 +426,12 @@ export interface components {
             /** @description Item and quality variant held. */
             item: components["schemas"]["ItemRef"];
             /**
+             * Known Capital
+             * @description Cost of remaining known FIFO lots.
+             * @default 0
+             */
+            known_capital: number;
+            /**
              * Listed Qty
              * @description Open units currently listed.
              */
@@ -419,6 +446,15 @@ export interface components {
              * @description Net realised gil profit for sales with known cost.
              */
             realised_profit: number;
+        };
+        /** PositionCost */
+        PositionCost: {
+            /** Hq */
+            hq: boolean;
+            /** Item Id */
+            item_id: number;
+            /** Unit Cost */
+            unit_cost: number;
         };
         Result: components["schemas"]["ScanResult"] | components["schemas"]["RetainerScanResult"] | components["schemas"]["SnipeHit"][];
         /** RetainerItemRow */
@@ -1262,7 +1298,9 @@ export interface operations {
     };
     get_positions_api_positions_get: {
         parameters: {
-            query?: never;
+            query?: {
+                view?: "open" | "closed" | "all";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -1295,6 +1333,65 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_position_cost_api_positions_cost_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PositionCost"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

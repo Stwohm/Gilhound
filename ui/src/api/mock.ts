@@ -10,6 +10,8 @@ export const demoRetainer = "Demo Retainer 01";
 const now = () => Math.floor(Date.now() / 1000);
 const pause = (ms = 150) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
+const costs = new Map<string, number>();
+
 let settings: Settings = {
   snipe_rule: { max_home_median_ratio: 0.5, max_last_sale_age_h: 24, max_top_buyer_share: 0.5,
     min_distinct_buyers_7d: 3, min_profit: 5000 },
@@ -41,7 +43,9 @@ function marketRows(params: Pick<ScanParams, "buyer_tax" | "seller_tax" | "sella
     const profit = entry.median * (1 - params.seller_tax) -
       entry.price * (1 + (params.buyer_tax ?? 0.05)) - (params.travel_cost?.[entry.dc] ?? 0);
     return {
-      item: { id: 91001 + index, name: entry.name, hq: entry.hq },
+      item: { id: 91001 + index, name: entry.name, hq: entry.hq,
+        universalis_url: `https://universalis.app/market/${91001 + index}?server=${encodeURIComponent(settings.home_world)}`,
+        saddlebag_url: `https://saddlebagexchange.com/queries/item-data/${91001 + index}` },
       buy_world: entry.world, buy_dc: entry.dc, buy_ppu: entry.price, buy_qty_at_price: entry.qty,
       home_median_7d: entry.median, home_lowest: index % 4 === 3 ? null : entry.median + 2400,
       sellable_qty: sellable, profit_per_unit: profit, total_profit_capped: sellable * profit,
@@ -134,15 +138,18 @@ export const mockApi: Api = {
       { name: "restocky", found: false, recognised: false, warning: "Source files were not found." },
     ];
   },
+  async setCost(cost) { costs.set(`${cost.item_id}-${cost.hq}`, cost.unit_cost); },
   async getPositions() {
     await pause();
     const rows = marketRows({
       buyer_tax: 0.05, seller_tax: 0.05, sellable_days: 3,
     });
     return rows.slice(0, 5).map((row, index) => ({
-      item: row.item, qty_open: row.sellable_qty + 3,
-      avg_cost: index === 3 ? null : row.buy_ppu, cost_known: index !== 3,
-      listed_qty: index === 3 ? 0 : row.sellable_qty, realised_profit: index === 3 ? 0 : 42500 + index * 16700,
+      item: row.item, qty_open: index === 4 ? 0 : row.sellable_qty + 3,
+      avg_cost: index === 3 ? costs.get(`${row.item.id}-${row.item.hq}`) ?? null : row.buy_ppu,
+      cost_known: index !== 3 || costs.has(`${row.item.id}-${row.item.hq}`),
+      known_capital: index === 4 ? 0 : (row.sellable_qty + 3) * (index === 3 ? costs.get(`${row.item.id}-${row.item.hq}`) ?? 0 : row.buy_ppu),
+      listed_qty: index === 4 ? 0 : row.sellable_qty, realised_profit: index === 3 ? 0 : 42500 + index * 16700,
     }));
   },
   async getPnl() {

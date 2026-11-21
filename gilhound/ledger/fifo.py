@@ -9,6 +9,58 @@ from gilhound.models import ItemRef, LedgerEvent, LedgerEventKind, PnLSummary, P
 
 from .adjustments import ItemAdjustment, ManualAdjustments
 
+# XIVAPI ItemUICategory "Currency". IDs below 100 are reserved for
+# gil, elemental crystals and low-ID currencies (including tomestones).
+CURRENCIES = {
+    10307,
+    10308,
+    10309,
+    10310,
+    10311,
+    17833,
+    17834,
+    21072,
+    21073,
+    21074,
+    21075,
+    21076,
+    21077,
+    21078,
+    21079,
+    21080,
+    21081,
+    21172,
+    21935,
+    22525,
+    25199,
+    25200,
+    26533,
+    26807,
+    28063,
+    28186,
+    28187,
+    28188,
+    30341,
+    33913,
+    33914,
+    36656,
+    36657,
+    37854,
+    38534,
+    38952,
+    39885,
+    41079,
+    41629,
+    41784,
+    41785,
+    44472,
+    46178,
+    48084,
+    49125,
+    52322,
+}
+
+
 type ItemKey = tuple[int, bool]
 
 
@@ -132,6 +184,7 @@ class Holding:
         return Position(
             item=self.item,
             qty_open=self.qty,
+            known_capital=remaining,
             listed_qty=self.listed,
             cost_known=known,
             avg_cost=remaining / self.qty if known and self.qty else None,
@@ -157,4 +210,11 @@ def calculate(
     summary = PnLSummary(
         **{k: sum(getattr(p, k) for p in per_item.values()) for k in PnLSummary.model_fields}
     )
-    return Ledger(entries, [h.position() for h in holdings.values()], summary, per_item)
+    positions = [
+        h.position()
+        for key, h in holdings.items()
+        if h.item.id >= 100
+        and h.item.id not in CURRENCIES
+        and not (key in overrides and overrides[key].personal)
+    ]
+    return Ledger(entries, positions, summary, per_item)

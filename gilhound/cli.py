@@ -55,15 +55,25 @@ def report(runtime: Runtime, args: argparse.Namespace) -> dict:
     elif args.command == "snipes":
         rows = runtime.run_snipes() if args.run else runtime.history.hits()
     elif args.command == "positions":
-        rows = runtime.ledger().positions
+        rows = [p for p in runtime.ledger().positions if (p.qty_open == 0) == args.closed]
     elif args.command == "sources":
         rows = runtime.sources()
     else:
         return {**result, **project(runtime.ledger().summary.model_dump(), fields)}
+    visible = rows[: args.top]
+    if args.command in {"snipes", "positions"} and (
+        not fields
+        or any(
+            f in {"item", "item.name", "item.universalis_url", "item.saddlebag_url"} for f in fields
+        )
+    ):
+        runtime.items.decorate(
+            (r.item for r in visible), runtime.settings.get().home_world, wait=True
+        )
     return {
         **result,
         "total": len(rows),
-        "rows": [project(r.model_dump(), fields) for r in rows[: args.top]],
+        "rows": [project(r.model_dump(), fields) for r in visible],
     }
 
 
@@ -82,7 +92,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     retainer.add_argument("name")
     retainer.add_argument("--world")
     commands.add_parser("snipes", parents=[common]).add_argument("--run", action="store_true")
-    for name in ("positions", "pnl", "sources"):
+    commands.add_parser("positions", parents=[common]).add_argument("--closed", action="store_true")
+    for name in ("pnl", "sources"):
         commands.add_parser(name, parents=[common])
     commands.add_parser("serve").add_argument("--port", type=int, default=8765)
     commands.add_parser("app")
