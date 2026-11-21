@@ -1,0 +1,5 @@
+eşya|q|nereden|alış|adet≤%15|Cerb medyan|Cerb en düşük ilan|satılan 7g|adet/gün|farklı alıcı|farklı gün|rakip≤medyan|son satış sa|kâr/adet
+Timeworn Zonureskin Map|NQ|Ragnarok (Chaos)|28800|1|74250|41000|80|11.4|23|5|15|15.8|41737
+Timeworn Kumbhiraskin Map|NQ|Shiva (Light)|45000|8|68393|66000|80|11.4|8|6|6|13.7|19973
+Assorted Candles|NQ|Sagittarius (Chaos)|3400|4|43054|43051|39|5.6|10|5|20|17.7|37501
+Timeworn Ophiotauroskin Map|NQ|Phoenix (Light)|24000|7|38500|45021|47|6.7|20|5|0|16.1|12575
