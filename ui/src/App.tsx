@@ -78,7 +78,7 @@ export default function App() {
     settings: <SettingsScreen resource={settings} updates={updates} />,
   };
 
-  return <TravelProvider home={preferences.home_world} enabled={preferences.go_button_enabled ?? true}><div className="app">
+  return <TravelProvider home={preferences.home_world}><div className="app">
     <a href="#main" className="skip-link" onClick={(event) => {
       event.preventDefault();
       document.getElementById("main")?.focus();

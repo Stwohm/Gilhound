@@ -25,6 +25,7 @@ from gilhound.models import (
     UserSettings,
 )
 
+from .bridge import Bridge
 from .diagnostics import LOG, archive, start_logging
 from .discord import Discord
 from .profiles import Profiles
@@ -37,6 +38,7 @@ class Runtime:
         self.root = root or data_dir()
         self.profiles = Profiles(self.root)
         self.plugins = plugins
+        self.bridge = Bridge(plugins)
         self.items = ItemCatalog(self.root)
         self.adjustment_lock = Lock()
         self.settings = SettingsStore(self.root / "settings.json")

@@ -231,6 +231,7 @@ th[aria-sort] { color: var(--accent); }
   border-radius: 8px; background: var(--rail); color: var(--rail-ink); }
 .travel-buttons { display: inline-flex; gap: .2rem; align-items: center; }
 .travel-buttons button { padding: .1rem .3rem; line-height: 1.2; }
+.travel-buttons .copy-fallback { opacity: .55; }
 .travel-toast { position: fixed; right: 1.5rem; bottom: 1.5rem; z-index: 10; background: #203239; color: white; padding: .7rem 1rem; border-radius: .4rem; }
 .metric-groups { display: flex; flex-wrap: wrap; gap: 1.5rem; padding: .6rem 0; }
 .metric-groups dl { display: grid; grid-template-columns: auto auto; gap: .3rem .8rem; }

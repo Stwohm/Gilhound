@@ -185,6 +185,84 @@
         "title": "ArchiveSummary",
         "type": "object"
       },
+      "BridgeGo": {
+        "properties": {
+          "world": {
+            "title": "World",
+            "type": "string"
+          }
+        },
+        "required": [
+          "world"
+        ],
+        "title": "BridgeGo",
+        "type": "object"
+      },
+      "BridgeResult": {
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "rejected",
+              "error",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "reason"
+        ],
+        "title": "BridgeResult",
+        "type": "object"
+      },
+      "BridgeStatus": {
+        "properties": {
+          "plugin_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plugin Version"
+          },
+          "status": {
+            "enum": [
+              "available",
+              "disabled",
+              "not_running",
+              "incompatible"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "world": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "World"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "BridgeStatus",
+        "type": "object"
+      },
       "CandidateWindow": {
         "properties": {
           "hours_ago": {
@@ -2051,18 +2129,6 @@
             "title": "Freshness Tiers",
             "type": "array"
           },
-          "go_button_enabled": {
-            "default": true,
-            "title": "Go Button Enabled",
-            "type": "boolean"
-          },
-          "go_delay_ms": {
-            "default": 120,
-            "maximum": 2000.0,
-            "minimum": 20.0,
-            "title": "Go Delay Ms",
-            "type": "integer"
-          },
           "history_days": {
             "default": 90,
             "maximum": 3650.0,
@@ -2156,18 +2222,6 @@
             },
             "title": "Freshness Tiers",
             "type": "array"
-          },
-          "go_button_enabled": {
-            "default": true,
-            "title": "Go Button Enabled",
-            "type": "boolean"
-          },
-          "go_delay_ms": {
-            "default": 120,
-            "maximum": 2000.0,
-            "minimum": 20.0,
-            "title": "Go Delay Ms",
-            "type": "integer"
           },
           "history_days": {
             "default": 90,
@@ -2326,20 +2380,19 @@
   },
   "openapi": "3.1.0",
   "paths": {
-    "/api/diagnostics/export": {
-      "post": {
-        "operationId": "export_diagnostics_api_diagnostics_export_post",
+    "/api/bridge": {
+      "get": {
+        "operationId": "bridge_status_api_bridge_get",
         "responses": {
           "200": {
             "content": {
-              "application/zip": {
+              "application/json": {
                 "schema": {
-                  "format": "binary",
-                  "type": "string"
+                  "$ref": "#/components/schemas/BridgeStatus"
                 }
               }
             },
-            "description": "Redacted diagnostics ZIP archive"
+            "description": "Successful Response"
           },
           "400": {
             "content": {
@@ -2369,30 +2422,28 @@
             }
           }
         },
-        "summary": "Export Diagnostics"
+        "summary": "Bridge Status"
       }
     },
-    "/api/go": {
+    "/api/bridge/go": {
       "post": {
-        "operationId": "go_api_go_post",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "world",
-            "required": true,
-            "schema": {
-              "title": "World",
-              "type": "string"
+        "operationId": "go_api_bridge_go_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BridgeGo"
+              }
             }
-          }
-        ],
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "title": "Response Go Api Go Post",
-                  "type": "boolean"
+                  "$ref": "#/components/schemas/BridgeResult"
                 }
               }
             },
@@ -2437,6 +2488,52 @@
           }
         },
         "summary": "Go"
+      }
+    },
+    "/api/diagnostics/export": {
+      "post": {
+        "operationId": "export_diagnostics_api_diagnostics_export_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Redacted diagnostics ZIP archive"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Export Diagnostics"
       }
     },
     "/api/history": {

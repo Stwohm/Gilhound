@@ -88,6 +88,21 @@ class FreshnessTier(BaseModel):
     send_discord: bool = Field(description="Whether this tier can trigger Discord notifications.")
 
 
+class BridgeStatus(BaseModel):
+    status: Literal["available", "disabled", "not_running", "incompatible"]
+    plugin_version: str | None = None
+    world: str | None = None
+
+
+class BridgeResult(BaseModel):
+    status: Literal["ok", "rejected", "error", "unavailable"]
+    reason: str
+
+
+class BridgeGo(BaseModel):
+    world: str
+
+
 class CandidateWindow(BaseModel):
     preferred_roi: int = Field(default=40, ge=0, description="Requested return on investment (%).")
     min_profit_amount: GilCost = Field(default=1000, description="Minimum candidate profit (gil).")
@@ -332,8 +347,6 @@ class PnLSummary(BaseModel):
 
 class UserSettings(BaseModel):
     history_days: int = Field(default=90, ge=1, le=3650)
-    go_button_enabled: bool = True
-    go_delay_ms: int = Field(default=120, ge=20, le=2000)
     snipe_rule: SnipeRule = Field(default_factory=SnipeRule)
     home_world: str = Field(description="Default world for resale and retainer scans.")
     buy_region: str = Field(description="Default market region for purchases.")

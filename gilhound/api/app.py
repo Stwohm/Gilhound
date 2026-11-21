@@ -19,6 +19,9 @@ from gilhound.api.jobs import Job, Jobs
 from gilhound.api.updates import Updates
 from gilhound.models import (
     AppInfo,
+    BridgeGo,
+    BridgeResult,
+    BridgeStatus,
     ItemRef,
     PnLSummary,
     Position,
@@ -35,7 +38,6 @@ from gilhound.runtime import Runtime
 from gilhound.runtime.discord import DeliveryError
 from gilhound.runtime.profiles import Library, ProfileChange, ProfileList
 from gilhound.runtime.store import ArchiveEntry, ArchiveSummary, Kind
-from gilhound.runtime.travel import Travel
 
 LOCAL_HOST = re.compile(r"(?:localhost|127\.0\.0\.1)(?::([0-9]{1,5}))?", re.ASCII | re.I)
 UI_ICONS = ("/favicon.ico", "/favicon.png", "/apple-touch-icon.png")
@@ -85,7 +87,6 @@ def create_app(
             updates.close()
             runtime.close()
 
-    travel = Travel()
     jobs = Jobs()
     updates = Updates()
     app = FastAPI(
@@ -177,17 +178,13 @@ def create_app(
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
 
-    @app.post("/api/go")
-    def go(world: str) -> bool:
-        settings = runtime.settings.get()
-        if not settings.go_button_enabled:
-            raise HTTPException(403, "Go is disabled.")
-        try:
-            return travel.go(world, settings.go_delay_ms)
-        except BlockingIOError as exc:
-            raise HTTPException(429, str(exc)) from exc
-        except (ValueError, OSError) as exc:
-            raise HTTPException(400, str(exc)) from exc
+    @app.get("/api/bridge")
+    def bridge_status() -> BridgeStatus:
+        return runtime.bridge.status()
+
+    @app.post("/api/bridge/go")
+    def go(request: BridgeGo) -> BridgeResult:
+        return runtime.bridge.send(f"/li {request.world} market")
 
     @app.get("/api/retainer-profiles")
     def retainer_profiles() -> dict[str, RetainerScanParams]:

@@ -10,9 +10,13 @@ from . import allagan_market, allagan_tools, cashflow, restocky
 from .common import Source
 
 
+def plugin_config_root() -> Path:
+    return Path(os.environ.get("APPDATA", Path.home())) / "XIVLauncher" / "pluginConfigs"
+
+
 def read_plugins(root: Path | None = None, *, local_tz: tzinfo | None = None) -> list[Source]:
     if root is None:
-        root = Path(os.environ.get("APPDATA", Path.home())) / "XIVLauncher" / "pluginConfigs"
+        root = plugin_config_root()
     return [
         cashflow.read(root / "CashFlow"),
         allagan_market.read(root / "AllaganMarket", local_tz),

@@ -15,7 +15,7 @@ const pause = (ms = 150) => new Promise<void>((resolve) => window.setTimeout(res
 const costs = new Map<string, number>();
 
 let settings: Settings = {
-  go_button_enabled: true, go_delay_ms: 120, history_days: 90,
+  history_days: 90,
   snipe_rule: { max_home_median_ratio: 0.5, max_last_sale_age_h: 24, max_top_buyer_share: 0.5,
     min_distinct_buyers_7d: 3, min_profit: 5000 },
   home_world: "Cerberus",
@@ -55,11 +55,22 @@ for (const library of ["scan", "snipes"] as const) {
 function mockCatalog(library: Library): Catalog {
   const catalog = structuredClone(catalogs[library]);
   for (const [name, { params: p }] of Object.entries(catalog.profiles)) {
+    const limits = [
+      `at least ${p.min_history_sales} sales in 7 days`,
+      p.min_distinct_buyers && `at least ${p.min_distinct_buyers} buyers`,
+      p.min_days_with_sales && `sales on at least ${p.min_days_with_sales} days`,
+      p.min_units_day && `at least ${p.min_units_day} units/day`,
+    ].filter(Boolean);
     const lines = [`Finds items in ${p.buy_region} to sell on ${p.home_world}.`,
-      `Requires at least ${p.min_distinct_buyers} buyers, ${p.min_days_with_sales} sale days and ${p.min_units_day} units/day.`,
-      `Requires positive profit of at least ${p.min_profit} gil per unit after taxes, capped at ${p.sellable_days} days of sales.`];
+      `Requires ${limits.join(", ")}.`,
+      `Requires ${p.min_profit ? `at least ${p.min_profit} gil` : "positive"} profit per unit after taxes, capped at ${p.sellable_days} days of sales.`];
     const r = p.snipe_rule;
-    if (r) lines.push(`Alerts at up to ${r.max_home_median_ratio * 100}% of the home median for at least ${r.min_profit} gil profit and ${r.min_distinct_buyers_7d} buyers, with the last sale under ${r.max_last_sale_age_h} h and top buyer share up to ${r.max_top_buyer_share * 100}%.`);
+    if (r) {
+      lines.push(`Alerts at up to ${r.max_home_median_ratio * 100}% of the home median, with the last sale under ${r.max_last_sale_age_h} h.`);
+      if (r.min_profit) lines.push(`Requires at least ${r.min_profit} gil profit.`);
+      if (r.min_distinct_buyers_7d) lines.push(`Requires at least ${r.min_distinct_buyers_7d} buyers.`);
+      if (r.max_top_buyer_share < 1) lines.push(`Top buyer share up to ${r.max_top_buyer_share * 100}%.`);
+    }
     for (const t of p.freshness_tiers ?? []) lines.push(`${t.name} up to ${t.max_age_h} h: ${t.send_discord ? "app and Discord when enabled" : "app only"}.`);
     catalog.descriptions[name] = lines;
   }
@@ -143,7 +154,8 @@ function record(result: Entry["result"], profile?:string) {
     result,description:[]});
 }
 export const mockApi: Api = {
-  async go(){return false;},
+  async bridge() { return { status: "not_running" }; },
+  async go() { return { status: "unavailable", reason: "Restocky not running" }; },
   async history(q){return [...archive.values()].reverse().filter(e=>
     (!q.has("kind") || e.kind===q.get("kind")) && (!q.has("profile") || e.profile===q.get("profile"))
     && (!q.has("since") || e.started_ts>=Number(q.get("since"))) && (!q.has("until") || e.started_ts<Number(q.get("until")))

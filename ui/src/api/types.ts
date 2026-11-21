@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+    "/api/bridge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Bridge Status */
+        get: operations["bridge_status_api_bridge_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/bridge/go": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Go */
+        post: operations["go_api_bridge_go_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/diagnostics/export": {
         parameters: {
             query?: never;
@@ -15,23 +49,6 @@ export interface paths {
         put?: never;
         /** Export Diagnostics */
         post: operations["export_diagnostics_api_diagnostics_export_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/go": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Go */
-        post: operations["go_api_go_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -527,6 +544,33 @@ export interface components {
             row_count: number;
             /** Started Ts */
             started_ts: number;
+        };
+        /** BridgeGo */
+        BridgeGo: {
+            /** World */
+            world: string;
+        };
+        /** BridgeResult */
+        BridgeResult: {
+            /** Reason */
+            reason: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "rejected" | "error" | "unavailable";
+        };
+        /** BridgeStatus */
+        BridgeStatus: {
+            /** Plugin Version */
+            plugin_version?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "available" | "disabled" | "not_running" | "incompatible";
+            /** World */
+            world?: string | null;
         };
         /** CandidateWindow */
         CandidateWindow: {
@@ -1394,16 +1438,6 @@ export interface components {
              */
             freshness_tiers?: components["schemas"]["FreshnessTier"][];
             /**
-             * Go Button Enabled
-             * @default true
-             */
-            go_button_enabled: boolean;
-            /**
-             * Go Delay Ms
-             * @default 120
-             */
-            go_delay_ms: number;
-            /**
              * History Days
              * @default 90
              */
@@ -1467,16 +1501,6 @@ export interface components {
              * @description Freshness thresholds in ascending order of age.
              */
             freshness_tiers?: components["schemas"]["FreshnessTier"][];
-            /**
-             * Go Button Enabled
-             * @default true
-             */
-            go_button_enabled: boolean;
-            /**
-             * Go Delay Ms
-             * @default 120
-             */
-            go_delay_ms: number;
             /**
              * History Days
              * @default 90
@@ -1557,6 +1581,97 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    bridge_status_api_bridge_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BridgeStatus"];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    go_api_bridge_go_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BridgeGo"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BridgeResult"];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     export_diagnostics_api_diagnostics_export_post: {
         parameters: {
             query?: never;
@@ -1592,56 +1707,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ApiError"];
-                };
-            };
-        };
-    };
-    go_api_go_post: {
-        parameters: {
-            query: {
-                world: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": boolean;
-                };
-            };
-            /** @description Invalid Host header */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description Missing or invalid bearer token */
-            401: {
-                headers: {
-                    "WWW-Authenticate"?: string;
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiError"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

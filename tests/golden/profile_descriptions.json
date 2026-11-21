@@ -1,0 +1,33 @@
+{
+  "Flip": [
+    "Finds items in Europe to sell on Cerberus.",
+    "Searches the last 24 hours for at least 5 sales, an average price of at least 1,500 gil, candidate profit of at least 1,000 gil and 40% ROI.",
+    "Requires at least 3 sales in 7 days.",
+    "Profit per unit must be positive after 5% buyer tax and 5% seller tax and travel costs, with sellable quantity capped at 3 days of sales."
+  ],
+  "High margin": [
+    "Finds items in Europe to sell on Cerberus.",
+    "Searches the last 24 hours for at least 5 sales, an average price of at least 5,000 gil, candidate profit of at least 5,000 gil and 40% ROI.",
+    "Searches the last 72 hours for at least 3 sales, an average price of at least 5,000 gil, candidate profit of at least 5,000 gil and 40% ROI.",
+    "Requires at least 4 sales in 7 days, at least 4 distinct buyers and sales on at least 3 days.",
+    "Profit per unit must be at least 12,000 gil after 5% buyer tax and 5% seller tax and travel costs, with sellable quantity capped at 3 days of sales."
+  ],
+  "Volume": [
+    "Finds items in Europe to sell on Cerberus.",
+    "Searches the last 24 hours for at least 5 sales, an average price of at least 3,000 gil, candidate profit of at least 3,000 gil and 40% ROI.",
+    "Searches the last 72 hours for at least 3 sales, an average price of at least 3,000 gil, candidate profit of at least 3,000 gil and 40% ROI.",
+    "Requires at least 4 sales in 7 days, at least 8 distinct buyers, sales on at least 4 days and at least 2.5 units/day.",
+    "Profit per unit must be at least 6,000 gil after 5% buyer tax and 5% seller tax and travel costs, with sellable quantity capped at 3 days of sales."
+  ],
+  "Snipe": [
+    "Finds items in Europe to sell on Cerberus.",
+    "Searches the last 24 hours for at least 5 sales, an average price of at least 3,000 gil, candidate profit of at least 3,000 gil and 40% ROI.",
+    "Searches the last 72 hours for at least 3 sales, an average price of at least 3,000 gil, candidate profit of at least 3,000 gil and 40% ROI.",
+    "Searches the last 168 hours for at least 3 sales, an average price of at least 5,000 gil, candidate profit of at least 4,000 gil and 100% ROI.",
+    "Requires at least 3 sales in 7 days.",
+    "Profit per unit must be positive after 5% buyer tax and 5% seller tax and travel costs, with sellable quantity capped at 3 days of sales.",
+    "Snipe alerts require a listing at or below 50% of the Cerberus 7-day median, at least 5,000 gil profit per unit, at least 3 buyers, a sale less than 24 hours ago and a top buyer share of at most 50%.",
+    "Fresh listings aged 0 to under 1 hours appear in the app and Discord when enabled.",
+    "Stale listings aged 1 to under 6 hours appear in the app only."
+  ]
+}

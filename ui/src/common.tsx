@@ -6,7 +6,7 @@ import type { components } from "./api/types";
 export type Schema<K extends keyof components["schemas"]> = components["schemas"][K];
 export type Settings = Schema<"UserSettings-Output">;
 export const defaults: Settings = {
-  go_button_enabled: true, go_delay_ms: 120, history_days: 90,
+  history_days: 90,
   home_world: "Cerberus",
   buy_region: "Europe",
   scan_interval_min: 5,

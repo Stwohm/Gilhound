@@ -34,20 +34,35 @@ class Profile(BaseModel):
         return self
 
 
+def _join(parts: list[str]) -> str:
+    if len(parts) < 2:
+        return "".join(parts)
+    return ", ".join(parts[:-1]) + " and " + parts[-1]
+
+
 def describe(profile: Profile) -> list[str]:
     p = profile.params
     sentences = [f"Finds items in {p.buy_region} to sell on {p.home_world}."]
     for window in p.windows:
-        sentences.append(
-            f"Searches the last {window.hours_ago} hours for at least {window.min_sales} sales, "
-            f"an average price of at least {window.min_desired_avg_ppu:,} gil and candidate "
-            f"profit of at least {window.min_profit_amount:,} gil at {window.preferred_roi}% ROI."
-        )
-    sentences.append(
-        f"Requires at least {p.min_history_sales} sales in 7 days, "
-        f"{p.min_distinct_buyers} distinct buyers, sales on at least {p.min_days_with_sales} "
-        f"days and at least {p.min_units_day:g} units/day."
-    )
+        criteria = []
+        if window.min_sales:
+            criteria.append(f"at least {window.min_sales} sales")
+        if window.min_desired_avg_ppu:
+            criteria.append(f"an average price of at least {window.min_desired_avg_ppu:,} gil")
+        if window.min_profit_amount:
+            criteria.append(f"candidate profit of at least {window.min_profit_amount:,} gil")
+        if window.preferred_roi:
+            criteria.append(f"{window.preferred_roi}% ROI")
+        qualifier = f" for {_join(criteria)}" if criteria else ""
+        sentences.append(f"Searches the last {window.hours_ago} hours{qualifier}.")
+    requirements = [f"at least {p.min_history_sales} sales in 7 days"]
+    if p.min_distinct_buyers:
+        requirements.append(f"at least {p.min_distinct_buyers} distinct buyers")
+    if p.min_days_with_sales:
+        requirements.append(f"sales on at least {p.min_days_with_sales} days")
+    if p.min_units_day:
+        requirements.append(f"at least {p.min_units_day:g} units/day")
+    sentences.append(f"Requires {_join(requirements)}.")
     profit = f"at least {p.min_profit:,} gil" if p.min_profit else "positive"
     sentences.append(
         f"Profit per unit must be {profit} after {p.buyer_tax * 100:g}% buyer tax "
@@ -60,13 +75,18 @@ def describe(profile: Profile) -> list[str]:
         if limit is not None:
             sentences.append(f"{label} must be less than {limit:g} hours old.")
     if p.preset == ScanPreset.SNIPE and (rule := p.snipe_rule):
-        sentences.append(
-            f"Snipe alerts require a listing at or below {rule.max_home_median_ratio * 100:g}% "
-            f"of the {p.home_world} 7-day median, at least {rule.min_profit:,} gil profit per "
-            f"unit, at least {rule.min_distinct_buyers_7d} buyers, a sale less than "
-            f"{rule.max_last_sale_age_h:g} hours ago and a top buyer share of at most "
-            f"{rule.max_top_buyer_share * 100:g}%."
-        )
+        criteria = [
+            f"a listing at or below {rule.max_home_median_ratio * 100:g}% "
+            f"of the {p.home_world} 7-day median"
+        ]
+        if rule.min_profit:
+            criteria.append(f"at least {rule.min_profit:,} gil profit per unit")
+        if rule.min_distinct_buyers_7d:
+            criteria.append(f"at least {rule.min_distinct_buyers_7d} buyers")
+        criteria.append(f"a sale less than {rule.max_last_sale_age_h:g} hours ago")
+        if rule.max_top_buyer_share < 1:
+            criteria.append(f"a top buyer share of at most {rule.max_top_buyer_share * 100:g}%")
+        sentences.append(f"Snipe alerts require {_join(criteria)}.")
         lower = 0
         for tier in p.freshness_tiers or []:
             channel = "app and Discord when enabled" if tier.send_discord else "app only"

@@ -134,17 +134,13 @@ def test_cli_profile(
     assert cli.main(["scan", "--profile", "High margin"]) == 0
 
 
-@pytest.mark.parametrize(("name", "phrases"), [
-    ("Flip", ["5 sales", "positive", "5% buyer tax"]),
-    ("High margin", ["4 distinct buyers", "12,000 gil"]),
-    ("Volume", ["8 distinct buyers", "2.5 units/day", "6,000 gil"]),
-    ("Snipe", ["50% of the Cerberus 7-day median", "5,000 gil", "1 to under 6 hours"]),
-])
+@pytest.mark.parametrize("name", ["Flip", "High margin", "Volume", "Snipe"])
 def test_profile_descriptions(
-    name: str, phrases: list[str], tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
+    name: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str],
 ) -> None:
     monkeypatch.setenv("APPDATA", str(tmp_path))
     assert cli.main(["profiles", "--describe", name]) == 0
-    text = " ".join(json.loads(capsys.readouterr().out)["description"])
-    assert all(phrase in text for phrase in phrases)
+    snapshot = Path(__file__).parents[1] / "golden" / "profile_descriptions.json"
+    assert json.loads(capsys.readouterr().out)["description"] == json.loads(
+        snapshot.read_bytes()
+    )[name]

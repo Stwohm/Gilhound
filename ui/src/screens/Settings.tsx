@@ -1,3 +1,4 @@
+import { BridgeIndicator } from "../Travel";
 import { useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { api, mockMode } from "../api/client";
@@ -73,8 +74,7 @@ function SettingsForm({ settings, onSaved }: { settings: Settings; onSaved: (set
           <Field label="Home world"><input required value={draft.home_world} onChange={(e) => update("home_world", e.target.value)} /></Field>
           <Field label="Buy region"><input required value={draft.buy_region} onChange={(e) => update("buy_region", e.target.value)} /></Field>
           <Field label="Archive retention (days)"><Numeric min={1} max={3650} value={draft.history_days ?? 90} onValue={v => update("history_days", v)} /></Field>
-          <Field label="Go delay (ms)"><Numeric min={20} max={2000} value={draft.go_delay_ms ?? 120} onValue={v => update("go_delay_ms", v)} /></Field>
-          <label className="check"><input type="checkbox" checked={draft.go_button_enabled ?? true} onChange={e => update("go_button_enabled", e.target.checked)} />Enable Go on Windows</label>
+          <BridgeIndicator />
           <a href="#snipes/rules">Edit snipe rules and schedule</a>
         </div>
       </fieldset>
