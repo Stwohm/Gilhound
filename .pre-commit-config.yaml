@@ -1,0 +1,13 @@
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
+  - repo: local
+    hooks:
+      - id: check-private-patterns
+        name: Check staged files for webhook and private patterns
+        entry: python scripts/check_patterns.py
+        language: python
+        pass_filenames: false
+        always_run: true
