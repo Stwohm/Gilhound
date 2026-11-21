@@ -19,6 +19,8 @@ from gilhound.updater._layout import (
     precedence,
     ready,
     rejected,
+    replace_launcher,
+    same_location,
     write_pointer,
 )
 
@@ -68,39 +70,77 @@ def _await_startup(app: subprocess.Popen, marker: Path) -> None:
             raise RuntimeError(f"Startup exited with status {status} before acknowledgement")
 
 
+def _read_pointer(root: Path, name: str) -> str | None:
+    try:
+        return pointer(root, name)
+    except ValueError:
+        logging.warning("Ignoring malformed %s", name)
+        return None
+
+
+def _bundles(root: Path) -> list[str]:
+    versions = []
+    for folder in root.glob("app-*"):
+        version = folder.name[4:]
+        try:
+            precedence(version)
+        except ValueError:
+            continue
+        if ready(folder):
+            versions.append(version)
+    return sorted(versions, key=precedence, reverse=True)
+
+
 def launch(root: Path) -> int:
     with ExitStack() as leases:
         with lock(root / "install.lock", timeout=75):
-            current = pointer(root, "current.txt")
-            pending = pointer(root, "pending.txt")
-            if not current:
-                raise ValueError("Installation has no current version")
-            previous = pointer(root, "previous.txt")
-            if previous and current == pending:
-                # Recover the last good version from an interrupted legacy trial.
-                current = previous
+            versions = _bundles(root)
+            current = _read_pointer(root, "current.txt")
+            pending = _read_pointer(root, "pending.txt")
+            previous = _read_pointer(root, "previous.txt")
+            failed = pointer(root, "failed.txt")
+            if current not in versions or current == failed:
+                usable = [v for v in versions if v != failed]
+                current = usable[0] if usable else None
+                if current == pending and len(usable) > 1:
+                    current = usable[1]  # Keep a rollback target for the pending trial.
+                if current is None:
+                    raise ValueError("Installation has no usable READY bundle")
                 write_pointer(root, "current.txt", current)
-            (root / "previous.txt").unlink(missing_ok=True)
-            _clean(root, {current, pending})
-            if pending and (pending == current or rejected(root, pending)):
+            if previous not in versions or previous == current or previous == failed:
+                previous = None
+                (root / "previous.txt").unlink(missing_ok=True)
+            # Legacy trials wrote current before acknowledgement. Retry the trial without
+            # moving the pointer backwards unless the new process actually fails.
+            retry = previous and current == pending and precedence(previous) < precedence(current)
+            if (pending not in versions or rejected(root, pending)
+                    or (not retry and precedence(pending) <= precedence(current))):
                 (root / "pending.txt").unlink(missing_ok=True)
                 pending = None
             app = None
-            if pending and ready(root / f"app-{pending}"):
+            if pending:
+                fallback = previous if retry else current
                 leases.enter_context(lock(root / f"use-{pending}.lock", shared=True))
                 marker = root / f"ready-{pending}-{uuid4().hex}"
                 try:
                     app = _start(root, pending, marker)
                     _await_startup(app, marker)
                 except (OSError, RuntimeError):
-                    logging.exception("Rolling back %s to %s", pending, current)
+                    logging.exception("Rolling back %s to %s", pending, fallback)
                     write_pointer(root, "failed.txt", pending)
+                    if retry:
+                        current = fallback
+                        write_pointer(root, "current.txt", current)
                     app = None
                 else:
+                    previous = fallback
+                    write_pointer(root, "previous.txt", previous)
                     write_pointer(root, "current.txt", pending)
+                    current = pending
                 finally:
                     marker.unlink(missing_ok=True)
                 (root / "pending.txt").unlink(missing_ok=True)
+            _clean(root, {current, previous})
             if app is None:
                 leases.enter_context(lock(root / f"use-{current}.lock", shared=True))
                 app = _start(root, current)
@@ -111,8 +151,12 @@ def _shortcuts(root: Path) -> None:
     script = """
 $ErrorActionPreference = 'Stop'
 $shell = New-Object -ComObject WScript.Shell
-foreach ($name in 'Programs','Desktop') {
-    $link = $shell.CreateShortcut((Join-Path $shell.SpecialFolders.Item($name) 'Gilhound.lnk'))
+$dirs = if ($env:GILHOUND_SHORTCUT_DIR) { $env:GILHOUND_SHORTCUT_DIR } else {
+    $shell.SpecialFolders.Item('Programs')
+    $shell.SpecialFolders.Item('Desktop')
+}
+foreach ($dir in $dirs) {
+    $link = $shell.CreateShortcut((Join-Path $dir 'Gilhound.lnk'))
     $link.TargetPath = Join-Path $env:GILHOUND_SHORTCUT_ROOT 'Gilhound.exe'
     $link.IconLocation = "$($link.TargetPath),0"
     $link.WorkingDirectory = $env:GILHOUND_SHORTCUT_ROOT
@@ -127,21 +171,22 @@ foreach ($name in 'Programs','Desktop') {
 
 
 def install(source: Path, root: Path) -> None:
-    bundles = [p for p in source.glob("app-*") if ready(p)]
-    if len(bundles) != 1:
+    bundles = _bundles(source)
+    if not bundles:
         raise ValueError("Extract the entire release zip before running Gilhound")
-    bundle = bundles[0]
-    version = bundle.name[4:]
-    precedence(version)
+    version = bundles[0]
+    bundle = source / f"app-{version}"
     with lock(root / "install.lock"):
-        launcher = root / "Gilhound.exe"
-        current = pointer(root, "current.txt")
-        if current is None or precedence(version) >= precedence(current):
-            temp = root / "Gilhound.exe.partial"
-            shutil.copyfile(source / launcher.name, temp)
-            temp.replace(launcher)
-        if current is None or (precedence(version) > precedence(current)
-                               and not rejected(root, version)):
+        current = _read_pointer(root, "current.txt")
+        pending = _read_pointer(root, "pending.txt")
+        newer_pending = pending and ready(root / f"app-{pending}") and (
+            precedence(pending) > precedence(version)
+        )
+        if not newer_pending and (current is None or precedence(version) >= precedence(current)):
+            launcher = bundle / "Gilhound.exe"
+            replace_launcher(launcher if launcher.is_file() else source / launcher.name, root)
+        if not newer_pending and (current is None or (precedence(version) > precedence(current)
+                                                      and not rejected(root, version))):
             folder = root / bundle.name
             if not ready(folder):
                 partial = root / "install.partial"
@@ -160,9 +205,23 @@ def main() -> int:
     root = install_root()
     root.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(filename=root / "launcher.log", level=logging.INFO)
-    source = Path(sys.executable).resolve().parent
+    source = Path(sys.executable).parent
     try:
-        if source != root.resolve():
+        try:
+            same = os.path.samefile(source, root)
+        except OSError as exc:
+            same = str(exc)
+        logging.info("sys.executable=%r source=%r root=%r source.resolve=%r root.resolve=%r "
+                     "samefile=%r", sys.executable, str(source), str(root), str(source.resolve()),
+                     str(root.resolve()), same)
+        if source.name.startswith("app-") and same_location(source.parent, root):
+            # A staged launcher can also resume an update a legacy launcher could not start.
+            with lock(root / "install.lock"):
+                selected = _read_pointer(root, "pending.txt") or _read_pointer(root, "current.txt")
+                if source.name[4:] == selected:
+                    replace_launcher(source / "Gilhound.exe", root)
+            return launch(root)
+        if not same_location(source, root):
             install(source, root)
             subprocess.Popen(
                 [root / "Gilhound.exe"], cwd=root,

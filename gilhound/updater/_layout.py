@@ -1,13 +1,17 @@
 """Shared on-disk protocol for the launcher and updater (stdlib only)."""
 
+import filecmp
+import logging
 import os
 import re
+import shutil
 import sys
 import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from uuid import uuid4
 
 EXE = "gilhound-app.exe"
 _NUMBER = r"(0|[1-9][0-9]*)"
@@ -30,6 +34,67 @@ def precedence(version: str) -> tuple:
 
 def install_root() -> Path:
     return Path(os.environ["LOCALAPPDATA"]) / "Gilhound"
+
+
+def same_location(left: Path, right: Path) -> bool:
+    try:
+        return os.path.samefile(left, right)
+    except OSError:
+        return os.path.normcase(left.resolve()) == os.path.normcase(right.resolve())
+
+
+def replace_launcher(source: Path, root: Path) -> None:
+    """Caller holds install.lock. Windows permits renaming a running image."""
+    target = root / "Gilhound.exe"
+    for retired in root.glob("Gilhound-*.exe.old"):
+        try:
+            retired.unlink()
+        except PermissionError:
+            pass  # The old supervisor still has its image mapped.
+    if target.exists() and filecmp.cmp(source, target, shallow=False):
+        return
+    temp = root / "Gilhound.exe.partial"
+    shutil.copyfile(source, temp)
+    try:
+        try:
+            temp.replace(target)
+        except PermissionError:
+            retired = root / f"Gilhound-{uuid4().hex}.exe.old"
+            target.rename(retired)
+            try:
+                temp.replace(target)
+            except OSError:
+                retired.rename(target)
+                raise
+    finally:
+        temp.unlink(missing_ok=True)
+
+
+def acknowledge_startup(version: str, marker: Path | None) -> None:
+    """A legacy supervisor holds install.lock until the new app acknowledges startup."""
+    root = install_root()
+    installed = getattr(sys, "frozen", False) and same_location(
+        Path(sys.executable).parent, root / f"app-{version}"
+    )
+    prior = None
+    if installed:
+        try:
+            prior = pointer(root, "current.txt")
+        except ValueError:
+            pass
+    if marker:
+        marker.touch()
+    if not installed:
+        return
+    try:
+        with lock(root / "install.lock", timeout=75):
+            if pointer(root, "current.txt") != version or pointer(root, "pending.txt"):
+                return
+            replace_launcher(root / f"app-{version}" / "Gilhound.exe", root)
+            if prior and prior != version and ready(root / f"app-{prior}"):
+                write_pointer(root, "previous.txt", prior)
+    except (OSError, ValueError):
+        logging.exception("Could not refresh installed launcher")
 
 
 def pointer(root: Path, name: str) -> str | None:

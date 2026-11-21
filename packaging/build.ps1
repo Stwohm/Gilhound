@@ -34,6 +34,8 @@ try {
         '--icon',$icon,'--paths',$repo,'--specpath',$work,
         '--workpath',"$work/cache",'--distpath',$stage,
         'launcher/launcher.py')
+    # Existing updaters extract only entries under app-<version>/.
+    Copy-Item -LiteralPath "$stage/Gilhound.exe" -Destination "$stage/app-$version"
     Copy-Item -LiteralPath "$PSScriptRoot/install.ps1" -Destination $stage
     $output = if ($Stub) { 'dist/stub' } else { 'dist' }
     New-Item -ItemType Directory -Force -Path $output | Out-Null

@@ -11,7 +11,22 @@ Gilhound uses Microsoft Edge WebView2 to display its window. If prompted, instal
 If you installed 0.1.4 or earlier, close Gilhound and run **Gilhound.exe**
 from the newly extracted release once to replace the older launcher.
 
-When the app offers a newer release, download it and choose the restart option. Gilhound checks the download before switching versions. If the new app fails during startup, the launcher reopens the previous version.
+From 0.1.5, use the in-app update and restart. The verified 0.1.6 download
+includes a launcher inside the staged app folder. When the new window opens,
+the app updates the installed launcher, including when the old launcher is
+still running. Your existing shortcuts keep working.
+
+If the 0.1.5 launcher already shows “Gilhound could not start” after staging
+0.1.6, open `%LOCALAPPDATA%\Gilhound\app-0.1.6\Gilhound.exe` once.
+This finishes the staged update using the new launcher. If you still need
+to stage it, open `app-0.1.5\gilhound-app.exe` in the install folder and
+use the in-app updater first.
+
+The launcher promotes a staged update when the new window acknowledges
+startup. If startup fails, it reopens the last working version. It keeps
+the current and previous bundles and removes older, unused bundles. If the
+current pointer is damaged, it recovers from the newest complete bundle
+other than the recorded failed version.
 
 Settings and the database live in `%APPDATA%\Gilhound`. The app and its startup log live in `%LOCALAPPDATA%\Gilhound`. To send a support report, choose **Export diagnostics** in the app and share the resulting zip. It contains logs and version information with personal data and the Discord webhook excluded.
 

@@ -13,7 +13,7 @@ import pytest
 
 import gilhound
 from gilhound import updater
-from gilhound.updater._layout import EXE, lock, precedence
+from gilhound.updater._layout import EXE, lock, precedence, replace_launcher, same_location
 
 # The onefile launcher deliberately lives outside the installed Python package.
 script = Path(__file__).resolve().parents[2] / "launcher" / "launcher.py"
@@ -100,6 +100,8 @@ def test_bad_version(version: str) -> None:
 def test_update_cycle(layout: Path, feed: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     progress = []
     info = release(feed)
+    for old_version in ("0.0.1", "0.0.2"):
+        shutil.copytree(layout / "app-0.1.0", layout / f"app-{old_version}")
     updater.download_and_stage(info, lambda done, total: progress.append((done, total)))
     assert progress[-1][0] == progress[-1][1] > 0
     assert (layout / "current.txt").read_text() == "0.1.0"
@@ -113,7 +115,8 @@ def test_update_cycle(layout: Path, feed: Path, monkeypatch: pytest.MonkeyPatch)
         assert launcher.launch(layout) == 0
         assert old.is_dir()
     assert launcher.launch(layout) == 0
-    assert not old.exists()
+    assert old.exists() and (layout / "previous.txt").read_text() == "0.1.0"
+    assert sorted(p.name for p in layout.glob("app-*")) == ["app-0.1.0", "app-0.1.1"]
     assert (layout / "started").read_text().splitlines() == ["app-0.1.1"] * 3
     monkeypatch.setattr(gilhound, "__version__", "0.1.1")
     assert updater.check() is None
@@ -188,6 +191,8 @@ def test_first_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     (source / "Gilhound.exe").write_bytes(b"launcher")
     (folder / EXE).write_bytes(b"desktop")
     (folder / "READY").touch()
+    shutil.copytree(folder, source / "app-0.0.9")
+    shutil.copytree(folder, source / "app-invalid")
     root = tmp_path / "installed"
     root.mkdir()
     shortcuts = []
@@ -200,6 +205,81 @@ def test_first_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert (root / folder.name / "READY").is_file()
     assert (root / folder.name / EXE).read_bytes() == b"desktop"
     assert (root / "Gilhound.exe").read_bytes() == b"launcher"
+
+
+def test_reinstall_keeps_newer_staged_release(
+    layout: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = layout.parent / "extracted"
+    shutil.copytree(layout / "app-0.1.0", source / "app-0.1.1")
+    shutil.copytree(layout / "app-0.1.0", layout / "app-0.1.2")
+    (layout / "pending.txt").write_text("0.1.2")
+    (source / "Gilhound.exe").write_bytes(b"older launcher")
+    (layout / "Gilhound.exe").write_bytes(b"newer launcher")
+    monkeypatch.setattr(launcher, "_shortcuts", lambda root: None)
+    launcher.install(source, layout)
+    assert (layout / "pending.txt").read_text() == "0.1.2"
+    assert (layout / "Gilhound.exe").read_bytes() == b"newer launcher"
+
+
+def test_same_location_falls_back_to_resolved_name(tmp_path: Path) -> None:
+    assert same_location(tmp_path / "missing", tmp_path / "child/../missing")
+    assert not same_location(tmp_path / "missing", tmp_path / "other")
+
+
+def test_swap_restores_running_launcher_on_error(
+    layout: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    old = layout / "Gilhound.exe"
+    old.write_bytes(b"old")
+    new = layout / "app-0.1.0/Gilhound.exe"
+    new.write_bytes(b"new")
+
+    def deny_replace(self: Path, target: Path) -> None:
+        raise PermissionError("locked")
+
+    monkeypatch.setattr(Path, "replace", deny_replace)
+    with pytest.raises(PermissionError):
+        replace_launcher(new, layout)
+    assert old.read_bytes() == b"old"
+    assert not (layout / "Gilhound.exe.partial").exists()
+
+
+@pytest.mark.parametrize("broken", [None, "", "../invalid", "9.9.9", "0.1.10"])
+def test_recover_current(layout: Path, broken: str | None) -> None:
+    for version in ("0.1.2", "0.1.9", "0.1.10"):
+        shutil.copytree(layout / "app-0.1.0", layout / f"app-{version}")
+    (layout / "failed.txt").write_text("0.1.10")
+    current = layout / "current.txt"
+    if broken is None:
+        current.unlink()
+    else:
+        current.write_text(broken)
+    assert launcher.launch(layout) == 0
+    assert current.read_text() == "0.1.9"
+    assert (layout / "started").read_text().strip() == "app-0.1.9"
+
+
+def test_stale_pending_does_not_downgrade(layout: Path) -> None:
+    shutil.copytree(layout / "app-0.1.0", layout / "app-0.0.9")
+    (layout / "pending.txt").write_text("0.0.9")
+    assert launcher.launch(layout) == 0
+    assert (layout / "current.txt").read_text() == "0.1.0"
+    assert not (layout / "pending.txt").exists()
+
+
+@pytest.mark.parametrize("exit_code", [0, 1])
+def test_interrupted_legacy_trial(layout: Path, exit_code: int) -> None:
+    bundle = layout / "app-0.1.1"
+    shutil.copytree(layout / "app-0.1.0", bundle)
+    (bundle / EXE).write_text(
+        "from pathlib import Path\nassert Path('../current.txt').read_text() == '0.1.1'\n"
+        + APP.format(exit_code)
+    )
+    for name, value in (("current", "0.1.1"), ("previous", "0.1.0"), ("pending", "0.1.1")):
+        (layout / f"{name}.txt").write_text(value)
+    assert launcher.launch(layout) == 0
+    assert (layout / "current.txt").read_text() == ("0.1.0" if exit_code else "0.1.1")
 
 
 @pytest.mark.parametrize(

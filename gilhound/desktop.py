@@ -16,7 +16,9 @@ from pathlib import Path
 
 import uvicorn
 
+from gilhound import __version__
 from gilhound.api.app import create_app
+from gilhound.updater._layout import acknowledge_startup
 
 
 def webview2_available(library: Path) -> bool:
@@ -75,10 +77,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             window = webview.create_window(
                 "Gilhound", f"http://127.0.0.1:{port}/", width=1200, height=800
             )
-            if args.ready_marker:
+            if args.ready_marker or getattr(sys, "frozen", False):
                 def acknowledge() -> None:
                     if worker.is_alive() and not server.should_exit:
-                        args.ready_marker.touch()
+                        acknowledge_startup(__version__, args.ready_marker)
 
                 window.events.shown += acknowledge
             icon = Path(__file__).resolve().parents[1] / "assets" / "gilhound.ico"

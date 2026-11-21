@@ -14,7 +14,7 @@ from gilhound import __version__, updater
 from gilhound.api.jobs import Job, Jobs, Progress
 from gilhound.models import AppInfo
 from gilhound.runtime.diagnostics import LOG
-from gilhound.updater._layout import EXE, install_root, ready
+from gilhound.updater._layout import EXE, install_root, ready, same_location
 
 CHECK_COOLDOWN = 10
 CHECK_CACHE_TTL = 3600
@@ -28,7 +28,7 @@ def installed() -> bool:
     root = install_root()
     folder = root / f"app-{__version__}"
     return (
-        Path(sys.executable).resolve() == (folder / EXE).resolve()
+        same_location(Path(sys.executable), folder / EXE)
         and ready(folder)
         and (root / "Gilhound.exe").is_file()
     )

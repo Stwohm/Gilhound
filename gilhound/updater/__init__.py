@@ -25,6 +25,7 @@ from gilhound.updater._layout import (
     precedence,
     ready,
     rejected,
+    replace_launcher,
     write_pointer,
 )
 
@@ -145,6 +146,9 @@ def download_and_stage(
                 finally:
                     if partial.exists():
                         shutil.rmtree(partial)
+            bundled_launcher = folder / "Gilhound.exe"
+            if bundled_launcher.is_file():
+                replace_launcher(bundled_launcher, root)
             write_pointer(root, "pending.txt", version)
 
 
