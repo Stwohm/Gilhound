@@ -279,10 +279,10 @@ export function ScanResults({ result, archived = false, retry, edit }: { result:
         )}
       </div>
       {sorted.length ? (
-        <Table label="Scan results">
+        <Table label="Scan results" className="scan-table">
           <thead>
             <tr>
-              <th>
+              <th className="select-column">
                 <input
                   type="checkbox"
                   aria-label="Select all results"
@@ -291,7 +291,7 @@ export function ScanResults({ result, archived = false, retry, edit }: { result:
                 />
               </th>
               {columns.map((c) => (
-                <th key={c.label}>
+                <th key={c.label} className={c.label === "Item" ? "item-column" : undefined}>
                   <button
                     className="sort-button"
                     onClick={() =>
@@ -313,7 +313,7 @@ export function ScanResults({ result, archived = false, retry, edit }: { result:
             {sorted.map(({ row, i }) => (
               <Fragment key={i}>
                 <tr className="expandable" onClick={() => setExpanded(expanded === i ? undefined : i)}>
-                  <td onClick={(e) => e.stopPropagation()}>
+                  <td className="select-column" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       aria-label={`Select ${row.item.name}`}
@@ -324,7 +324,7 @@ export function ScanResults({ result, archived = false, retry, edit }: { result:
                     />
                   </td>
                   {columns.map((c) => (
-                    <td key={c.label}>
+                    <td key={c.label} className={c.label === "Item" ? "item-column" : undefined}>
                       {c.label === "Item" ? (
                         <>
                           <button
