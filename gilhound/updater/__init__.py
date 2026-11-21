@@ -24,6 +24,7 @@ from gilhound.updater._layout import (
     pointer,
     precedence,
     ready,
+    rejected,
     write_pointer,
 )
 
@@ -55,6 +56,8 @@ def check() -> UpdateInfo | None:
         release = json.load(response)
     version = release["tag_name"].removeprefix("v")
     if precedence(version) <= precedence(gilhound.__version__):
+        return None
+    if os.environ.get("LOCALAPPDATA") and rejected(install_root(), version):
         return None
     assets = {item["name"]: item["browser_download_url"] for item in release["assets"]}
     return UpdateInfo(version, assets[f"Gilhound-{version}-win64.zip"], assets["SHA256SUMS.txt"])
@@ -118,6 +121,8 @@ def download_and_stage(
         if digest.hexdigest() != matches[0].lower():
             raise ValueError("Release SHA256 mismatch")
         with lock(root / "install.lock"):
+            if rejected(root, version):
+                raise ValueError("Release previously failed startup")
             current = pointer(root, "current.txt")
             pending = pointer(root, "pending.txt")
             if any(v and precedence(v) > precedence(version) for v in [current, pending]):

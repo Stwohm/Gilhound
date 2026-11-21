@@ -8,7 +8,19 @@ Gilhound uses Microsoft Edge WebView2 to display its window. If prompted, instal
 
 ## Updates and support
 
+If you installed 0.1.4 or earlier, close Gilhound and run **Gilhound.exe**
+from the newly extracted release once to replace the older launcher.
+
 When the app offers a newer release, download it and choose the restart option. Gilhound checks the download before switching versions. If the new app fails during startup, the launcher reopens the previous version.
 
 Settings and the database live in `%APPDATA%\Gilhound`. The app and its startup log live in `%LOCALAPPDATA%\Gilhound`. To send a support report, choose **Export diagnostics** in the app and share the resulting zip. It contains logs and version information with personal data and the Discord webhook excluded.
+
+## Optional in-game travel
+
+Scans and position tracking read public market APIs and local plugin files.
+To let **Go** move your character, enable the optional bridge in Restocky
+0.3.9 or later. Each explicit click on **Go** requests only
+`/li <world> market`, once per click, for the selected world.
+If the bridge is unavailable, **Go** copies the command to your clipboard.
+You can also choose **Copy route** at any time, then paste and run it in game.
 

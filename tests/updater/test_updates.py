@@ -1,13 +1,12 @@
 import hashlib
 import importlib.util
 import json
+import shutil
 import subprocess
 import sys
-from collections.abc import Iterator
-from functools import partial
-from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+import time
 from pathlib import Path
-from threading import Thread
+from urllib.request import urlopen
 from zipfile import ZipFile
 
 import pytest
@@ -28,7 +27,9 @@ from pathlib import Path
 assert sys.argv[1] == '--launcher-pid' and int(sys.argv[2]) > 0
 with Path('../started').open('a') as log:
     print(Path.cwd().name, file=log)
-raise SystemExit({})
+if {0} == 0 and '--ready-marker' in sys.argv:
+    Path(sys.argv[-1]).touch()
+raise SystemExit({0})
 """
 
 
@@ -54,34 +55,28 @@ def layout(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture
-def feed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
+def feed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     path = tmp_path / "feed"
     path.mkdir()
-    handler = partial(SimpleHTTPRequestHandler, directory=str(path))
-    with ThreadingHTTPServer(("127.0.0.1", 0), handler) as server:
-        base = f"http://127.0.0.1:{server.server_port}"
-        names = ["Gilhound-0.1.1-win64.zip", "SHA256SUMS.txt"]
-        assets = [dict(name=name, browser_download_url=f"{base}/{name}") for name in names]
-        (path / "latest").write_text(json.dumps(dict(tag_name="v0.1.1", assets=assets)))
-        monkeypatch.setenv("GILHOUND_UPDATE_FEED", base + "/latest")
-        thread = Thread(target=server.serve_forever, kwargs={"poll_interval": 0.02})
-        thread.start()
-        try:
-            yield path
-        finally:
-            server.shutdown()
-            thread.join()
+    monkeypatch.setattr(updater, "_open", urlopen)
+    monkeypatch.setenv("GILHOUND_UPDATE_FEED", (path / "latest").as_uri())
+    return path
 
 
-def release(feed: Path, status: int = 0, bad_member: bool = False) -> updater.UpdateInfo:
+def release(
+    feed: Path, status: int = 0, bad_member: bool = False, version: str = "0.1.1",
+) -> updater.UpdateInfo:
+    names = [f"Gilhound-{version}-win64.zip", "SHA256SUMS.txt"]
+    assets = [dict(name=name, browser_download_url=(feed / name).as_uri()) for name in names]
+    (feed / "latest").write_text(json.dumps(dict(tag_name=f"v{version}", assets=assets)))
     info = updater.check()
-    assert info is not None and info.version == "0.1.1"
+    assert info is not None and info.version == version
     path = feed / info.filename
     with ZipFile(path, "w") as archive:
         archive.writestr("Gilhound.exe", "launcher")
         archive.writestr("install.ps1", "")
-        archive.writestr("app-0.1.1/READY", "")
-        archive.writestr(f"app-0.1.1/{EXE}", APP.format(status))
+        archive.writestr(f"app-{version}/READY", "")
+        archive.writestr(f"app-{version}/{EXE}", APP.format(status))
         if bad_member:
             archive.writestr("app-0.1.1/../escape", "")
     digest = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -125,12 +120,23 @@ def test_update_cycle(layout: Path, feed: Path, monkeypatch: pytest.MonkeyPatch)
 
 
 def test_rollback(layout: Path, feed: Path, caplog: pytest.LogCaptureFixture) -> None:
-    updater.download_and_stage(release(feed, status=5))
+    bad = release(feed, status=5)
+    updater.download_and_stage(bad)
     assert launcher.launch(layout) == 0
     assert "Rolling back 0.1.1 to 0.1.0" in caplog.text
     assert (layout / "current.txt").read_text() == "0.1.0"
     assert (layout / "started").read_text().splitlines() == ["app-0.1.1", "app-0.1.0"]
     assert not (layout / "pending.txt").exists()
+    assert updater.check() is None
+    with pytest.raises(ValueError, match="previously failed startup"):
+        updater.download_and_stage(bad)
+    # Older installed clients may still stage a rejected release.
+    (layout / "pending.txt").write_text(bad.version)
+    assert launcher.launch(layout) == 0
+    assert (layout / "started").read_text().splitlines()[-1] == "app-0.1.0"
+    updater.download_and_stage(release(feed, version="0.1.2"))
+    assert launcher.launch(layout) == 0
+    assert (layout / "current.txt").read_text() == "0.1.2"
 
 
 @pytest.mark.parametrize("corrupt", [True, False])
@@ -187,6 +193,7 @@ def test_first_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     shortcuts = []
     monkeypatch.setattr(launcher, "_shortcuts", shortcuts.append)
     launcher.install(source, root)
+    (root / "Gilhound.exe").write_bytes(b"legacy launcher")
     launcher.install(source, root)
     assert shortcuts == [root, root]
     assert (root / "current.txt").read_text() == "0.1.0"
@@ -194,3 +201,68 @@ def test_first_install(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert (root / folder.name / EXE).read_bytes() == b"desktop"
     assert (root / "Gilhound.exe").read_bytes() == b"launcher"
 
+
+@pytest.mark.parametrize(
+    ("exit_at", "exit_code", "ack_at", "accepted"),
+    [
+        pytest.param(55, 0, 45, True, id="ack-in-time"),
+        pytest.param(5, 1, None, False, id="crash-at-5s"),
+        pytest.param(30, 1, None, False, id="crash-at-30s"),
+        pytest.param(5, 0, None, False, id="clean-exit-before-ack"),
+        pytest.param(120, 0, None, False, id="timeout"),
+        pytest.param(55, 1, 30, True, id="crash-after-ack"),
+    ],
+)
+def test_startup_watchdog(
+    layout: Path, monkeypatch: pytest.MonkeyPatch, exit_at: int,
+    exit_code: int, ack_at: int | None, accepted: bool,
+) -> None:
+    shutil.copytree(layout / "app-0.1.0", layout / "app-0.1.1")
+    (layout / "pending.txt").write_text("0.1.1")
+    elapsed = 0.0
+    started = []
+    killed = False
+
+    class Process:
+        def __init__(self, args: list) -> None:
+            self.args = args
+
+        def wait(self, timeout: float | None = None) -> int:
+            nonlocal elapsed
+            if self.args[0].parent.name == "app-0.1.0" or killed:
+                return 0
+            if timeout is None:
+                return exit_code
+            assert (layout / "pending.txt").is_file()
+            assert (layout / "current.txt").read_text() == "0.1.0"
+            assert (layout / "app-0.1.0" / EXE).is_file()
+            elapsed = min(elapsed + timeout, exit_at)
+            if ack_at is not None and elapsed >= ack_at and "--ready-marker" in self.args:
+                Path(self.args[-1]).touch()
+            if elapsed == exit_at:
+                return exit_code
+            raise subprocess.TimeoutExpired(self.args, timeout)
+
+        def kill(self) -> None:
+            nonlocal killed
+            killed = True
+
+    def spawn(args: list, **kwargs: object) -> Process:
+        started.append(args[0].parent.name)
+        return Process(args)
+
+    monkeypatch.setattr(time, "monotonic", lambda: elapsed)
+    monkeypatch.setattr(launcher.subprocess, "Popen", spawn)
+    assert launcher.launch(layout) == (exit_code if accepted else 0)
+    assert (layout / "current.txt").read_text() == ("0.1.1" if accepted else "0.1.0")
+    assert started == (["app-0.1.1"] if accepted else ["app-0.1.1", "app-0.1.0"])
+    assert killed == (exit_at > 60 and ack_at is None)
+    assert elapsed == (ack_at if accepted else min(60, exit_at))
+    assert not (layout / "pending.txt").exists()
+
+
+@pytest.mark.parametrize("file", ["README.md", "docs/INSTALL.md"])
+def test_travel_disclosure(file: str) -> None:
+    guide = (script.parents[1] / file).read_text(encoding="utf-8").lower()
+    for term in ("optional", "restocky", "**go**", "/li <world> market", "per click", "clipboard"):
+        assert term in guide, file

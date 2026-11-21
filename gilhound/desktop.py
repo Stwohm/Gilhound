@@ -41,7 +41,8 @@ def serve(port: int) -> None:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="Gilhound")
     parser.add_argument("--launcher-pid", type=int, help=argparse.SUPPRESS)
-    parser.parse_args(argv)
+    parser.add_argument("--ready-marker", type=Path, help=argparse.SUPPRESS)
+    args = parser.parse_args(argv)
     import webview
 
     if sys.platform == "win32" and not webview2_available(Path(webview.__file__).parent / "lib"):
@@ -71,7 +72,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 if not worker.is_alive():
                     raise RuntimeError("Could not start the local API.")
                 time.sleep(0.025)
-            webview.create_window("Gilhound", f"http://127.0.0.1:{port}/", width=1200, height=800)
+            window = webview.create_window(
+                "Gilhound", f"http://127.0.0.1:{port}/", width=1200, height=800
+            )
+            if args.ready_marker:
+                def acknowledge() -> None:
+                    if worker.is_alive() and not server.should_exit:
+                        args.ready_marker.touch()
+
+                window.events.shown += acknowledge
             icon = Path(__file__).resolve().parents[1] / "assets" / "gilhound.ico"
             webview.start(
                 gui="edgechromium" if sys.platform == "win32" else None,

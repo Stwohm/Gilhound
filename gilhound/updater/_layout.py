@@ -52,6 +52,11 @@ def write_pointer(root: Path, name: str, version: str) -> None:
         path.unlink(missing_ok=True)
 
 
+def rejected(root: Path, version: str) -> bool:
+    failed = pointer(root, "failed.txt")
+    return failed is not None and precedence(version) <= precedence(failed)
+
+
 def ready(folder: Path) -> bool:
     return (folder / "READY").is_file() and (folder / EXE).is_file()
 
