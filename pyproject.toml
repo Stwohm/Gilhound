@@ -33,8 +33,12 @@ include = ["gilhound", "gilhound.*"]
 testpaths = ["tests"]
 
 [tool.ruff]
+extend-exclude = ["legacy"]
 target-version = "py312"
 line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.per-file-ignores]
+"tools/*.py" = ["E402"]
