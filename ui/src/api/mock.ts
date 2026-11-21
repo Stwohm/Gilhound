@@ -34,6 +34,7 @@ let lastUpdateCheck = now();
 const pause = (ms = 150) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 
 const costs = new Map<string, number>();
+const gatheredItems = new Map<string, boolean>();
 
 let settings: Settings = {
   partner_snapshot_hours: 48, partner_cache_min: 45, partner_regular_days: 5, partner_window_days: 14,
@@ -255,6 +256,9 @@ export const mockApi: Api = {
       if (item) hidden.set(key, item);
     }
   },
+  async setGathered(change) {
+    gatheredItems.set(`${change.item_id}-${change.hq}`, change.gathered);
+  },
   async scan(params,profile) {
     const started_ts = now();
     await pause(800);
@@ -324,15 +328,18 @@ export const mockApi: Api = {
   },
   async setCost(cost) { costs.set(`${cost.item_id}-${cost.hq}`, cost.unit_cost); },
   async getSales() {
-    return marketRows(mockParams.Flip).slice(0,3).map((r,i) => {
+    return marketRows(mockParams.Flip).slice(0,3).map((r,i): components["schemas"]["RealisedSale"] => {
+      const key = `${r.item.id}-${r.item.hq}`;
+      const gathered = gatheredItems.get(key) ?? (i === 2);
       const gross = r.home_median_7d * 2, net = Math.floor(gross * 0.95);
-      const basis = i === 2 ? null : Math.floor(2 * r.buy_ppu * 1.05);
-      return {item:r.item, qty:2, ts:now() - (i+1)*86400, gross, net, fifo_cost:basis,
+      const unitCost = costs.get(key) ?? (gathered ? 0 : null);
+      const basis = i === 2 ? (unitCost == null ? null : 2 * unitCost) : Math.floor(2 * r.buy_ppu * 1.05);
+      return {item:r.item, gathered, qty:2, ts:now() - (i+1)*86400, gross, net, fifo_cost:basis,
         buy_ppu:basis == null ? null : basis/2, gross_ppu:gross/2, net_ppu:net/2,
         profit:basis == null ? null : net-basis, known_profit:basis == null ? 0 : net-basis, roi_pct:basis ? 100*(net-basis)/basis : null,
         unknown_qty:basis == null ? 2 : 0, sources:["restocky"], listing_days:i+0.5,
         purchase_days:i+1, retainer:demoRetainer, reprices:i, own_undercuts:i};
-    });
+    }).filter(r => !hidden.has(`${r.item.id}-${r.item.hq}`));
   },
   async recheck(q) {
     const row = marketRows(mockParams.Flip).find(r => r.item.id === q.item_id && r.item.hq === q.hq && r.buy_world === q.buy_world);
@@ -344,24 +351,37 @@ export const mockApi: Api = {
     const rows = marketRows({
       buyer_tax: 0.05, seller_tax: 0.05, sellable_days: 3,
     });
-    return rows.slice(0, 5).map((row, index) => ({
-      item: row.item, qty_open: index === 4 ? 0 : row.sellable_qty + 3,
-      avg_cost: index === 3 ? costs.get(`${row.item.id}-${row.item.hq}`) ?? null : row.buy_ppu,
-      cost_known: index !== 3 || costs.has(`${row.item.id}-${row.item.hq}`),
-      known_capital: index === 4 ? 0 : (row.sellable_qty + 3) * (index === 3 ? costs.get(`${row.item.id}-${row.item.hq}`) ?? 0 : row.buy_ppu),
-      listing_count: index === 4 ? 0 : 1,
-      listed_qty: index === 4 ? 0 : row.sellable_qty, realised_profit: index === 3 ? 0 : 42500 + index * 16700,
-    })).filter(r => !hidden.has(r.item.id + "-" + r.item.hq));
+    return rows.slice(0, 5).map((row, index) => {
+      const key = `${row.item.id}-${row.item.hq}`;
+      const gathered = gatheredItems.get(key) ?? (index === 2);
+      const qty = index === 4 ? 0 : row.sellable_qty + 3;
+      const cost = index === 2 || index === 3
+        ? costs.get(key) ?? (gathered ? 0 : null)
+        : row.buy_ppu;
+      return {
+        item: row.item, gathered, qty_open: qty, avg_cost: cost, cost_known: cost != null,
+        known_capital: gathered ? 0 : qty * (cost ?? 0),
+        listing_count: index === 4 ? 0 : 1,
+        listed_qty: index === 4 ? 0 : row.sellable_qty, realised_profit: index === 3 ? 0 : 42500 + index * 16700,
+      };
+    }).filter(r => !hidden.has(r.item.id + "-" + r.item.hq));
   },
   async getPnl() {
     await pause();
-    const rows = await mockApi.getPositions();
-    const known = rows.filter(r => r.cost_known);
-    const cost = known.reduce((sum, r) => sum + (r.avg_cost ?? 0), 0);
-    const profit = known.reduce((sum, r) => sum + r.realised_profit, 0);
-    const unknown = rows.length - known.length;
-    return { realised_profit: profit, known_cost_of_goods_sold: cost,
-      sales_proceeds: profit + cost + unknown * 1000, unknown_cost_qty_sold: unknown };
+    const rows = await mockApi.getSales();
+    const gathered = rows.filter(r => r.gathered);
+    const flips = rows.filter(r => !r.gathered);
+    const flipProfit = flips.reduce((sum, r) => sum + r.known_profit, 0);
+    const gatheredProceeds = gathered.reduce((sum, r) => sum + r.net, 0);
+    return {
+      flip_profit: flipProfit, gathered_proceeds: gatheredProceeds,
+      total_profit: flipProfit + gatheredProceeds,
+      flip_proceeds: flips.reduce((sum, r) => sum + r.net, 0),
+      realised_profit: rows.reduce((sum, r) => sum + r.known_profit, 0),
+      known_cost_of_goods_sold: rows.reduce((sum, r) => sum + (r.fifo_cost ?? 0), 0),
+      sales_proceeds: rows.reduce((sum, r) => sum + r.net, 0),
+      unknown_cost_qty_sold: rows.reduce((sum, r) => sum + r.unknown_qty, 0),
+    };
   },
   async getSettings() {
     await pause();

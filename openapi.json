@@ -651,6 +651,23 @@
       },
       "PnLSummary": {
         "properties": {
+          "flip_proceeds": {
+            "description": "Net proceeds from non-gathered items.",
+            "minimum": 0.0,
+            "title": "Flip Proceeds",
+            "type": "integer"
+          },
+          "flip_profit": {
+            "description": "Net realised profit on non-gathered units with known cost.",
+            "title": "Flip Profit",
+            "type": "integer"
+          },
+          "gathered_proceeds": {
+            "description": "Net proceeds from gathered items.",
+            "minimum": 0.0,
+            "title": "Gathered Proceeds",
+            "type": "integer"
+          },
           "known_cost_of_goods_sold": {
             "description": "FIFO cost for sold units with known cost.",
             "minimum": 0.0,
@@ -668,14 +685,23 @@
             "title": "Sales Proceeds",
             "type": "integer"
           },
+          "total_profit": {
+            "description": "Flip profit plus gathered proceeds.",
+            "title": "Total Profit",
+            "type": "integer"
+          },
           "unknown_cost_qty_sold": {
-            "description": "Sold units with unknown cost basis.",
+            "description": "Non-gathered units sold with unknown cost basis.",
             "minimum": 0.0,
             "title": "Unknown Cost Qty Sold",
             "type": "integer"
           }
         },
         "required": [
+          "flip_profit",
+          "gathered_proceeds",
+          "total_profit",
+          "flip_proceeds",
           "realised_profit",
           "sales_proceeds",
           "known_cost_of_goods_sold",
@@ -714,6 +740,11 @@
               }
             ],
             "title": "First Listed"
+          },
+          "gathered": {
+            "default": false,
+            "title": "Gathered",
+            "type": "boolean"
           },
           "home_lowest": {
             "anyOf": [
@@ -755,7 +786,7 @@
           },
           "known_capital": {
             "default": 0,
-            "description": "Cost of remaining known FIFO lots.",
+            "description": "Cost of remaining known flip lots.",
             "minimum": 0.0,
             "title": "Known Capital",
             "type": "integer"
@@ -841,6 +872,30 @@
           "unit_cost"
         ],
         "title": "PositionCost",
+        "type": "object"
+      },
+      "PositionGathered": {
+        "properties": {
+          "gathered": {
+            "title": "Gathered",
+            "type": "boolean"
+          },
+          "hq": {
+            "title": "Hq",
+            "type": "boolean"
+          },
+          "item_id": {
+            "exclusiveMinimum": 0.0,
+            "title": "Item Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "item_id",
+          "hq",
+          "gathered"
+        ],
+        "title": "PositionGathered",
         "type": "object"
       },
       "PositionPersonal": {
@@ -1115,6 +1170,11 @@
               }
             ],
             "title": "First Listed"
+          },
+          "gathered": {
+            "default": false,
+            "title": "Gathered",
+            "type": "boolean"
           },
           "gross": {
             "anyOf": [
@@ -1573,6 +1633,11 @@
       },
       "SalesByItem": {
         "properties": {
+          "gathered": {
+            "default": false,
+            "title": "Gathered",
+            "type": "boolean"
+          },
           "item": {
             "$ref": "#/components/schemas/ItemRef"
           },
@@ -4825,6 +4890,64 @@
           }
         },
         "summary": "Set Position Cost"
+      }
+    },
+    "/api/positions/gathered": {
+      "put": {
+        "operationId": "set_gathered_api_positions_gathered_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PositionGathered"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Gathered"
       }
     },
     "/api/positions/hidden": {

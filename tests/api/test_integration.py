@@ -151,6 +151,15 @@ def test_position_views_and_cost(
             change["personal"] = False
             assert client.put("/api/positions/personal", json=change).status_code == 204
             assert client.get("/api/positions").json() == [updated]
+            del change["personal"]
+            change["gathered"] = True
+            assert client.put("/api/positions/gathered", json=change).status_code == 204
+            (gathered,) = client.get("/api/positions").json()
+            assert gathered["gathered"] and gathered["known_capital"] == 0
+            assert gathered["avg_cost"] == 7
+            change["gathered"] = False
+            assert client.put("/api/positions/gathered", json=change).status_code == 204
+            assert client.get("/api/positions").json() == [updated]
 
 
 def test_live_snipe_controls(tmp_path: Path, token: str, monkeypatch: pytest.MonkeyPatch) -> None:

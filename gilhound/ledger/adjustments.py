@@ -14,6 +14,7 @@ class ItemAdjustment(BaseModel):
     item: ItemRef
     unknown_unit_cost: GilCost | None = None
     personal: bool = False
+    gathered: bool = False
 
 
 class Acquisition(BaseModel):
@@ -47,7 +48,16 @@ class ManualAdjustments(BaseModel):
         with NamedTemporaryFile(dir=path.parent, delete=False) as stream:
             temp = Path(stream.name)
         try:
-            temp.write_text(self.model_dump_json(indent=2), encoding="utf-8")
+            # Preserve omission so existing cost and personal edits can still auto-detect.
+            omitted_gathered = {
+                index: {"gathered"}
+                for index, item in enumerate(self.items)
+                if "gathered" not in item.model_fields_set
+            }
+            temp.write_text(
+                self.model_dump_json(indent=2, exclude={"items": omitted_gathered}),
+                encoding="utf-8",
+            )
             temp.replace(path)
         finally:
             temp.unlink(missing_ok=True)

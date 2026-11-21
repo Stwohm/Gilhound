@@ -54,6 +54,18 @@ export default function Positions() {
   const [cost, setCost] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  async function setGathered(row: Schema<"Position">) {
+    setSaving(true);
+    setError("");
+    try {
+      await api.setGathered({ item_id: row.item.id, hq: row.item.hq, gathered: !row.gathered });
+      positions.retry();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update Gathered status.");
+    } finally {
+      setSaving(false);
+    }
+  }
   const holdings = open?.filter(r => unlisted || r.listed_qty > 0);
   const known = holdings?.filter(r => r.cost_known).length ?? 0;
   const rows = holdings?.filter(r => !needsCost || !r.cost_known);
@@ -73,7 +85,7 @@ export default function Positions() {
     { label: "Active listed item qualities", value: open.filter(p=>p.listed_qty>0).length, quantity: true },
     { label: "Listed", value: open.reduce((sum, row) => sum + row.listed_qty, 0), quantity: true,
       listings: open.reduce((sum, row) => sum + (row.listing_count ?? 0), 0) },
-    { label: "Known capital in all holdings", value: open.reduce((sum, row) => sum + row.known_capital, 0) },
+    { label: "Known flip capital", value: open.reduce((sum, row) => sum + row.known_capital, 0) },
   ];
 
   return <>
@@ -113,7 +125,9 @@ export default function Positions() {
               <input aria-label="Unit cost in gil" required type="number" min="0" step="1" value={cost} onChange={e => setCost(e.target.value)} />
               <button disabled={saving}>Save</button><button type="button" onClick={() => setEditing("")}>Cancel</button>
             </form> : <>Unknown <button onClick={() => { setCost(""); setError(""); setEditing(`${row.item.id}-${row.item.hq}`); }}>Set cost</button></>}</td>
-          <td><button disabled={saving} title="Hide (personal)" aria-label={`Hide (personal): ${row.item.name}`}
+          <td><label><input type="checkbox" disabled={saving} checked={row.gathered}
+            aria-label={`Gathered: ${row.item.name}`} onChange={() => void setGathered(row)} /> Gathered</label>{" "}
+            <button disabled={saving} title="Hide (personal)" aria-label={`Hide (personal): ${row.item.name}`}
             onClick={() => void personal(row.item, true)}><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24"
             fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3l18 18M10 5c5-1 9 3 12 7l-3 4M6 6l-4 6c4 6 10 9 16 5" /></svg></button></td>
         </tr>)}</tbody>

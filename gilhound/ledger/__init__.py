@@ -28,7 +28,12 @@ def latest_listing_source(sources: Iterable[Source]) -> Source | None:
                default=None)
 
 
-def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | None = None) -> Ledger:
+def build_ledger(
+    sources: Iterable[Source],
+    adjustments: ManualAdjustments | None = None,
+    *,
+    gathered_ids: frozenset[int] = frozenset(),
+) -> Ledger:
     """Replay history then reconcile current stock as a lower bound on holdings.
 
     Use one complete listing snapshot (newest file mtime, AllaganMarket first
@@ -39,7 +44,7 @@ def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | Non
     manual = adjustments or ManualAdjustments()
     inputs = [s for s in sources if s.status.recognised]
     history = [e for s in inputs for e in s.records.events]
-    replay = calculate(history, manual)
+    replay = calculate(history, manual, gathered_ids=gathered_ids)
     existing = {(p.item.id, p.item.hq): p.qty_open for p in replay.positions}
     ts = max([0, *(e.ts for e in replay.events), *(s.status.last_update_ts or 0 for s in inputs)])
     latest = latest_listing_source(inputs)
@@ -110,7 +115,7 @@ def build_ledger(sources: Iterable[Source], adjustments: ManualAdjustments | Non
         for s in inputs
     ):
         limits = {key: sellable[key] + listed[key] for key in set(sellable) | set(listed)}
-    ledger = calculate(history, manual, limits)
+    ledger = calculate(history, manual, limits, gathered_ids=gathered_ids)
     tracked: dict[ItemKey, list[Stock]] = defaultdict(list)
     for src in inputs:
         if src.status.name == SourceName.RESTOCKY:

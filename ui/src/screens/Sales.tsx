@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { api } from "../api/client";
-import { Field, Notice, PageTitle, ResourceState, Section, Table, gil, number, time, useResource } from "../common";
+import { Badge, Field, Notice, PageTitle, ResourceState, Section, Table, gil, number, time, useResource } from "../common";
 import type { Schema } from "../common";
 
 type Sale = Schema<"RealisedSale">;
@@ -8,10 +8,10 @@ const quality = (s: Sale) => s.item.hq ? "HQ" : "NQ";
 const rivals = (s: Sale) => Object.entries(s.rivals ?? {}).sort((a,b) => b[1]-a[1])
   .map(([name,count]) => name + " (" + count + ")").join(", ");
 function exportSales(rows: Sale[]) {
-  const header = ["UTC","Item ID","Item","Quality","Qty","Gross stack","Net stack","FIFO stack cost",
+  const header = ["UTC","Item ID","Item","Quality","Gathered","Qty","Gross stack","Net stack","FIFO stack cost",
     "Unknown units","Realised profit (known units)","ROI %","Purchase days","Listing days","Reprices",
     "Own undercuts","Rival observations","Retainer","Sources"];
-  const cells = rows.map(s => [new Date(s.ts*1000).toISOString(),s.item.id,s.item.name,quality(s),s.qty,
+  const cells = rows.map(s => [new Date(s.ts*1000).toISOString(),s.item.id,s.item.name,quality(s),s.gathered,s.qty,
     s.gross,s.net,s.fifo_cost,s.unknown_qty,s.known_profit,s.roi_pct,s.purchase_days,s.listing_days,
     s.reprices,s.own_undercuts,rivals(s),s.retainer,s.sources.join(", ")]);
   const csv = [header,...cells].map(line => line.map(value => {
@@ -50,13 +50,13 @@ export default function Sales() {
     (!retainer || s.retainer === retainer) && (s.item.name.toLowerCase().includes(search.toLowerCase()) ||
     String(s.item.id) === search)) ?? [], [data.data,from,until,search,retainer]);
   const groups = new Map<string,{name:string; qty:number; count:number; profit:number; net:number;
-    slotDays:number; timedProfit:number; known:number}>();
+    slotDays:number; timedProfit:number; known:number; gathered:boolean}>();
   const periods = new Map<number,number>(), distribution = [0,0,0,0];
-  let totalNet=0, profit=0, duration=0, timed=0, unknown=0;
+  let totalNet=0, flipProfit=0, gatheredIncome=0, duration=0, timed=0, unknown=0;
   for (const sale of rows) {
     const key=sale.item.id+"-"+sale.item.hq;
     const g=groups.get(key) ?? {name:sale.item.name+" "+quality(sale),qty:0,count:0,profit:0,
-      net:0,slotDays:0,timedProfit:0,known:0};
+      net:0,slotDays:0,timedProfit:0,known:0,gathered:sale.gathered};
     g.qty+=sale.qty; g.count++; g.profit+=sale.known_profit; g.net+=sale.net;
     g.known+=sale.qty-sale.unknown_qty;
     if (sale.listing_days != null) {
@@ -64,7 +64,9 @@ export default function Sales() {
       distribution[sale.listing_days<1 ? 0 : sale.listing_days<3 ? 1 : sale.listing_days<7 ? 2 : 3]++;
       if (sale.fifo_cost != null && sale.listing_days>0) {g.slotDays+=sale.listing_days; g.timedProfit+=sale.known_profit;}
     }
-    groups.set(key,g); totalNet+=sale.net; profit+=sale.known_profit; unknown+=sale.unknown_qty;
+    groups.set(key,g); totalNet+=sale.net; unknown+=sale.unknown_qty;
+    if (sale.gathered) gatheredIncome+=sale.net;
+    else flipProfit+=sale.known_profit;
     const day=Math.floor(sale.ts/86400);
     const period=weekly ? day-(day+3)%7 : day;
     if (sale.unknown_qty<sale.qty) periods.set(period,(periods.get(period) ?? 0)+sale.known_profit);
@@ -83,7 +85,8 @@ export default function Sales() {
       {sources.data?.filter(s => s.found && s.warning).map(s => <Notice tone="warn" key={s.name}>{s.warning}</Notice>)}
       {!data.data ? <ResourceState error={data.error} retry={data.retry} loading="Loading sales…" /> :
         !rows.length ? <Notice>No confirmed sales match these filters.</Notice> : <>
-        <dl className="metric-grid panel-body">{[["Realised profit (known units)",gil(profit)],["Net turnover",gil(totalNet)],
+        <dl className="metric-grid panel-body">{[["Flip profit",gil(flipProfit)],["Gathered income",gil(gatheredIncome)],
+          ["Total",gil(flipProfit+gatheredIncome)],["Net turnover",gil(totalNet)],
           ["Unknown-cost units",gil(unknown)],["Average listing days",number(timed ? duration/timed : null)],
           ["Best item by known profit",ranked[0]?.name ?? "—"],["Worst item by known profit",ranked.at(-1)?.name ?? "—"]]
           .map(([k,v])=><div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}</dl>
@@ -93,11 +96,11 @@ export default function Sales() {
         <div className="sales-charts"><Bars title={"Realised profit per "+(weekly?"week":"day")+" (UTC)"} buckets={buckets}/>
           <Bars title="Days from listing to sale" buckets={distribution.map((v,i)=>[["<1 day","1–3","3–7","7+ days"][i],v])}/></div>
         {rollup ? <Table label="Sales by item"><thead><tr>{["Item","Sales","Units","Net turnover","Known profit","Gil per listing-slot-day"].map(h=><th key={h}>{h}</th>)}</tr></thead>
-          <tbody>{items.map((g,i)=><tr key={i}><td>{g.name}</td><td>{g.count}</td><td>{g.qty}</td><td>{gil(g.net)}</td><td>{g.known ? gil(g.profit) : "Unknown"}</td>
+          <tbody>{items.map((g,i)=><tr key={i}><td>{g.name} {g.gathered && <Badge tone="good">Gathered</Badge>}</td><td>{g.count}</td><td>{g.qty}</td><td>{gil(g.net)}</td><td>{g.known ? gil(g.profit) : "Unknown"}</td>
             <td>{gil(g.slotDays ? g.timedProfit/g.slotDays : null)}</td></tr>)}</tbody></Table> :
           <Table className="sales-table" label="Confirmed sales"><thead><tr>{["Item / sale","Qty","FIFO cost/unit","Sold per unit","Realised profit","Days to sale","Listing history"].map(h=><th key={h}>{h}</th>)}</tr></thead>
           <tbody>{rows.map((s,i)=><tr key={i}>
-            <td><strong>{s.item.name} {quality(s)}</strong><br/>{time(s.ts)}<br/>{s.retainer ?? "Unknown retainer"}</td>
+            <td><strong>{s.item.name} {quality(s)}</strong> {s.gathered && <Badge tone="good">Gathered</Badge>}<br/>{time(s.ts)}<br/>{s.retainer ?? "Unknown retainer"}</td>
             <td>{s.qty}</td><td>{s.buy_ppu==null ? "Unknown" : gil(s.buy_ppu)}</td>
             <td>{gil(s.net_ppu)} net<br/><small>{gil(s.gross_ppu)} gross</small></td>
             <td><strong className={s.profit==null ? undefined : s.profit>=0 ? "profit" : "loss"}>{s.profit==null ? "Unknown" : gil(s.profit)}</strong>

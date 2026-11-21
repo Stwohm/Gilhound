@@ -218,6 +218,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(json.dumps({"command": args.command, "error": type(exc).__name__}))
         return 1
     if args.table:
+        if args.command == "pnl":
+            result["command"] = result.pop("command")
         rows = result.get("rows", [result])
         if rows:
             print("\t".join(rows[0]))

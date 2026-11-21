@@ -5,9 +5,9 @@ from collections.abc import Callable
 from pathlib import Path
 from threading import Lock
 
-from gilhound.ingest import discover, read_plugins
+from gilhound.ingest import discover, gatherbuddy, read_plugins
 from gilhound.ingest.common import item_ref
-from gilhound.ingest.discover import listing_sources
+from gilhound.ingest.discover import listing_sources, plugin_config_root
 from gilhound.ledger import (
     ItemAdjustment,
     Ledger,
@@ -218,7 +218,12 @@ class Runtime:
         return discover(self.plugins)
 
     def ledger(self) -> Ledger:
-        return build_ledger(read_plugins(self.plugins), ManualAdjustments.load(self.root))
+        plugins = self.plugins or plugin_config_root()
+        return build_ledger(
+            read_plugins(plugins),
+            ManualAdjustments.load(self.root),
+            gathered_ids=gatherbuddy.read(plugins / "GatherBuddyReborn"),
+        )
 
     def hidden(self) -> list[ItemRef]:
         return [a.item for a in ManualAdjustments.load(self.root).items if a.personal]
@@ -231,6 +236,16 @@ class Runtime:
                 entry = ItemAdjustment(item=item_ref(iid, hq))
                 manual.items.append(entry)
             entry.personal = personal
+            manual.save(self.root)
+
+    def set_gathered(self, iid: int, hq: bool, gathered: bool) -> None:
+        with self.adjustment_lock:
+            manual = ManualAdjustments.load(self.root)
+            entry = next((a for a in manual.items if (a.item.id, a.item.hq) == (iid, hq)), None)
+            if entry is None:
+                entry = ItemAdjustment(item=item_ref(iid, hq))
+                manual.items.append(entry)
+            entry.gathered = gathered
             manual.save(self.root)
 
     def set_cost(self, iid: int, hq: bool, unit_cost: int) -> None:

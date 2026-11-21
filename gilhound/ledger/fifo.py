@@ -102,7 +102,7 @@ def rollup_sales(rows: Iterable[RealisedSale]) -> list[SalesByItem]:
     for row in rows:
         key = row.item.id, row.item.hq
         if key not in groups:
-            groups[key] = SalesByItem(item=row.item)
+            groups[key] = SalesByItem(item=row.item, gathered=row.gathered)
         group = groups[key]
         group.sales += 1
         group.qty += row.qty
@@ -259,6 +259,7 @@ class Lot:
 
 def empty_summary() -> PnLSummary:
     return PnLSummary(
+        flip_profit=0, gathered_proceeds=0, total_profit=0, flip_proceeds=0,
         realised_profit=0, sales_proceeds=0, known_cost_of_goods_sold=0, unknown_cost_qty_sold=0
     )
 
@@ -266,6 +267,7 @@ def empty_summary() -> PnLSummary:
 @dataclass
 class Holding:
     item: ItemRef
+    gathered: bool
     lots: deque[Lot] = field(default_factory=deque)
     qty: int = 0
     listed: int = 0
@@ -283,6 +285,8 @@ class Holding:
 
     def apply(self, row: LedgerEvent, adjustment: ItemAdjustment | None) -> None:
         override = adjustment.unknown_unit_cost if adjustment else None
+        if override is None and self.gathered:
+            override = 0
         total = stack_total(row)
         if row.kind in (LedgerEventKind.BUY, LedgerEventKind.OPENING, LedgerEventKind.TRADE_IN):
             self.acquire(row.qty, total, override, row.kind == LedgerEventKind.BUY,
@@ -325,11 +329,17 @@ class Holding:
                 unknown = self.pnl.unknown_cost_qty_sold - before.unknown_cost_qty_sold
                 basis = self.pnl.known_cost_of_goods_sold - before.known_cost_of_goods_sold
                 profit = self.pnl.realised_profit - before.realised_profit
+                if self.gathered:
+                    self.pnl.gathered_proceeds += total
+                else:
+                    self.pnl.flip_proceeds += total
+                    self.pnl.flip_profit += profit
+                self.pnl.total_profit = self.pnl.flip_profit + self.pnl.gathered_proceeds
                 details = row.details.model_dump() if isinstance(row, Transaction) else {}
                 first = details.get("first_listed")
                 self.sales.append(RealisedSale(
                     item=row.item, ts=row.ts, qty=row.qty, net=total, fifo_cost=None if unknown
-                    else basis, unknown_qty=unknown, known_profit=profit,
+                    else basis, unknown_qty=unknown, known_profit=profit, gathered=self.gathered,
                     roi_pct=100 * profit / basis if basis and not unknown else None,
                     purchase_days=holding_seconds / (86400 * row.qty) if dated_qty == row.qty
                     else None, listing_days=(row.ts - first) / 86400 if first is not None
@@ -359,7 +369,8 @@ class Holding:
         return Position(
             item=self.item,
             qty_open=self.qty,
-            known_capital=remaining,
+            gathered=self.gathered,
+            known_capital=0 if self.gathered else remaining,
             listed_qty=self.listed,
             cost_known=known,
             avg_cost=remaining / self.qty if known and self.qty else None,
@@ -371,6 +382,8 @@ def calculate(
     events: Iterable[LedgerEvent],
     adjustments: ManualAdjustments | None = None,
     available: dict[ItemKey, int] | None = None,
+    *,
+    gathered_ids: frozenset[int] = frozenset(),
 ) -> Ledger:
     manual = adjustments or ManualAdjustments()
     overrides = {(a.item.id, a.item.hq): a for a in manual.items}
@@ -382,9 +395,13 @@ def calculate(
     holdings: dict[ItemKey, Holding] = {}
     for row in entries:
         key = row.item.id, row.item.hq
+        adjustment = overrides.get(key)
         if key not in holdings:
-            holdings[key] = Holding(row.item)
-        holdings[key].apply(enrichment.get(id(row), row), overrides.get(key))
+            gathered = row.item.id in gathered_ids
+            if adjustment is not None and "gathered" in adjustment.model_fields_set:
+                gathered = adjustment.gathered
+            holdings[key] = Holding(row.item, gathered)
+        holdings[key].apply(enrichment.get(id(row), row), adjustment)
     per_item = {key: h.pnl for key, h in holdings.items()}
     summary = PnLSummary(
         **{k: sum(getattr(p, k) for p in per_item.values()) for k in PnLSummary.model_fields}

@@ -21,6 +21,7 @@ export interface Api {
   recheck(query: Schema["QuoteRequest"]): Promise<Schema["QuoteSnapshot"]>;
   getHidden(): Promise<Schema["ItemRef"][]>;
   setPersonal(change: Schema["PositionPersonal"]): Promise<void>;
+  setGathered(change: Schema["PositionGathered"]): Promise<void>;
   bridge(): Promise<Schema["BridgeStatus"]>;
   go(request: Schema["BridgeGo"]): Promise<Schema["BridgeResult"]>;
   history(query: URLSearchParams): Promise<Schema["ArchiveSummary"][]>;
@@ -120,6 +121,7 @@ const realApi: Api = {
   recheck: query => json("/api/recheck", "POST", query),
   getHidden: () => json("/api/positions/hidden"),
   setPersonal: async change => { await request("/api/positions/personal", "PUT", change); },
+  setGathered: async change => { await request("/api/positions/gathered", "PUT", change); },
   bridge: () => json("/api/bridge"),
   go: request => json("/api/bridge/go", "POST", request),
   history: query => json("/api/history?" + query),

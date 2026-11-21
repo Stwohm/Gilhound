@@ -405,6 +405,7 @@ class RealisedSale(SaleDetails):
     roi_pct: float | None
     purchase_days: float | None
     listing_days: float | None
+    gathered: bool = False
 
     @computed_field
     @property
@@ -429,6 +430,7 @@ class RealisedSale(SaleDetails):
 
 class SalesByItem(BaseModel):
     item: ItemRef
+    gathered: bool = False
     sales: int = 0
     qty: int = 0
     net: int = 0
@@ -445,7 +447,8 @@ class Position(BaseModel):
     home_rank: int | None = None
     home_observed_ts: EpochSeconds | None = None
     item: ItemRef = Field(description="Item and quality variant held.")
-    known_capital: int = Field(default=0, ge=0, description="Cost of remaining known FIFO lots.")
+    gathered: bool = False
+    known_capital: int = Field(default=0, ge=0, description="Cost of remaining known flip lots.")
     qty_open: int = Field(ge=0, description="Units still held, including listed units.")
     avg_cost: float | None = Field(description="Average open cost in gil, if known.")
     cost_known: bool = Field(description="Whether all open units have a known cost basis.")
@@ -457,12 +460,20 @@ class Position(BaseModel):
 
 
 class PnLSummary(BaseModel):
+    flip_profit: int = Field(
+        description="Net realised profit on non-gathered units with known cost."
+    )
+    gathered_proceeds: GilCost = Field(description="Net proceeds from gathered items.")
+    total_profit: int = Field(description="Flip profit plus gathered proceeds.")
+    flip_proceeds: GilCost = Field(description="Net proceeds from non-gathered items.")
     realised_profit: int = Field(description="Net realised gil profit for sales with known cost.")
     sales_proceeds: GilCost = Field(description="Gil proceeds from all recorded sales after tax.")
     known_cost_of_goods_sold: GilCost = Field(
         description="FIFO cost for sold units with known cost."
     )
-    unknown_cost_qty_sold: int = Field(ge=0, description="Sold units with unknown cost basis.")
+    unknown_cost_qty_sold: int = Field(
+        ge=0, description="Non-gathered units sold with unknown cost basis."
+    )
 
 
 class PartnerRetainer(BaseModel, extra="forbid"):

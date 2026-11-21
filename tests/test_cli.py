@@ -2,14 +2,23 @@ import json
 import time
 from collections.abc import Callable
 from pathlib import Path
+from shutil import copyfile
 
 import pytest
 
 from gilhound import cli
+from gilhound.ingest.common import Records, Source, event, item_ref
 from gilhound.market.http import HttpClient, RateLimiter
 from gilhound.market.presets import run_scan
 from gilhound.market.universalis import Universalis
-from gilhound.models import Position, ScanPreset, ScanResult
+from gilhound.models import (
+    LedgerEventKind,
+    Position,
+    ScanPreset,
+    ScanResult,
+    SourceName,
+    SourceStatus,
+)
 from gilhound.runtime import Runtime
 from gilhound.sources.fixtures import install
 
@@ -23,6 +32,32 @@ def test_startup_failure_returns_json(
     (root / "settings.json").write_text("malformed")
     assert cli.main(["sources"]) != 0
     assert json.loads(capsys.readouterr().out) == {"command": "sources", "error": "ValueError"}
+
+
+def test_cli_detects_and_reports_gathered_sales(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    name = "GatherBuddyReborn/auto_gather_lists.json"
+    fixture = Path(__file__).parent / "fixtures/plugins" / name
+    target = tmp_path / "XIVLauncher/pluginConfigs" / name
+    target.parent.mkdir(parents=True)
+    copyfile(fixture, target)
+
+    records = Records(events=[
+        event(SourceName.CASHFLOW, LedgerEventKind.SELL, item_ref(5056, False), 2, 1, 20)
+    ])
+    source = Source(SourceStatus(name=SourceName.CASHFLOW, recognised=True, found=True), records)
+    monkeypatch.setattr("gilhound.runtime.read_plugins", lambda _: [source])
+
+    assert cli.main(["pnl", "--table"]) == 0
+    header, values = capsys.readouterr().out.splitlines()
+    assert header.split("\t")[:3] == ["flip_profit", "gathered_proceeds", "total_profit"]
+    assert values.split("\t")[:3] == ["0", "20", "20"]
+    assert cli.main(["sales", "--rollup", "--fields", "gathered,net,known_profit"]) == 0
+    assert json.loads(capsys.readouterr().out)["rows"] == [
+        {"gathered": True, "net": 20, "known_profit": 20}
+    ]
 
 
 @pytest.mark.parametrize("top", [0, 1])

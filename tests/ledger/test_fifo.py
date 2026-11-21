@@ -1,7 +1,9 @@
 from pathlib import Path
 
+from gilhound.ingest import gatherbuddy
 from gilhound.ingest.common import Records, Source, Stock, event, item_ref
 from gilhound.ledger import Acquisition, ItemAdjustment, ManualAdjustments, build_ledger, calculate
+from gilhound.ledger.fifo import rollup_sales
 from gilhound.models import LedgerEventKind as K
 from gilhound.models import SourceName as S
 from gilhound.models import SourceStatus
@@ -50,6 +52,66 @@ def test_unknown_manual_and_personal(tmp_path: Path) -> None:
     personal = calculate(history, ManualAdjustments.load(tmp_path))
     assert personal.summary.sales_proceeds == personal.summary.realised_profit == 0
     assert personal.positions == []
+
+
+def test_gathered_sales_split() -> None:
+    ore, flip, unknown = [item_ref(i, False) for i in (5056, 5333, 6000)]
+    ledger = calculate(
+        [
+            event(S.CASHFLOW, K.SELL, ore, 3, 2, 90),
+            event(S.ALLAGAN_MARKET, K.LIST, ore, 2, 3, None),
+            event(S.CASHFLOW, K.BUY, flip, 2, 1, 30),
+            event(S.CASHFLOW, K.SELL, flip, 2, 2, 50),
+            event(S.CASHFLOW, K.SELL, unknown, 4, 2, 100),
+        ],
+        ManualAdjustments(items=[ItemAdjustment(item=ore, gathered=True)]),
+    )
+    assert ledger.summary.model_dump() == {
+        "flip_profit": 20,
+        "flip_proceeds": 150,
+        "gathered_proceeds": 90,
+        "total_profit": 110,
+        "realised_profit": 110,
+        "sales_proceeds": 240,
+        "known_cost_of_goods_sold": 30,
+        "unknown_cost_qty_sold": 4,
+    }
+    gathered = next(s for s in ledger.sales if s.gathered)
+    assert gathered.fifo_cost == gathered.unknown_qty == 0
+    assert gathered.profit == gathered.net == 90
+    assert not next(s for s in ledger.sales if s.item == flip).gathered
+    position = next(p for p in ledger.positions if p.item == ore)
+    assert position.gathered and position.cost_known
+    assert position.avg_cost == position.known_capital == 0
+    assert position.qty_open == position.listed_qty == 2
+    rollup = rollup_sales(ledger.sales)
+    assert [(g.gathered, g.known_profit) for g in rollup] == [(True, 90), (False, 20), (False, 0)]
+
+
+def test_gathered_override_survives_adjustments_round_trip(tmp_path: Path) -> None:
+    fixture = Path(__file__).parents[1] / "fixtures/plugins/GatherBuddyReborn"
+    gathered_ids = gatherbuddy.read(fixture)
+    assert gathered_ids == {5056, 1001, 1002}
+    assert not gatherbuddy.read(tmp_path)
+    (tmp_path / "auto_gather_lists.json").write_text("[", encoding="utf-8")
+    assert not gatherbuddy.read(tmp_path)
+
+    nq, hq = item_ref(5056, False), item_ref(5056, True)
+    manual = ManualAdjustments(items=[ItemAdjustment(item=nq), ItemAdjustment(item=hq)])
+    manual.items[1].gathered = False
+    manual.save(tmp_path)
+    manual = ManualAdjustments.load(tmp_path)
+    assert "gathered" not in manual.items[0].model_fields_set
+    assert "gathered" in manual.items[1].model_fields_set
+    ledger = calculate(
+        [event(S.CASHFLOW, K.SELL, item, 1, 1, 20) for item in (nq, hq)],
+        manual,
+        gathered_ids=gathered_ids,
+    )
+    assert [(s.item.hq, s.gathered, s.unknown_qty) for s in ledger.sales] == [
+        (False, True, 0),
+        (True, False, 1),
+    ]
 
 
 def test_conflicting_sale_proceeds_consume_both_lots() -> None:

@@ -68,6 +68,12 @@ class PositionPersonal(BaseModel):
     personal: bool
 
 
+class PositionGathered(BaseModel):
+    item_id: int = Field(gt=0)
+    hq: bool
+    gathered: bool
+
+
 class ApiError(BaseModel):
     detail: str = Field(description="Explanation of the request failure.")
 
@@ -328,6 +334,11 @@ def create_app(
     @app.put("/api/positions/personal", status_code=204)
     def set_personal(change: PositionPersonal) -> Response:
         runtime.set_personal(change.item_id, change.hq, change.personal)
+        return Response(status_code=204)
+
+    @app.put("/api/positions/gathered", status_code=204)
+    def set_gathered(change: PositionGathered) -> Response:
+        runtime.set_gathered(change.item_id, change.hq, change.gathered)
         return Response(status_code=204)
 
     @app.put("/api/positions/cost", status_code=204)

@@ -294,6 +294,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/positions/gathered": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set Gathered */
+        put: operations["set_gathered_api_positions_gathered_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/positions/hidden": {
         parameters: {
             query?: never;
@@ -862,6 +879,21 @@ export interface components {
         /** PnLSummary */
         PnLSummary: {
             /**
+             * Flip Proceeds
+             * @description Net proceeds from non-gathered items.
+             */
+            flip_proceeds: number;
+            /**
+             * Flip Profit
+             * @description Net realised profit on non-gathered units with known cost.
+             */
+            flip_profit: number;
+            /**
+             * Gathered Proceeds
+             * @description Net proceeds from gathered items.
+             */
+            gathered_proceeds: number;
+            /**
              * Known Cost Of Goods Sold
              * @description FIFO cost for sold units with known cost.
              */
@@ -877,8 +909,13 @@ export interface components {
              */
             sales_proceeds: number;
             /**
+             * Total Profit
+             * @description Flip profit plus gathered proceeds.
+             */
+            total_profit: number;
+            /**
              * Unknown Cost Qty Sold
-             * @description Sold units with unknown cost basis.
+             * @description Non-gathered units sold with unknown cost basis.
              */
             unknown_cost_qty_sold: number;
         };
@@ -896,6 +933,11 @@ export interface components {
             cost_known: boolean;
             /** First Listed */
             first_listed?: number | null;
+            /**
+             * Gathered
+             * @default false
+             */
+            gathered: boolean;
             /** Home Lowest */
             home_lowest?: number | null;
             /** Home Observed Ts */
@@ -906,7 +948,7 @@ export interface components {
             item: components["schemas"]["ItemRef"];
             /**
              * Known Capital
-             * @description Cost of remaining known FIFO lots.
+             * @description Cost of remaining known flip lots.
              * @default 0
              */
             known_capital: number;
@@ -944,6 +986,15 @@ export interface components {
             item_id: number;
             /** Unit Cost */
             unit_cost: number;
+        };
+        /** PositionGathered */
+        PositionGathered: {
+            /** Gathered */
+            gathered: boolean;
+            /** Hq */
+            hq: boolean;
+            /** Item Id */
+            item_id: number;
         };
         /** PositionPersonal */
         PositionPersonal: {
@@ -1027,6 +1078,11 @@ export interface components {
             fifo_cost: number | null;
             /** First Listed */
             first_listed?: number | null;
+            /**
+             * Gathered
+             * @default false
+             */
+            gathered: boolean;
             /** Gross */
             gross?: number | null;
             /** Gross Ppu */
@@ -1183,6 +1239,11 @@ export interface components {
         };
         /** SalesByItem */
         SalesByItem: {
+            /**
+             * Gathered
+             * @default false
+             */
+            gathered: boolean;
             item: components["schemas"]["ItemRef"];
             /**
              * Known Profit
@@ -2910,6 +2971,56 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["PositionCost"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_gathered_api_positions_gathered_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PositionGathered"];
             };
         };
         responses: {
