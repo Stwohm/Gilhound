@@ -72,10 +72,10 @@ async function request(path: string, method = "GET", body?: unknown): Promise<Re
 
 
   if (response.status === 401) throw new Error("Your session could not be authenticated. Reopen Gilhound.");
-  if (response.status === 422) throw new Error("The API rejected one or more fields. Check your input.");
   if (!response.ok) {
     const body = await response.json().catch(() => null);
     throw new Error(typeof body?.detail === "string" ? body.detail
+      : response.status === 422 ? "The API rejected one or more fields. Check your input."
       : `Gilhound API request failed (HTTP ${response.status}).`);
   }
   return response;

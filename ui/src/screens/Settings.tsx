@@ -80,7 +80,7 @@ function SettingsForm({ settings, onSaved }: { settings: Settings; onSaved: (set
         </div>
       </fieldset>
     </Section>
-    <PartnerSettings draft={draft} change={v => setDraft(d => ({...d,...v}))} />
+    <PartnerSettings draft={draft} hasWebhook={Boolean(savedWebhook)} change={v => setDraft(d => ({...d,...v}))} />
     <Section title="Discord notifications">
       <fieldset className="panel-body editor" disabled={saving}>
         <legend className="sr-only">Discord notifications</legend>

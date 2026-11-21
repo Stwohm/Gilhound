@@ -568,6 +568,14 @@
             "title": "Items",
             "type": "array"
           },
+          "listings": {
+            "items": {
+              "$ref": "#/components/schemas/SharedListing"
+            },
+            "maxItems": 200,
+            "title": "Listings",
+            "type": "array"
+          },
           "retainers": {
             "items": {
               "$ref": "#/components/schemas/PartnerRetainer"
@@ -582,18 +590,52 @@
             "type": "string"
           },
           "version": {
-            "const": 1,
+            "enum": [
+              1,
+              2
+            ],
             "title": "Version",
             "type": "integer"
           }
         },
         "required": [
-          "version",
           "sender",
-          "created_ts",
-          "items"
+          "items",
+          "version",
+          "created_ts"
         ],
         "title": "PartnerShare",
+        "type": "object"
+      },
+      "PartnerShareDraft": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AvoidItem"
+            },
+            "maxItems": 500,
+            "title": "Items",
+            "type": "array"
+          },
+          "retainers": {
+            "items": {
+              "$ref": "#/components/schemas/PartnerRetainer"
+            },
+            "maxItems": 64,
+            "title": "Retainers",
+            "type": "array"
+          },
+          "sender": {
+            "maxLength": 80,
+            "title": "Sender",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sender",
+          "items"
+        ],
+        "title": "PartnerShareDraft",
         "type": "object"
       },
       "PnLSummary": {
@@ -1353,6 +1395,7 @@
             "anyOf": [
               {
                 "enum": [
+                  "shared",
                   "now",
                   "regular",
                   "manual"
@@ -2215,6 +2258,7 @@
             "anyOf": [
               {
                 "enum": [
+                  "shared",
                   "now",
                   "regular",
                   "manual"
@@ -2393,6 +2437,45 @@
           "code"
         ],
         "title": "ShareCode",
+        "type": "object"
+      },
+      "SharedListing": {
+        "additionalProperties": false,
+        "properties": {
+          "hq": {
+            "title": "Hq",
+            "type": "boolean"
+          },
+          "id": {
+            "exclusiveMinimum": 0.0,
+            "maximum": 2147483647.0,
+            "title": "Id",
+            "type": "integer"
+          },
+          "ppu": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ppu"
+          },
+          "qty": {
+            "exclusiveMinimum": 0.0,
+            "title": "Qty",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "hq",
+          "qty"
+        ],
+        "title": "SharedListing",
         "type": "object"
       },
       "SnipeHit": {
@@ -2713,6 +2796,7 @@
             "anyOf": [
               {
                 "enum": [
+                  "shared",
                   "now",
                   "regular",
                   "manual"
@@ -3170,6 +3254,13 @@
             "title": "Partner Retainers",
             "type": "array"
           },
+          "partner_snapshot_hours": {
+            "default": 48,
+            "maximum": 8760.0,
+            "minimum": 1.0,
+            "title": "Partner Snapshot Hours",
+            "type": "integer"
+          },
           "partner_window_days": {
             "default": 14,
             "maximum": 90.0,
@@ -3349,6 +3440,13 @@
             "maxItems": 64,
             "title": "Partner Retainers",
             "type": "array"
+          },
+          "partner_snapshot_hours": {
+            "default": 48,
+            "maximum": 8760.0,
+            "minimum": 1.0,
+            "title": "Partner Snapshot Hours",
+            "type": "integer"
           },
           "partner_window_days": {
             "default": 14,
@@ -4272,6 +4370,72 @@
         "summary": "Get Job"
       }
     },
+    "/api/partner/discord": {
+      "post": {
+        "operationId": "post_partner_share_api_partner_discord_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PartnerShareDraft"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "title": "Response Post Partner Share Api Partner Discord Post",
+                  "type": "boolean"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Partner Share"
+      }
+    },
     "/api/partner/preview": {
       "post": {
         "operationId": "preview_share_api_partner_preview_post",
@@ -4344,7 +4508,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PartnerShare"
+                "$ref": "#/components/schemas/PartnerShareDraft"
               }
             }
           },

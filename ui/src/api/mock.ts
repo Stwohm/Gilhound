@@ -15,7 +15,7 @@ const pause = (ms = 150) => new Promise<void>((resolve) => window.setTimeout(res
 const costs = new Map<string, number>();
 
 let settings: Settings = {
-  partner_cache_min: 45, partner_regular_days: 5, partner_window_days: 14,
+  partner_snapshot_hours: 48, partner_cache_min: 45, partner_regular_days: 5, partner_window_days: 14,
   suppress_partner_discord: true, share_sender: "",
   min_net_multiple: 1,
   history_days: 90,

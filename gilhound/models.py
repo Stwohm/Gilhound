@@ -210,7 +210,7 @@ class ScanParams(BaseModel):
 
 
 class PartnerMark(BaseModel):
-    partner: Literal["now", "regular", "manual"] | None = None
+    partner: Literal["shared", "now", "regular", "manual"] | None = None
     partner_detail: str | None = None
     you_list: bool = False
 
@@ -474,21 +474,43 @@ class AvoidItem(BaseModel, extra="forbid"):
     note: str = Field(default="", max_length=160)
 
 
-class PartnerShare(BaseModel, extra="forbid"):
-    version: Literal[1]
+MAX_SHARE_ITEMS = 200
+SHARE_ITEM_LIMIT_MESSAGE = (
+    f"A share supports at most {MAX_SHARE_ITEMS} listings and avoid items combined"
+)
+
+
+class SharedListing(BaseModel, extra="forbid"):
+    id: int = Field(gt=0, le=2147483647)
+    hq: bool
+    qty: int = Field(gt=0)
+    ppu: int | None = Field(default=None, ge=0)
+
+
+class PartnerShareDraft(BaseModel):
     sender: str = Field(max_length=80)
-    created_ts: int = Field(ge=0, le=253402300799)
     items: list[AvoidItem] = Field(max_length=500)
     retainers: list[PartnerRetainer] = Field(default_factory=list, max_length=64)
 
+
+class PartnerShare(PartnerShareDraft, extra="forbid"):
+    version: Literal[1, 2]
+    created_ts: int = Field(ge=0, le=253402300799)
+    listings: list[SharedListing] = Field(default_factory=list, max_length=MAX_SHARE_ITEMS)
+
     @model_validator(mode="after")
     def unique_items(self) -> "PartnerShare":
+        if self.version == 1 and self.listings:
+            raise ValueError("GH1 shares cannot contain listings")
+        if self.version == 2 and len(self.items) + len(self.listings) > MAX_SHARE_ITEMS:
+            raise ValueError(SHARE_ITEM_LIMIT_MESSAGE)
         if len({(i.id, i.hq) for i in self.items}) != len(self.items):
             raise ValueError("Duplicate item and quality")
         return self
 
 
 class UserSettings(BaseModel):
+    partner_snapshot_hours: int = Field(default=48, ge=1, le=8760)
     partner_retainers: list[PartnerRetainer] = Field(default_factory=list, max_length=64)
     partner_cache_min: int = Field(default=45, ge=1, le=1440)
     partner_window_days: int = Field(default=14, ge=1, le=90)
