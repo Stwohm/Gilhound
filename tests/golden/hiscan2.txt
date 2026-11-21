@@ -1,0 +1,5 @@
+eşya|q|nereden|alış|adet≤%15|Cerb medyan|Cerb en düşük ilan|satılan 7g|adet/gün|farklı alıcı|farklı gün|rakip≤medyan|son satış sa|kâr/adet
+Scroll Cabinet|NQ|Phoenix (Light)|400000|8|485482|779995|24|3.4|5|4|0|23.8|61208
+Occult Table|NQ|Twintania (Light)|111999|4|182427|1499998|18|2.6|4|3|0|23.8|61306
+Excavating Vacuum Suit Identification Key|NQ|Zodiark (Light)|407000|8|499995|5498985|8|1.1|8|4|0|15.4|67995
+Mini Yan|NQ|Zodiark (Light)|1399997|4|1500000|2788888|9|1.3|6|4|0|62.0|25003

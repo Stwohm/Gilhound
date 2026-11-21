@@ -1,0 +1,12 @@
+eşya | q | nereden | alış | o fiyata adet | Cerberus medyan (7g) | satılan adet (7g) | adet/gün | rakip stok ≤medyan | tahmini bekleme (gün) | son satış (sa) | kâr/adet (%5 vergi sonrası)
+Scroll Cabinet | NQ | Phoenix (Light) | 400000 | 5 | 485482 | 24 | 3.4 | 0 | 1.5 | 23.8 | 61208
+Rinascita Poleyns of Casting | HQ | Ragnarok (Chaos) | 3715 | 3 | 26990 | 7 | 1 | 0 | 3.0 | 17.6 | 21925
+Occult Table | NQ | Twintania (Light) | 111999 | 1 | 182427 | 18 | 2.6 | 0 | 0.4 | 23.8 | 61306
+Jute Yarn | HQ | Zodiark (Light) | 5998 | 13 | 9999 | 18 | 2.6 | 0 | 5.1 | 12.5 | 3501
+Synthetic Dark Matter Gamma | NQ | Raiden (Light) | 15000 | 5 | 21099 | 32 | 4.6 | 0 | 1.1 | 9.0 | 5044
+Undyed Felt | HQ | Odin (Light) | 1898 | 26 | 2800 | 57 | 8.1 | 0 | 3.2 | 13.3 | 762
+Archeo Kingdom Beret of Aiming | NQ | Moogle (Chaos) | 10000 | 2 | 18998 | 8 | 1.1 | 0 | 1.7 | 21.4 | 8048
+Rinascita Armguards of Casting | HQ | Sagittarius (Chaos) | 10000 | 1 | 19647 | 8 | 1.1 | 0 | 0.9 | 17.6 | 8665
+Rinascita Rapier | HQ | Lich (Light) | 6900 | 2 | 11000 | 7 | 1 | 0 | 2.0 | 17.6 | 3550
+Marble Alcove Bed | NQ | Phoenix (Light) | 24794 | 5 | 26996 | 35 | 5 | 2 | 1.4 | 13.3 | 852
+Rinascita Ring of Fending | HQ | Shiva (Light) | 14992 | 2 | 17999 | 8 | 1.1 | 0 | 1.7 | 17.3 | 2107
