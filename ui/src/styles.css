@@ -161,14 +161,28 @@ tbody tr:last-child td { border-bottom: 0; }
 td small { margin-left: 4px; }
 td button { padding: 4px 8px; }
 .table-scroll thead th { position: sticky; top: 0; z-index: 2; }
-.table-scroll tr > :where(:first-child:not([colspan])), .scan-table .item-column {
+.table-scroll tr > :where(:first-child:not([colspan])), .scan-table .item-column:nth-child(2) {
   position: sticky; left: 0; z-index: 1; white-space: normal;
 }
-.table-scroll thead th:first-child, .scan-table thead .item-column { z-index: 3; }
+.table-scroll thead th:first-child, .scan-table thead .item-column:nth-child(2) { z-index: 3; }
 .scan-table { --selection-width: 42px; }
 .scan-table .select-column { width: var(--selection-width); }
 .scan-table .item-column { left: var(--selection-width); }
 .scan-table .item-column .warning-text { display: block; }
+.column-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 13px; }
+.column-toolbar button, .column-menu button { padding: 3px 7px; font-size: .76rem; }
+.column-handle { cursor: grab; padding: 1px 5px; margin-left: 4px; border: 0; background: transparent; color: inherit; }
+.column-handle:active { cursor: grabbing; }
+.column-menu { display: flex; width: max-content; gap: 4px; margin-top: 4px; }
+.search-form { display: grid; gap: 12px; }
+.search-form .form-actions { align-items: end; margin-top: 0; }
+.search-entry { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.search-entry .form-actions { align-items: center; }
+.search-entry input[type="number"] { width: 7rem; }
+.search-choices { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; padding: 0; margin: 0; }
+.search-choices button { white-space: normal; text-align: left; }
+.search-reference { display: flex; flex-wrap: wrap; gap: 12px 22px; }
+.search-item-icon { object-fit: contain; vertical-align: middle; margin-right: 6px; }
 .sort-button { font: inherit; color: inherit; padding: 2px; border: 0; background: transparent; }
 .scan-table thead .sort-button { white-space: normal; text-align: inherit; }
 th[aria-sort] { color: var(--accent); }

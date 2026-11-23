@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from gilhound.models import LedgerEventKind, SaleDetails, SourceName
+from gilhound.models import LedgerEventKind, LowStockItems, SaleDetails, SearchEntry, SourceName
 
 from .common import (
     READ_ERRORS,
@@ -219,4 +219,37 @@ def read(folder: Path) -> Source:
         "Restocky",
         (*HEADERS, "listings.json", "cost-ledger.json", "undercut-history.json"),
         parse,
+    )
+
+
+def low_stock(root: Path) -> LowStockItems:
+    """Mirror Restocky's offline calculation across the saved retainer snapshots."""
+    try:
+        config = json.loads((root / "Restocky.json").read_text(encoding="utf-8-sig"))
+        watched = config["LowStock"]
+        snapshots = config["Snapshots"]
+        require(isinstance(watched, list) and isinstance(snapshots, dict))
+        if not watched:
+            return LowStockItems(reason="Restocky has no low-stock watch entries.")
+        retainer_keys = {key for key, snapshot in snapshots.items() if isinstance(snapshot, dict)}
+        if not retainer_keys:
+            return LowStockItems(reason="Restocky has no saved retainer snapshots.")
+        counts: Counter[tuple[int, bool]] = Counter()
+        for row in objects(root / "Restocky" / "listings.json"):
+            if row["Outcome"] == "active" and row["RetainerKey"] in retainer_keys:
+                counts[uint(row["ItemId"]), flag(row["IsHq"])] += uint(row["Quantity"])
+        entries = {}
+        for row in watched:
+            item_id, hq = uint(row["ItemId"]), flag(row["IsHq"])
+            target, threshold = uint(row.get("Target", 3)), uint(row.get("Threshold", 1))
+            listed = counts[item_id, hq]
+            if item_id and listed <= threshold:
+                entries[item_id, hq] = SearchEntry(
+                    item_id=item_id, hq_only=hq, quantity=max(0, target - listed) or None,
+                )
+    except READ_ERRORS:
+        return LowStockItems(reason="Restocky low-stock data is missing or unreadable.")
+    return LowStockItems(
+        entries=list(entries.values()),
+        reason=None if entries else "No watched items are at or below their threshold.",
     )

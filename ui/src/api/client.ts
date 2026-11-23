@@ -12,6 +12,14 @@ type JsonBody<K extends keyof operations> = operations[K] extends {
 export type Library = "scan" | "snipes";
 type Schema = components["schemas"];
 export interface Api {
+  getColumnOrder(): Promise<Record<string, string[]>>;
+  saveColumnOrder(table: string, order: string[]): Promise<string[]>;
+  searchRegions(): Promise<string[]>;
+  resolveSearch(query: string): Promise<Schema["SearchResolution"]>;
+  lowStock(): Promise<Schema["LowStockItems"]>;
+  searchLists(): Promise<Schema["SearchLists"]>;
+  editSearchLists(change: Schema["SearchListChange"]): Promise<Schema["SearchLists"]>;
+  search(params: Schema["SearchParams"], progress: (done: number, total?: number | null) => void): Promise<Schema["SearchResult"]>;
   sharePartner(draft: Schema["PartnerShareDraft"]): Promise<string>;
   previewPartner(code: string): Promise<Schema["PartnerShare"]>;
   postPartner(draft: Schema["PartnerShareDraft"]): Promise<boolean>;
@@ -112,6 +120,20 @@ async function job<T>(path: string, params?: unknown): Promise<T> {
 }
 
 const realApi: Api = {
+  getColumnOrder: () => json("/api/column-order"),
+  saveColumnOrder: (table, order) => json("/api/column-order", "PUT", { table, order }),
+  searchRegions: () => json("/api/search/regions"),
+  resolveSearch: query => json("/api/search/items?" + new URLSearchParams({ q: query })),
+  lowStock: () => json("/api/search/low-stock"),
+  searchLists: () => json("/api/search-lists"),
+  editSearchLists: change => json("/api/search-lists", "POST", change),
+  async search(params, progress) {
+    const current = await waitForJob("/api/jobs/search", params, progress);
+    if (current.state !== "complete" || !current.result || !("region" in current.result)) {
+      throw new Error(current.error || "Item search failed. Please retry.");
+    }
+    return current.result;
+  },
   sharePartner: draft => json("/api/partner/share", "POST", draft),
   previewPartner: code => json("/api/partner/preview", "POST", {code}),
   postPartner: draft => json("/api/partner/discord", "POST", draft),

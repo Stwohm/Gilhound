@@ -18,6 +18,7 @@ LIST_FIELDS = (
     "hq",
     "lastReviewTime",
 )
+SALE_FIELDS = ("pricePerUnit", "quantity", "hq", "timestamp")
 
 
 def epoch(value: int | float) -> int:
@@ -76,6 +77,7 @@ class Universalis:
         entries: int = 0,
         hq: bool | None = None,
         projected: bool = False,
+        include_retainers: bool = True,
         worlds: dict[int, str] | None = None,
     ) -> dict[int, Snapshot]:
         if not 1 <= len(ids) <= 100:
@@ -88,9 +90,13 @@ class Universalis:
             query["hq"] = str(hq).lower()
         if projected:
             prefix = "items." if len(ids) > 1 else ""
-            query["fields"] = ",".join(
-                [*(f"{prefix}listings.{k}" for k in LIST_FIELDS), "unresolvedItems"]
-            )
+            fields = [
+                f"{prefix}listings.{key}" for key in LIST_FIELDS
+                if include_retainers or key != "retainerName"
+            ]
+            if entries:
+                fields.extend(f"{prefix}recentHistory.{key}" for key in SALE_FIELDS)
+            query["fields"] = ",".join([*fields, "unresolvedItems"])
         path = ",".join(map(str, ids))
         raw = self.http.request(f"{BASE}/{quote(location, safe='')}/{path}?{urlencode(query)}")
         items = raw.get("items", {str(ids[0]): raw} if len(ids) == 1 else {})

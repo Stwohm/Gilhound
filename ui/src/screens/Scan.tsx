@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { PartnerBadge, usePartnerFilter, visiblePartnerRow } from "../Partner";
 import { api } from "../api/client";
+import { mergeColumnOrder } from "../columnOrder";
 import { Item, Notice, PageTitle, Section, Table, age, errorMessage, gil, number, time } from "../common";
 import type { Schema } from "../common";
 import { checkQuotes, route } from "../Travel";
@@ -81,6 +82,7 @@ const initial = [
   "Last sale",
   "Data age",
 ];
+const defaultOrder = mergeColumnOrder(definitions.map(column => column.label), initial);
 function readColumns(): string[] {
   try {
     const saved: unknown = JSON.parse(localStorage.getItem("scanColumns") ?? "null");
@@ -282,7 +284,7 @@ export function ScanResults({ result, archived = false, retry, edit }: { result:
         )}
       </div>
       {sorted.length ? (
-        <Table label="Scan results" className="scan-table">
+        <Table label="Scan results" className="scan-table" tableKey="scan" defaults={defaultOrder}>
           <thead>
             <tr>
               <th className="select-column">
@@ -300,7 +302,8 @@ export function ScanResults({ result, archived = false, retry, edit }: { result:
                 />
               </th>
               {columns.map((c) => (
-                <th key={c.label} className={c.label === "Item" ? "item-column" : undefined}>
+                <th key={c.label} data-column={c.label} className={c.label === "Item" ? "item-column" : undefined}
+                  aria-sort={sort.label === c.label ? (sort.desc ? "descending" : "ascending") : undefined}>
                   <button
                     className="sort-button"
                     onClick={() =>

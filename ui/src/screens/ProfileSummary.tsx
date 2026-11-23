@@ -1,4 +1,5 @@
 import { components } from "../../../openapi.json";
+import { Table } from "../common";
 import type { Schema } from "../common";
 
 const groups = {
@@ -36,11 +37,11 @@ export default function ProfileSummary({ name, catalog }: { name: string; catalo
     <h3>{name}</h3>
     {catalog.descriptions[name]?.map((line, i) => <p key={i}>{line}</p>)}
     <details><summary>All parameters</summary>
-      <table><thead><tr><th>Parameter</th><th>Value</th><th>Description</th></tr></thead>
+      <Table label="Profile parameters"><thead><tr><th>Parameter</th><th>Value</th><th>Description</th></tr></thead>
         <tbody>{rows.map(row => <tr key={row.label}><th scope="row">{row.label}</th>
           <td>{row.value} {row.changed && <small className="badge gold">Changed</small>}</td>
           <td>{row.description}</td></tr>)}</tbody>
-      </table>
+      </Table>
     </details>
   </section>;
 }

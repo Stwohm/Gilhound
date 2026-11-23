@@ -2,12 +2,13 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import brandIcon from "../../assets/icon-256.png";
 import { api, mockMode } from "./api/client";
 import { useUpdates } from "./api/useUpdates";
-import { Badge, Notice, defaults, errorMessage, useResource } from "./common";
+import { Badge, ColumnOrderProvider, Notice, defaults, errorMessage, useResource } from "./common";
 import { TravelProvider } from "./Travel";
 import History from "./screens/History";
 import Scan from "./screens/Scan";
 import Snipes from "./screens/Snipes";
 import Retainer from "./screens/Retainer";
+import Search from "./screens/Search";
 import Sales from "./screens/Sales";
 import Positions from "./screens/Positions";
 import SettingsScreen from "./screens/Settings";
@@ -17,6 +18,7 @@ const pages = [
   { id: "history", title: "History", icon: "chart" },
   { id: "snipes", title: "Snipes", icon: "bolt" },
   { id: "retainer", title: "Retainer", icon: "bag" },
+  { id: "search", title: "Search", icon: "scan" },
   { id: "positions", title: "Positions", icon: "chart" },
   { id: "sales", title: "Sales", icon: "chart" },
   { id: "settings", title: "Settings", icon: "gear" },
@@ -76,6 +78,7 @@ export default function App() {
     history: <History />,
     snipes: <Snipes resource={settings} />,
     retainer: null,
+    search: null,
     positions: <Positions />,
     sales: <Sales />,
     settings: <SettingsScreen resource={settings} updates={updates} />,
@@ -107,11 +110,12 @@ export default function App() {
         {page.id !== "settings" && <small className="foot-region" role="status">{updates.result}</small>}
       </div>
     </aside>
-    <main id="main" tabIndex={-1} aria-label={page.title}>
+    <main id="main" tabIndex={-1} aria-label={page.title}><ColumnOrderProvider>
       <UpdateBanner version={info?.update_available ? info.latest_version : null} />
       <div className="retained-screen" hidden={page.id !== "scan"}><Scan settings={preferences} /></div>
       <div className="retained-screen" hidden={page.id !== "retainer"}><Retainer settings={preferences} /></div>
+      <div className="retained-screen" hidden={page.id !== "search"}><Search active={page.id === "search"} home={preferences.home_world} /></div>
       {screens[page.id]}
-    </main>
+    </ColumnOrderProvider></main>
   </div></TravelProvider>;
 }

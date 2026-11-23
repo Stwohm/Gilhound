@@ -67,7 +67,8 @@ export function RetainerResults({result,running=false,archived=false}: {archived
       {control}
       {result?.warnings?.map((warning, index) => <Notice tone="warn" key={index}>{warning}</Notice>)}
       {result?.rows.length ? <Table label="Retainer listings"><thead><tr>
-        {["Item", "Listed price", "Qty", archived ? "Retainer listing last seen at scan time" : "Retainer listing last seen", "Cheapest world / DC", "Cheapest price", "Cheapest qty", "Spread to retainer’s asking price", "Profit / unit"].map((label) => <th key={label} scope="col">{label}</th>)}
+        {["Item", "Listed price", "Qty", "Retainer listing last seen", "Cheapest world / DC", "Cheapest price", "Cheapest qty", "Spread to retainer’s asking price", "Profit / unit"].map(label =>
+          <th key={label} scope="col" data-column={label}>{archived && label === "Retainer listing last seen" ? label + " at scan time" : label}</th>)}
       </tr></thead><tbody>
         {result.rows.filter(r => visiblePartnerRow(r, hide)).map((row, index) => <tr key={index}>
           <td><PartnerBadge row={row}/><Item quote={row.cheapest_world && row.cheapest_ppu && row.cheapest_qty ? {

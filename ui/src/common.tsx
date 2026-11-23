@@ -1,12 +1,15 @@
 import type { Quote } from "./recheck";
 import { TravelButtons } from "./Travel";
-import { useEffect, useState } from "react";
-import type { InputHTMLAttributes, ReactNode } from "react";
+import { Children, cloneElement, createContext, Fragment, isValidElement, useContext, useEffect, useRef, useState } from "react";
+import type { InputHTMLAttributes, ReactElement, ReactNode } from "react";
 import type { components } from "./api/types";
+import { api } from "./api/client";
+import { mergeColumnOrder, moveColumn } from "./columnOrder";
 
 export type Schema<K extends keyof components["schemas"]> = components["schemas"][K];
 export type Settings = Schema<"UserSettings-Output">;
 export const defaults: Settings = {
+  column_order: {},
   partner_snapshot_hours: 48, partner_cache_min: 45, partner_regular_days: 5, partner_window_days: 14,
   suppress_partner_discord: true, share_sender: "",
   min_net_multiple: 1,
@@ -67,7 +70,7 @@ export function PageTitle({ title, description, children }: { title: string; des
   </header>;
 }
 
-export function Section({ title, detail, action, children }: { title: string; detail?: string; action?: ReactNode; children: ReactNode }) {
+export function Section({ title, detail, action, children }: { title: ReactNode; detail?: string; action?: ReactNode; children: ReactNode }) {
   return <section className="panel">
     <div className="section-head">
       <div><h2>{title}</h2>{detail && <p>{detail}</p>}</div>
@@ -154,8 +157,139 @@ export function TravelEditor({ entries, onChange }: {
   </div>;
 }
 
-export function Table({ label, children, className = "" }: { label: string; children: ReactNode; className?: string }) {
-  return <div className={`table-scroll ${className}`} tabIndex={0} role="region" aria-label={label}>
-    <table aria-label={label}>{children}</table>
-  </div>;
+type Orders = Record<string, string[]>;
+const ColumnOrderContext = createContext<{
+  orders: Orders;
+  errors: Record<string, string>;
+  save: (key: string, order: string[]) => void;
+}>({ orders: {}, errors: {}, save: () => {} });
+
+export function ColumnOrderProvider({ children }: { children: ReactNode }) {
+  const saved = useResource(api.getColumnOrder);
+  const [orders, setOrders] = useState<Orders>({});
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const pending = useRef(new Map<string, Promise<unknown>>());
+
+  function save(key: string, order: string[]) {
+    setOrders(previous => ({ ...previous, [key]: order }));
+    setErrors(previous => ({ ...previous, [key]: "" }));
+    const write = Promise.resolve(pending.current.get(key)).catch(() => undefined)
+      .then(() => api.saveColumnOrder(key, order));
+    pending.current.set(key, write);
+    void write.then(() => finish(""), error => finish(errorMessage(error)));
+    function finish(error: string) {
+      if (pending.current.get(key) !== write) return;
+      pending.current.delete(key);
+      setErrors(previous => ({ ...previous, [key]: error }));
+    }
+  }
+
+  return <ColumnOrderContext.Provider value={{ orders: { ...saved.data, ...orders }, errors, save }}>
+    {saved.error && <Notice tone="warn">Could not load column order. <button type="button" onClick={saved.retry}>Retry</button></Notice>}
+    {children}
+  </ColumnOrderContext.Provider>;
+}
+
+type TableElement = ReactElement<{ children?: ReactNode; colSpan?: number; "data-column"?: string }>;
+
+function tableElements(children: ReactNode): TableElement[] {
+  return Children.toArray(children).filter(isValidElement) as TableElement[];
+}
+
+export function Table({ label, children, className = "", tableKey = label, defaults }: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+  tableKey?: string;
+  defaults?: readonly string[];
+}) {
+  const store = useContext(ColumnOrderContext);
+  const drag = useRef<string | null>(null);
+  const [menu, setMenu] = useState<string | null>(null);
+  const sections = tableElements(children);
+  const header = tableElements(sections.find(section => section.type === "thead")?.props.children)[0];
+  const labels = tableElements(header?.props.children).map(cell =>
+    cell.props["data-column"] ?? (typeof cell.props.children === "string" ? cell.props.children : null));
+  const visible = labels.filter((label): label is string => label !== null);
+  const saved = store.orders[tableKey] ?? [];
+  const order = mergeColumnOrder(defaults ?? visible, saved);
+  const shown = order.filter(column => visible.includes(column));
+  // Unlabelled controls stay in place. Full-width rows are left intact.
+  let index = 0;
+  const positions = labels.map(column => column === null ? null : labels.indexOf(shown[index++]));
+
+  function move(from: string, to: string) {
+    const next = moveColumn(order, shown, from, to);
+    if (next !== order) store.save(tableKey, next);
+    setMenu(null);
+  }
+
+  function arrange(section: TableElement, headings: boolean): ReactNode {
+    if (section.type === "tr") {
+      const cells = tableElements(section.props.children);
+      if (cells.length !== labels.length || cells.some(cell => cell.props.colSpan)) return section;
+      return cloneElement(section, {}, positions.map((position, slot) => {
+        const cell = cells[position ?? slot];
+        const column = labels[position ?? slot];
+        if (!headings || column === null) return cell;
+        const columnIndex = shown.indexOf(column);
+        const focusHandle = (element: HTMLElement) =>
+          element.closest("th")?.querySelector<HTMLButtonElement>(".column-handle")?.focus();
+        const shift = (element: HTMLElement, offset: number) => {
+          focusHandle(element);
+          move(column, shown[columnIndex + offset]);
+        };
+        return <th key={column} {...cell.props} scope="col"
+          onContextMenu={event => { event.preventDefault(); setMenu(menu === column ? null : column); }}
+          onDragOver={event => {
+            if (drag.current === null) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "move";
+          }}
+          onDrop={event => {
+            if (drag.current === null) return;
+            event.preventDefault();
+            move(drag.current, column);
+            drag.current = null;
+          }}>
+          {cell.props.children}
+          <button className="column-handle" type="button" title={`Reorder ${column}`}
+            aria-label={`Reorder ${column}`} aria-expanded={menu === column} draggable
+            onClick={() => setMenu(menu === column ? null : column)}
+            onDragStart={event => {
+              drag.current = column;
+              event.dataTransfer.setData("text/plain", column);
+              event.dataTransfer.effectAllowed = "move";
+              setMenu(null);
+            }}
+            onDragEnd={() => { drag.current = null; }}>⠿</button>
+          {menu === column && <div className="column-menu" onKeyDown={event => {
+            if (event.key === "Escape") {
+              focusHandle(event.currentTarget);
+              setMenu(null);
+            }
+          }}>
+            <button type="button" disabled={columnIndex === 0} onClick={event => shift(event.currentTarget, -1)}>Move left</button>
+            <button type="button" disabled={columnIndex === shown.length - 1} onClick={event => shift(event.currentTarget, 1)}>Move right</button>
+          </div>}
+        </th>;
+      }));
+    }
+    if (section.type === Fragment || section.type === "thead" || section.type === "tbody" || section.type === "tfoot") {
+      return cloneElement(section, {}, tableElements(section.props.children).map(row => arrange(row, headings)));
+    }
+    return section;
+  }
+
+  return <>
+    <div className="column-toolbar">
+      <button type="button" onClick={() => { store.save(tableKey, []); setMenu(null); }}>Restore default order</button>
+      {store.errors[tableKey] && <span role="alert">Column order could not be saved.{" "}
+        <button type="button" onClick={() => store.save(tableKey, saved)}>Retry</button>
+      </span>}
+    </div>
+    <div className={`table-scroll ${className}`} tabIndex={0} role="region" aria-label={label}>
+      <table aria-label={label}>{sections.map(section => arrange(section, section.type === "thead"))}</table>
+    </div>
+  </>;
 }

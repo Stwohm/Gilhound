@@ -8,10 +8,19 @@ from contextlib import closing
 from typing import Any
 
 from gilhound.ledger.fifo import rollup_sales
-from gilhound.models import PartnerShareDraft, RetainerScanParams, ScanPreset
+from gilhound.market.search import SearchRegionError
+from gilhound.models import (
+    PartnerShareDraft,
+    RetainerScanParams,
+    ScanPreset,
+    SearchEntry,
+    SearchName,
+    SearchParams,
+)
 from gilhound.runtime import Runtime
 from gilhound.runtime.partner import ShareSizeError, current_share, decode, encode, snapshot_summary
 from gilhound.runtime.profiles import BUILTINS
+from gilhound.runtime.search_lists import SearchListNotFound
 
 
 def rounded(value: Any) -> Any:
@@ -113,6 +122,27 @@ def report(runtime: Runtime, args: argparse.Namespace) -> dict:
             duration_s=listing.duration_s,
             warning_count=len(listing.warnings),
         )
+    elif args.command == "search":
+        entries: list[SearchEntry | SearchName] = []
+        saved = runtime.search_lists.get(args.list) if args.list else None
+        if saved:
+            entries.extend(saved.entries)
+        entries.extend(SearchName(name=value) for value in args.items)
+        if args.hq or args.qty is not None:
+            overrides = {key: value for key, value in
+                         (("hq_only", args.hq), ("quantity", args.qty)) if value is not None}
+            entries = [entry.model_copy(update=overrides) for entry in entries]
+        response = runtime.search(SearchParams(
+            entries=entries, region=args.region or (saved.region if saved else "Europe"),
+        ))
+        result.update(region=response.region, home_world=response.home_world,
+                      duration_s=response.duration_s)
+        rows = response.rows
+    elif args.command == "search-lists":
+        library = runtime.search_lists.list()
+        return {**result, "total": len(library.lists), "warning": library.warning, "rows": [
+            {"name": name, **search.model_dump()} for name, search in library.lists.items()
+        ]}
     elif args.command == "snipes":
         rows = runtime.run_snipes() if args.run else runtime.history.hits()
         runtime.partners.mark(rows, runtime.settings.get())
@@ -179,6 +209,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     retainer = commands.add_parser("retainer", parents=[common])
     retainer.add_argument("name")
     retainer.add_argument("--world")
+    search = commands.add_parser("search", parents=[common])
+    search.add_argument("items", metavar="name-or-id", nargs="*")
+    search.add_argument("--region")
+    search.add_argument("--hq", action="store_true", default=None)
+    search.add_argument("--qty", type=int)
+    search.add_argument("--list", metavar="NAME")
+    commands.add_parser("search-lists", parents=[common])
     commands.add_parser("snipes", parents=[common]).add_argument("--run", action="store_true")
     positions = commands.add_parser("positions", parents=[common])
     positions.add_argument("--closed", action="store_true")
@@ -196,6 +233,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if getattr(args, "top", 0) < 0:
         parser.error("--top must be nonnegative")
+    if args.command == "search":
+        if not args.items and not args.list:
+            parser.error("search needs an item or --list NAME")
+        if args.qty is not None and args.qty <= 0:
+            parser.error("--qty must be positive")
     try:
         if args.command in {"serve", "app"}:
             from gilhound import desktop
@@ -209,7 +251,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = report(runtime, args)
         if args.command != "history" or args.action != "show":
             result = rounded(result)
-    except ShareSizeError as exc:
+    except (SearchListNotFound, SearchRegionError, ShareSizeError) as exc:
         print(json.dumps({"command": args.command, "error": str(exc)}))
         return 1
     except (Exception, SystemExit) as exc:

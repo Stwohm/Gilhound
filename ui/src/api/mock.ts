@@ -37,6 +37,7 @@ const costs = new Map<string, number>();
 const gatheredItems = new Map<string, boolean>();
 
 let settings: Settings = {
+  column_order: {},
   partner_snapshot_hours: 48, partner_cache_min: 45, partner_regular_days: 5, partner_window_days: 14,
   suppress_partner_discord: true, share_sender: "",
   min_net_multiple: 1,
@@ -177,6 +178,12 @@ let nextRun = lastRun + 300;
 type Entry = components["schemas"]["ArchiveEntry"];
 const archive = new Map<number,Entry>();
 const retainers: Record<string,components["schemas"]["RetainerScanParams"]> = Object.create(null);
+const searchLists = new Map<string, components["schemas"]["SavedSearch"]>();
+const columnOrderKey = "gilhoundColumnOrder";
+function readColumnOrder(): Record<string, string[]> {
+  try { return JSON.parse(window.localStorage.getItem(columnOrderKey) ?? "{}"); }
+  catch { return { ...settings.column_order }; }
+}
 let nextId=1;
 function record(result: Entry["result"], profile?:string) {
   const id=nextId++;
@@ -187,6 +194,78 @@ function record(result: Entry["result"], profile?:string) {
     result,description:[]});
 }
 export const mockApi: Api = {
+  async getColumnOrder() { return readColumnOrder(); },
+  async saveColumnOrder(table, order) {
+    const orders = readColumnOrder();
+    if (order.length) orders[table] = order;
+    else delete orders[table];
+    settings = { ...settings, column_order: orders };
+    window.localStorage.setItem(columnOrderKey, JSON.stringify(orders));
+    return order;
+  },
+  async searchRegions() { return ["Europe", "Chaos", "Light", "Cerberus", "Ragnarok", "Odin"]; },
+  async lowStock() { return { reason: "Restocky low-stock data unavailable in mock mode." }; },
+  async searchLists() { return { lists: Object.fromEntries(searchLists) }; },
+  async editSearchLists(change) {
+    const key = [...searchLists.keys()].find(name => name.toLowerCase() === change.name.toLowerCase());
+    if (!key && change.action !== "create") throw new Error("Saved search list not found.");
+    if (change.action === "create" && key) throw new Error("A list with that name already exists.");
+    if (change.action === "rename" && change.new_name && key) {
+      const name = change.new_name;
+      if ([...searchLists.keys()].some(other => other !== key && other.toLowerCase() === name.toLowerCase())) {
+        throw new Error("A list with that name already exists.");
+      }
+      const search = searchLists.get(key)!;
+      searchLists.delete(key);
+      searchLists.set(name, search);
+    } else if (change.action === "delete" && key) {
+      searchLists.delete(key);
+    } else if (change.search) {
+      searchLists.set(key ?? change.name, change.search);
+    }
+    return mockApi.searchLists();
+  },
+  async resolveSearch(query) {
+    const key = query.trim().toLowerCase();
+    const items = [...new Map(marketRows(mockParams.Flip).map(({ item }) => [item.id, item])).values()];
+    const exact = items.filter(item => item.name.toLowerCase() === key || String(item.id) === key);
+    const candidates = exact.length ? exact : items.filter(item => item.name.toLowerCase().includes(key));
+    if (candidates.length === 1) return { item: candidates[0] };
+    return candidates.length
+      ? { candidates, error: "Multiple items match. Choose an item." }
+      : { error: "Item is unknown or unmarketable." };
+  },
+  async search(params, progress) {
+    progress(0, params.entries.length);
+    await pause();
+    const rows = await Promise.all(params.entries.map(async (entry, index) => {
+      const resolved = await mockApi.resolveSearch("item_id" in entry ? String(entry.item_id) : entry.name);
+      progress(index + 1, params.entries.length);
+      if (!resolved.item) return { ...resolved, entry };
+      const row = marketRows(mockParams.Flip).find(row => row.item.id === resolved.item?.id)!;
+      const world = !params.region || params.region === "Europe" || params.region === "Chaos"
+        ? row.buy_world : params.region === "Light" ? "Odin" : params.region;
+      const hq = entry.hq_only || row.item.hq;
+      const qty = row.buy_qty_at_price;
+      const stack = (world: string, dc: string, ppu: number) => ({
+        world, dc, ppu, qty, hq, total: ppu * qty + Math.floor(ppu * qty / 20),
+        data_age_h: row.data_age_h, last_review_ts: Math.floor(now() - row.data_age_h * 3600),
+      });
+      const listing = stack(world, world === "Odin" ? "Light" : "Chaos", row.buy_ppu);
+      const travel = world === settings.home_world ? 0 : settings.travel_cost?.[listing.dc] ?? 0;
+      return {
+        entry, item: { ...resolved.item, hq }, listings: [listing],
+        home_cheapest: row.home_lowest ? stack(settings.home_world, "Chaos", row.home_lowest) : null,
+        home_median_7d: row.home_median_7d,
+        home_sale_age_h: row.volume_proof.last_sale_age_h,
+        cover: entry.quantity ? {
+          requested: entry.quantity, covered: qty, listings: [listing], worlds: [world],
+          purchase_cost: listing.total, travel_cost: travel, total_cost: listing.total + travel,
+        } : null,
+      };
+    }));
+    return { region: params.region ?? "Europe", home_world: settings.home_world, rows, duration_s: 0.15 };
+  },
   async sharePartner(draft) {
     const listings = marketRows(mockParams.Flip).filter(row => row.you_list).map(row => ({
       id: row.item.id, hq: row.item.hq, qty: row.sellable_qty, ppu: row.home_lowest,

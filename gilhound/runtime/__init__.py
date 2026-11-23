@@ -5,7 +5,7 @@ from collections.abc import Callable
 from pathlib import Path
 from threading import Lock
 
-from gilhound.ingest import discover, gatherbuddy, read_plugins
+from gilhound.ingest import discover, gatherbuddy, read_plugins, restocky
 from gilhound.ingest.common import item_ref
 from gilhound.ingest.discover import listing_sources, plugin_config_root
 from gilhound.ledger import (
@@ -15,17 +15,24 @@ from gilhound.ledger import (
     build_ledger,
     latest_listing_source,
 )
-from gilhound.market.items import ItemCatalog
+from gilhound.market.items import UNAVAILABLE, ItemCatalog
 from gilhound.market.presets import run_scan
 from gilhound.market.retainer import run_retainer_scan
+from gilhound.market.search import resolve_item, run_search, search_regions
 from gilhound.market.snipe import evaluate
+from gilhound.market.universalis import Universalis
 from gilhound.models import (
     ItemRef,
+    LowStockItems,
     RetainerScanParams,
     RetainerScanResult,
     ScanParams,
     ScanPreset,
     ScanResult,
+    SearchName,
+    SearchParams,
+    SearchResolution,
+    SearchResult,
     SnipeHit,
     SnipeStatus,
     SourceStatus,
@@ -38,6 +45,7 @@ from .discord import Discord
 from .partner import Partners
 from .profiles import Profiles
 from .scheduler import Scheduler
+from .search_lists import SearchListStore
 from .store import ArchiveEntry, History, SettingsStore, data_dir
 
 
@@ -45,6 +53,7 @@ class Runtime:
     def __init__(self, root: Path | None = None, plugins: Path | None = None) -> None:
         self.root = root or data_dir()
         self.profiles = Profiles(self.root)
+        self.search_lists = SearchListStore(self.root)
         self.plugins = plugins
         self.bridge = Bridge(plugins)
         self.items = ItemCatalog(self.root)
@@ -165,6 +174,29 @@ class Runtime:
             self.items.decorate((r.item for r in result.rows), settings.home_world, wait=True)
         self.history.save_scan(result, profile, started=started)
         return result
+
+    def search(
+        self, params: SearchParams, progress: Callable[[int, int], None] | None = None,
+    ) -> SearchResult:
+        settings = self.settings.get()
+        return run_search(params, progress=progress, home_world=settings.home_world,
+                          travel_cost=settings.travel_cost, catalog=self.items)
+
+    def search_regions(self) -> list[str]:
+        return search_regions(Universalis(self.items.http).data_centers())
+
+    def resolve_search(self, query: str) -> SearchResolution:
+        try:
+            marketable = self.items.marketable()
+        except UNAVAILABLE:
+            return SearchResolution(error="Marketable item catalog unavailable. Try again.")
+        with self.items.lock:
+            names = dict(self.items.names)
+        return resolve_item(SearchName(name=query), marketable=marketable, names=names,
+                            http=self.items.http)
+
+    def low_stock(self) -> LowStockItems:
+        return restocky.low_stock(self.plugins or plugin_config_root())
 
     def _snipe_scan(
         self, params: ScanParams, settings: UserSettings, profile: str | None = None

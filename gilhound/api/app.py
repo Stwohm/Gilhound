@@ -15,16 +15,18 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, ValidationError
 
 from gilhound import __version__
-from gilhound.api.jobs import Job, Jobs
+from gilhound.api.jobs import Job, JobError, Jobs
 from gilhound.api.updates import Updates
 from gilhound.ledger.fifo import rollup_sales
 from gilhound.market.recheck import recheck
+from gilhound.market.search import SearchRegionError
 from gilhound.models import (
     AppInfo,
     BridgeGo,
     BridgeResult,
     BridgeStatus,
     ItemRef,
+    LowStockItems,
     PartnerShare,
     PartnerShareDraft,
     PnLSummary,
@@ -37,6 +39,11 @@ from gilhound.models import (
     SalesByItem,
     ScanParams,
     ScanResult,
+    SearchListChange,
+    SearchLists,
+    SearchParams,
+    SearchResolution,
+    SearchResult,
     SnipeHit,
     SnipeStatus,
     SourceStatus,
@@ -46,6 +53,7 @@ from gilhound.runtime import Runtime
 from gilhound.runtime.discord import DeliveryError
 from gilhound.runtime.partner import MAX_CODE, ShareSizeError, current_share, decode, encode
 from gilhound.runtime.profiles import Library, ProfileChange, ProfileList
+from gilhound.runtime.search_lists import SearchListNotFound
 from gilhound.runtime.store import ArchiveEntry, ArchiveSummary, Kind
 
 LOCAL_HOST = re.compile(r"(?:localhost|127\.0\.0\.1)(?::([0-9]{1,5}))?", re.ASCII | re.I)
@@ -76,6 +84,11 @@ class PositionGathered(BaseModel):
 
 class ApiError(BaseModel):
     detail: str = Field(description="Explanation of the request failure.")
+
+
+class ColumnOrderChange(BaseModel):
+    table: str = Field(min_length=1, max_length=100)
+    order: list[str] = Field(max_length=100)
 
 
 def create_app(
@@ -219,6 +232,15 @@ def create_app(
         except ValidationError as exc:
             raise HTTPException(422, "Check the supplied settings fields.") from exc
 
+    @app.get("/api/column-order")
+    def get_column_order() -> dict[str, list[str]]:
+        return runtime.settings.get().column_order
+
+    @app.put("/api/column-order")
+    def put_column_order(change: ColumnOrderChange) -> list[str]:
+        _, settings = runtime.settings.update({}, column_order=(change.table, change.order))
+        return settings.column_order.get(change.table, [])
+
     @app.get("/api/profiles/{library}")
     def get_profiles(library: Library) -> ProfileList:
         return runtime.profiles.list(library, runtime.settings.get())
@@ -277,6 +299,31 @@ def create_app(
     @app.post("/api/retainer-scan")
     def run_retainer_scan(params: RetainerScanParams) -> RetainerScanResult:
         return runtime.retainer(params)
+
+    @app.get("/api/search/regions")
+    def get_search_regions() -> list[str]:
+        return runtime.search_regions()
+
+    @app.get("/api/search/items")
+    def get_search_item(q: str = Query(min_length=1, max_length=200)) -> SearchResolution:
+        return runtime.resolve_search(q)
+
+    @app.get("/api/search/low-stock")
+    def get_search_low_stock() -> LowStockItems:
+        return runtime.low_stock()
+
+    @app.get("/api/search-lists")
+    def get_search_lists() -> SearchLists:
+        return runtime.search_lists.list()
+
+    @app.post("/api/search-lists")
+    def edit_search_lists(change: SearchListChange) -> SearchLists:
+        try:
+            return runtime.search_lists.change(change)
+        except SearchListNotFound as exc:
+            raise HTTPException(404, str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
     @app.get("/api/snipes/status")
     def get_snipe_status() -> SnipeStatus:
@@ -379,6 +426,16 @@ def create_app(
     @app.post("/api/jobs/retainer", status_code=202)
     def submit_retainer(params: RetainerScanParams, profile: str | None = None) -> Job:
         return jobs.submit(lambda progress: runtime.retainer(params, progress, profile))
+
+    @app.post("/api/jobs/search", status_code=202)
+    def submit_search(params: SearchParams) -> Job:
+        def run(progress: Callable[[int, int], None]) -> SearchResult:
+            try:
+                return runtime.search(params, progress)
+            except SearchRegionError as exc:
+                raise JobError(str(exc)) from exc
+
+        return jobs.submit(run)
 
     @app.post("/api/jobs/snipes", status_code=202)
     def submit_snipes() -> Job:

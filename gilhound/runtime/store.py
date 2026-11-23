@@ -76,13 +76,24 @@ class SettingsStore:
 
     def save(self, settings: UserSettings) -> UserSettings:
         fields = dict(settings)
-        if "webhook_url" not in settings.model_fields_set:
-            fields.pop("webhook_url")
+        for field in ("webhook_url", "column_order"):
+            if field not in settings.model_fields_set:
+                fields.pop(field)
         return self.update(fields)[1]
 
-    def update(self, fields: dict) -> tuple[UserSettings, UserSettings]:
+    def update(
+        self, fields: dict, *, column_order: tuple[str, list[str]] | None = None,
+    ) -> tuple[UserSettings, UserSettings]:
         with self._locked():
             previous = self._read()
+            if column_order is not None:
+                key, order = column_order
+                orders = previous.column_order.copy()
+                if order:
+                    orders[key] = order
+                else:
+                    orders.pop(key, None)
+                fields = {**fields, "column_order": orders}
             settings = UserSettings.model_validate({**dict(previous), **fields}, extra="forbid")
             secret = settings.webhook_url
             if secret and secret.get_secret_value() == "**********":

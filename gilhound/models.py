@@ -43,6 +43,94 @@ class Listing(BaseModel):
     )
 
 
+class SearchOptions(BaseModel):
+    hq_only: bool = False
+    quantity: int | None = Field(default=None, gt=0)
+
+
+class SearchEntry(SearchOptions):
+    item_id: int
+
+
+class SearchName(SearchOptions):
+    name: str = Field(max_length=200)
+
+
+SearchRegion = Annotated[str, Field(min_length=1, max_length=64)]
+
+
+class SearchParams(BaseModel):
+    entries: list[SearchEntry | SearchName] = Field(min_length=1, max_length=1000)
+    region: SearchRegion = "Europe"
+    top: int = Field(default=10, ge=1, le=100)
+
+
+class SavedSearch(BaseModel):
+    entries: list[SearchEntry] = Field(min_length=1, max_length=1000)
+    region: SearchRegion = "Europe"
+
+
+class SearchListChange(BaseModel):
+    action: Literal["create", "save", "rename", "delete"]
+    name: str = Field(min_length=1, max_length=80)
+    new_name: str | None = Field(default=None, min_length=1, max_length=80)
+    search: SavedSearch | None = None
+
+
+class SearchLists(BaseModel):
+    lists: dict[str, SavedSearch] = Field(default_factory=dict)
+    warning: str | None = None
+
+
+class SearchResolution(BaseModel):
+    item: ItemRef | None = None
+    candidates: list[ItemRef] = Field(default_factory=list)
+    error: str | None = None
+
+
+class SearchListing(BaseModel):
+    world: str
+    dc: str | None
+    ppu: int
+    qty: int
+    hq: bool
+    total: int = Field(description="Whole-stack cost including the 5% buyer tax.")
+    last_review_ts: EpochSeconds
+    data_age_h: float | None
+
+
+class SearchCover(BaseModel):
+    requested: int
+    covered: int
+    listings: list[SearchListing]
+    worlds: list[str]
+    purchase_cost: int
+    travel_cost: int
+    total_cost: int
+
+
+class SearchRow(SearchResolution):
+    entry: SearchEntry | SearchName
+    listings: list[SearchListing] = Field(default_factory=list)
+    home_cheapest: SearchListing | None = None
+    home_median_7d: float | None = None
+    home_sale_age_h: float | None = None
+    cover: SearchCover | None = None
+    warnings: list[str] = Field(default_factory=list)
+
+
+class SearchResult(BaseModel):
+    region: str
+    home_world: str
+    rows: list[SearchRow]
+    duration_s: float
+
+
+class LowStockItems(BaseModel):
+    entries: list[SearchEntry] = Field(default_factory=list)
+    reason: str | None = None
+
+
 class Sale(BaseModel):
     ppu: int = Field(gt=0, description="Sale price in gil per unit.")
     qty: int = Field(gt=0, description="Units sold.")
@@ -523,6 +611,7 @@ class PartnerShare(PartnerShareDraft, extra="forbid"):
 
 
 class UserSettings(BaseModel):
+    column_order: dict[str, list[str]] = Field(default_factory=dict)
     partner_snapshot_hours: int = Field(default=48, ge=1, le=8760)
     partner_retainers: list[PartnerRetainer] = Field(default_factory=list, max_length=64)
     partner_cache_min: int = Field(default=45, ge=1, le=1440)

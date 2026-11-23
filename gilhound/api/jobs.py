@@ -9,9 +9,9 @@ from fastapi import HTTPException
 from pydantic import BaseModel
 
 from gilhound.market.workers import Workers, checkpoint
-from gilhound.models import RetainerScanResult, ScanResult, SnipeHit
+from gilhound.models import RetainerScanResult, ScanResult, SearchResult, SnipeHit
 
-type Result = ScanResult | RetainerScanResult | list[SnipeHit]
+type Result = ScanResult | RetainerScanResult | SearchResult | list[SnipeHit]
 type Progress = Callable[[int, int], None]
 
 

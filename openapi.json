@@ -370,6 +370,30 @@
         "title": "CandidateWindow",
         "type": "object"
       },
+      "ColumnOrderChange": {
+        "properties": {
+          "order": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 100,
+            "title": "Order",
+            "type": "array"
+          },
+          "table": {
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Table",
+            "type": "string"
+          }
+        },
+        "required": [
+          "table",
+          "order"
+        ],
+        "title": "ColumnOrderChange",
+        "type": "object"
+      },
       "FreshnessTier": {
         "properties": {
           "max_age_h": {
@@ -538,6 +562,30 @@
           "retainer"
         ],
         "type": "string"
+      },
+      "LowStockItems": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/SearchEntry"
+            },
+            "title": "Entries",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "LowStockItems",
+        "type": "object"
       },
       "PartnerRetainer": {
         "additionalProperties": false,
@@ -1383,6 +1431,9 @@
             "$ref": "#/components/schemas/RetainerScanResult"
           },
           {
+            "$ref": "#/components/schemas/SearchResult"
+          },
+          {
             "items": {
               "$ref": "#/components/schemas/SnipeHit"
             },
@@ -1682,6 +1733,31 @@
           "item"
         ],
         "title": "SalesByItem",
+        "type": "object"
+      },
+      "SavedSearch": {
+        "properties": {
+          "entries": {
+            "items": {
+              "$ref": "#/components/schemas/SearchEntry"
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Entries",
+            "type": "array"
+          },
+          "region": {
+            "default": "Europe",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Region",
+            "type": "string"
+          }
+        },
+        "required": [
+          "entries"
+        ],
+        "title": "SavedSearch",
         "type": "object"
       },
       "ScanParams": {
@@ -2501,6 +2577,461 @@
         "title": "ScanRow",
         "type": "object"
       },
+      "SearchCover": {
+        "properties": {
+          "covered": {
+            "title": "Covered",
+            "type": "integer"
+          },
+          "listings": {
+            "items": {
+              "$ref": "#/components/schemas/SearchListing"
+            },
+            "title": "Listings",
+            "type": "array"
+          },
+          "purchase_cost": {
+            "title": "Purchase Cost",
+            "type": "integer"
+          },
+          "requested": {
+            "title": "Requested",
+            "type": "integer"
+          },
+          "total_cost": {
+            "title": "Total Cost",
+            "type": "integer"
+          },
+          "travel_cost": {
+            "title": "Travel Cost",
+            "type": "integer"
+          },
+          "worlds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Worlds",
+            "type": "array"
+          }
+        },
+        "required": [
+          "requested",
+          "covered",
+          "listings",
+          "worlds",
+          "purchase_cost",
+          "travel_cost",
+          "total_cost"
+        ],
+        "title": "SearchCover",
+        "type": "object"
+      },
+      "SearchEntry": {
+        "properties": {
+          "hq_only": {
+            "default": false,
+            "title": "Hq Only",
+            "type": "boolean"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "integer"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          }
+        },
+        "required": [
+          "item_id"
+        ],
+        "title": "SearchEntry",
+        "type": "object"
+      },
+      "SearchListChange": {
+        "properties": {
+          "action": {
+            "enum": [
+              "create",
+              "save",
+              "rename",
+              "delete"
+            ],
+            "title": "Action",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "new_name": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "New Name"
+          },
+          "search": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SavedSearch"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "action",
+          "name"
+        ],
+        "title": "SearchListChange",
+        "type": "object"
+      },
+      "SearchListing": {
+        "properties": {
+          "data_age_h": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Age H"
+          },
+          "dc": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dc"
+          },
+          "hq": {
+            "title": "Hq",
+            "type": "boolean"
+          },
+          "last_review_ts": {
+            "minimum": 0.0,
+            "title": "Last Review Ts",
+            "type": "integer"
+          },
+          "ppu": {
+            "title": "Ppu",
+            "type": "integer"
+          },
+          "qty": {
+            "title": "Qty",
+            "type": "integer"
+          },
+          "total": {
+            "description": "Whole-stack cost including the 5% buyer tax.",
+            "title": "Total",
+            "type": "integer"
+          },
+          "world": {
+            "title": "World",
+            "type": "string"
+          }
+        },
+        "required": [
+          "world",
+          "dc",
+          "ppu",
+          "qty",
+          "hq",
+          "total",
+          "last_review_ts",
+          "data_age_h"
+        ],
+        "title": "SearchListing",
+        "type": "object"
+      },
+      "SearchLists": {
+        "properties": {
+          "lists": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SavedSearch"
+            },
+            "title": "Lists",
+            "type": "object"
+          },
+          "warning": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warning"
+          }
+        },
+        "title": "SearchLists",
+        "type": "object"
+      },
+      "SearchName": {
+        "properties": {
+          "hq_only": {
+            "default": false,
+            "title": "Hq Only",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 200,
+            "title": "Name",
+            "type": "string"
+          },
+          "quantity": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Quantity"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "SearchName",
+        "type": "object"
+      },
+      "SearchParams": {
+        "properties": {
+          "entries": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/SearchEntry"
+                },
+                {
+                  "$ref": "#/components/schemas/SearchName"
+                }
+              ]
+            },
+            "maxItems": 1000,
+            "minItems": 1,
+            "title": "Entries",
+            "type": "array"
+          },
+          "region": {
+            "default": "Europe",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Region",
+            "type": "string"
+          },
+          "top": {
+            "default": 10,
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Top",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "entries"
+        ],
+        "title": "SearchParams",
+        "type": "object"
+      },
+      "SearchResolution": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ItemRef"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItemRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "title": "SearchResolution",
+        "type": "object"
+      },
+      "SearchResult": {
+        "properties": {
+          "duration_s": {
+            "title": "Duration S",
+            "type": "number"
+          },
+          "home_world": {
+            "title": "Home World",
+            "type": "string"
+          },
+          "region": {
+            "title": "Region",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/SearchRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "region",
+          "home_world",
+          "rows",
+          "duration_s"
+        ],
+        "title": "SearchResult",
+        "type": "object"
+      },
+      "SearchRow": {
+        "properties": {
+          "candidates": {
+            "items": {
+              "$ref": "#/components/schemas/ItemRef"
+            },
+            "title": "Candidates",
+            "type": "array"
+          },
+          "cover": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SearchCover"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "entry": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SearchEntry"
+              },
+              {
+                "$ref": "#/components/schemas/SearchName"
+              }
+            ],
+            "title": "Entry"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "home_cheapest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SearchListing"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "home_median_7d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Median 7D"
+          },
+          "home_sale_age_h": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Sale Age H"
+          },
+          "item": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ItemRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "listings": {
+            "items": {
+              "$ref": "#/components/schemas/SearchListing"
+            },
+            "title": "Listings",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "entry"
+        ],
+        "title": "SearchRow",
+        "type": "object"
+      },
       "ShareCode": {
         "properties": {
           "code": {
@@ -3244,6 +3775,16 @@
             "title": "Buy Region",
             "type": "string"
           },
+          "column_order": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Column Order",
+            "type": "object"
+          },
           "dedup_cooldown_h": {
             "default": 6,
             "description": "Hours before a listing can resend.",
@@ -3430,6 +3971,16 @@
             "description": "Default market region for purchases.",
             "title": "Buy Region",
             "type": "string"
+          },
+          "column_order": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Column Order",
+            "type": "object"
           },
           "dedup_cooldown_h": {
             "default": 6,
@@ -3817,6 +4368,125 @@
           }
         },
         "summary": "Go"
+      }
+    },
+    "/api/column-order": {
+      "get": {
+        "operationId": "get_column_order_api_column_order_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "title": "Response Get Column Order Api Column Order Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get Column Order"
+      },
+      "put": {
+        "operationId": "put_column_order_api_column_order_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ColumnOrderChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response Put Column Order Api Column Order Put",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Column Order"
       }
     },
     "/api/diagnostics/export": {
@@ -4355,6 +5025,71 @@
           }
         },
         "summary": "Submit Scan"
+      }
+    },
+    "/api/jobs/search": {
+      "post": {
+        "operationId": "submit_search_api_jobs_search_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchParams"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Job"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Submit Search"
       }
     },
     "/api/jobs/snipes": {
@@ -5764,6 +6499,276 @@
           }
         },
         "summary": "Run Scan"
+      }
+    },
+    "/api/search-lists": {
+      "get": {
+        "operationId": "get_search_lists_api_search_lists_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchLists"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get Search Lists"
+      },
+      "post": {
+        "operationId": "edit_search_lists_api_search_lists_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SearchListChange"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchLists"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Edit Search Lists"
+      }
+    },
+    "/api/search/items": {
+      "get": {
+        "operationId": "get_search_item_api_search_items_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SearchResolution"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Search Item"
+      }
+    },
+    "/api/search/low-stock": {
+      "get": {
+        "operationId": "get_search_low_stock_api_search_low_stock_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LowStockItems"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get Search Low Stock"
+      }
+    },
+    "/api/search/regions": {
+      "get": {
+        "operationId": "get_search_regions_api_search_regions_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "Response Get Search Regions Api Search Regions Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Invalid Host header"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiError"
+                }
+              }
+            },
+            "description": "Missing or invalid bearer token",
+            "headers": {
+              "WWW-Authenticate": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Get Search Regions"
       }
     },
     "/api/settings": {

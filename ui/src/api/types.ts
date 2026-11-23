@@ -38,6 +38,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/column-order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Column Order */
+        get: operations["get_column_order_api_column_order_get"];
+        /** Put Column Order */
+        put: operations["put_column_order_api_column_order_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/diagnostics/export": {
         parameters: {
             query?: never;
@@ -135,6 +153,23 @@ export interface paths {
         put?: never;
         /** Submit Scan */
         post: operations["submit_scan_api_jobs_scan_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/jobs/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Submit Search */
+        post: operations["submit_search_api_jobs_search_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -466,6 +501,75 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/search-lists": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Search Lists */
+        get: operations["get_search_lists_api_search_lists_get"];
+        put?: never;
+        /** Edit Search Lists */
+        post: operations["edit_search_lists_api_search_lists_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/search/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Search Item */
+        get: operations["get_search_item_api_search_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/search/low-stock": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Search Low Stock */
+        get: operations["get_search_low_stock_api_search_low_stock_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/search/regions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Search Regions */
+        get: operations["get_search_regions_api_search_regions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings": {
         parameters: {
             query?: never;
@@ -769,6 +873,13 @@ export interface components {
              */
             preferred_roi: number;
         };
+        /** ColumnOrderChange */
+        ColumnOrderChange: {
+            /** Order */
+            order: string[];
+            /** Table */
+            table: string;
+        };
         /** FreshnessTier */
         FreshnessTier: {
             /**
@@ -839,6 +950,13 @@ export interface components {
         };
         /** @enum {string} */
         Kind: "scan" | "snipe" | "retainer";
+        /** LowStockItems */
+        LowStockItems: {
+            /** Entries */
+            entries?: components["schemas"]["SearchEntry"][];
+            /** Reason */
+            reason?: string | null;
+        };
         /** PartnerRetainer */
         PartnerRetainer: {
             /** Name */
@@ -1129,7 +1247,7 @@ export interface components {
             /** Reasons */
             reasons: string[];
         };
-        Result: components["schemas"]["ScanResult"] | components["schemas"]["RetainerScanResult"] | components["schemas"]["SnipeHit"][];
+        Result: components["schemas"]["ScanResult"] | components["schemas"]["RetainerScanResult"] | components["schemas"]["SearchResult"] | components["schemas"]["SnipeHit"][];
         /** RetainerItemRow */
         RetainerItemRow: {
             /**
@@ -1272,6 +1390,16 @@ export interface components {
              * @default 0
              */
             unknown_qty: number;
+        };
+        /** SavedSearch */
+        SavedSearch: {
+            /** Entries */
+            entries: components["schemas"]["SearchEntry"][];
+            /**
+             * Region
+             * @default Europe
+             */
+            region: string;
         };
         /** ScanParams */
         ScanParams: {
@@ -1623,6 +1751,145 @@ export interface components {
              */
             you_list: boolean;
         };
+        /** SearchCover */
+        SearchCover: {
+            /** Covered */
+            covered: number;
+            /** Listings */
+            listings: components["schemas"]["SearchListing"][];
+            /** Purchase Cost */
+            purchase_cost: number;
+            /** Requested */
+            requested: number;
+            /** Total Cost */
+            total_cost: number;
+            /** Travel Cost */
+            travel_cost: number;
+            /** Worlds */
+            worlds: string[];
+        };
+        /** SearchEntry */
+        SearchEntry: {
+            /**
+             * Hq Only
+             * @default false
+             */
+            hq_only: boolean;
+            /** Item Id */
+            item_id: number;
+            /** Quantity */
+            quantity?: number | null;
+        };
+        /** SearchListChange */
+        SearchListChange: {
+            /**
+             * Action
+             * @enum {string}
+             */
+            action: "create" | "save" | "rename" | "delete";
+            /** Name */
+            name: string;
+            /** New Name */
+            new_name?: string | null;
+            search?: components["schemas"]["SavedSearch"] | null;
+        };
+        /** SearchListing */
+        SearchListing: {
+            /** Data Age H */
+            data_age_h: number | null;
+            /** Dc */
+            dc: string | null;
+            /** Hq */
+            hq: boolean;
+            /** Last Review Ts */
+            last_review_ts: number;
+            /** Ppu */
+            ppu: number;
+            /** Qty */
+            qty: number;
+            /**
+             * Total
+             * @description Whole-stack cost including the 5% buyer tax.
+             */
+            total: number;
+            /** World */
+            world: string;
+        };
+        /** SearchLists */
+        SearchLists: {
+            /** Lists */
+            lists?: {
+                [key: string]: components["schemas"]["SavedSearch"];
+            };
+            /** Warning */
+            warning?: string | null;
+        };
+        /** SearchName */
+        SearchName: {
+            /**
+             * Hq Only
+             * @default false
+             */
+            hq_only: boolean;
+            /** Name */
+            name: string;
+            /** Quantity */
+            quantity?: number | null;
+        };
+        /** SearchParams */
+        SearchParams: {
+            /** Entries */
+            entries: (components["schemas"]["SearchEntry"] | components["schemas"]["SearchName"])[];
+            /**
+             * Region
+             * @default Europe
+             */
+            region: string;
+            /**
+             * Top
+             * @default 10
+             */
+            top: number;
+        };
+        /** SearchResolution */
+        SearchResolution: {
+            /** Candidates */
+            candidates?: components["schemas"]["ItemRef"][];
+            /** Error */
+            error?: string | null;
+            item?: components["schemas"]["ItemRef"] | null;
+        };
+        /** SearchResult */
+        SearchResult: {
+            /** Duration S */
+            duration_s: number;
+            /** Home World */
+            home_world: string;
+            /** Region */
+            region: string;
+            /** Rows */
+            rows: components["schemas"]["SearchRow"][];
+        };
+        /** SearchRow */
+        SearchRow: {
+            /** Candidates */
+            candidates?: components["schemas"]["ItemRef"][];
+            cover?: components["schemas"]["SearchCover"] | null;
+            /** Entry */
+            entry: components["schemas"]["SearchEntry"] | components["schemas"]["SearchName"];
+            /** Error */
+            error?: string | null;
+            home_cheapest?: components["schemas"]["SearchListing"] | null;
+            /** Home Median 7D */
+            home_median_7d?: number | null;
+            /** Home Sale Age H */
+            home_sale_age_h?: number | null;
+            item?: components["schemas"]["ItemRef"] | null;
+            /** Listings */
+            listings?: components["schemas"]["SearchListing"][];
+            /** Warnings */
+            warnings?: string[];
+        };
         /** ShareCode */
         ShareCode: {
             /** Code */
@@ -1893,6 +2160,10 @@ export interface components {
              * @description Default market region for purchases.
              */
             buy_region: string;
+            /** Column Order */
+            column_order?: {
+                [key: string]: string[];
+            };
             /**
              * Dedup Cooldown H
              * @description Hours before a listing can resend.
@@ -2005,6 +2276,10 @@ export interface components {
              * @description Default market region for purchases.
              */
             buy_region: string;
+            /** Column Order */
+            column_order?: {
+                [key: string]: string[];
+            };
             /**
              * Dedup Cooldown H
              * @description Hours before a listing can resend.
@@ -2214,6 +2489,99 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BridgeResult"];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_column_order_api_column_order_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string[];
+                    };
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    put_column_order_api_column_order_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ColumnOrderChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
                 };
             };
             /** @description Invalid Host header */
@@ -2544,6 +2912,58 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ScanParams"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Job"];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_search_api_jobs_search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchParams"];
             };
         };
         responses: {
@@ -3605,6 +4025,225 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_search_lists_api_search_lists_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchLists"];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    edit_search_lists_api_search_lists_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchListChange"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchLists"];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_search_item_api_search_items_get: {
+        parameters: {
+            query: {
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResolution"];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_search_low_stock_api_search_low_stock_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LowStockItems"];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    get_search_regions_api_search_regions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            /** @description Invalid Host header */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Missing or invalid bearer token */
+            401: {
+                headers: {
+                    "WWW-Authenticate"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
         };
