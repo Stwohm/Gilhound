@@ -8,6 +8,9 @@ from pydantic import BaseModel, Field, SecretStr, computed_field, field_serializ
 EpochSeconds = Annotated[int, Field(strict=True, ge=0)]
 Fraction = Annotated[float, Field(ge=0, le=1)]
 GilCost = Annotated[int, Field(ge=0)]
+DEFAULT_BUYER_TAX = 0.05
+DEFAULT_SELLER_TAX = 0.05
+DEFAULT_SELLABLE_DAYS = 3
 
 
 class World(BaseModel):
@@ -57,17 +60,20 @@ class SearchName(SearchOptions):
 
 
 SearchRegion = Annotated[str, Field(min_length=1, max_length=64)]
+SearchMode = Literal["buy", "sell"]
 
 
 class SearchParams(BaseModel):
     entries: list[SearchEntry | SearchName] = Field(min_length=1, max_length=1000)
     region: SearchRegion = "Europe"
     top: int = Field(default=10, ge=1, le=100)
+    mode: SearchMode = "buy"
 
 
 class SavedSearch(BaseModel):
     entries: list[SearchEntry] = Field(min_length=1, max_length=1000)
     region: SearchRegion = "Europe"
+    mode: SearchMode = Field(default="buy", exclude_if=lambda mode: mode == "buy")
 
 
 class SearchListChange(BaseModel):
@@ -109,6 +115,27 @@ class SearchCover(BaseModel):
     total_cost: int
 
 
+class SearchSellInfo(BaseModel):
+    volume_proof: "VolumeProof"
+    units_sold_7d: int
+    sales_7d: int
+    sell_ppu: float | None = None
+    home_lowest: int | None = None
+    ask_exit_ppu: float | None = None
+    distinct_sellers: int
+    home_listing_count: int
+    rival_stock: int
+    buy_world: str | None = None
+    buy_ppu: int | None = None
+    data_age_h: float | None = None
+    profit_per_unit: float | None = None
+    roi_pct: float | None = None
+    days_to_sell: float | None = None
+    est_wait_days: float | None = None
+    cover_profit: float | None = None
+    cover_roi_pct: float | None = None
+
+
 class SearchRow(SearchResolution):
     entry: SearchEntry | SearchName
     listings: list[SearchListing] = Field(default_factory=list)
@@ -117,6 +144,7 @@ class SearchRow(SearchResolution):
     home_sale_age_h: float | None = None
     cover: SearchCover | None = None
     warnings: list[str] = Field(default_factory=list)
+    sell: SearchSellInfo | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class SearchResult(BaseModel):
@@ -250,12 +278,16 @@ class ScanParams(BaseModel):
     buy_region: str = Field(pattern=r"\S", description="Market region to search for purchases.")
     min_ppu: GilCost = Field(default=0, description="Minimum purchase price in gil per unit.")
     min_profit: GilCost = Field(default=0, description="Minimum net profit in gil per unit.")
-    buyer_tax: Fraction = Field(default=0.05, description="Buyer tax as a fraction of the price.")
+    buyer_tax: Fraction = Field(
+        default=DEFAULT_BUYER_TAX, description="Buyer tax as a fraction of the price."
+    )
     seller_tax: Fraction = Field(description="Seller tax as a fraction of the price.")
     travel_cost: dict[str, GilCost] = Field(
         default_factory=dict, description="Travel cost in gil keyed by data centre name."
     )
-    sellable_days: float = Field(default=3, gt=0, description="Days of sales used to cap quantity.")
+    sellable_days: float = Field(
+        default=DEFAULT_SELLABLE_DAYS, gt=0, description="Days of sales used to cap quantity."
+    )
 
     @model_validator(mode="before")
     @classmethod
@@ -612,6 +644,7 @@ class PartnerShare(PartnerShareDraft, extra="forbid"):
 
 class UserSettings(BaseModel):
     column_order: dict[str, list[str]] = Field(default_factory=dict)
+    search_mode: SearchMode = "buy"
     partner_snapshot_hours: int = Field(default=48, ge=1, le=8760)
     partner_retainers: list[PartnerRetainer] = Field(default_factory=list, max_length=64)
     partner_cache_min: int = Field(default=45, ge=1, le=1440)

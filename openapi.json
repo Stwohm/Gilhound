@@ -1746,6 +1746,15 @@
             "title": "Entries",
             "type": "array"
           },
+          "mode": {
+            "default": "buy",
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
           "region": {
             "default": "Europe",
             "maxLength": 64,
@@ -2842,6 +2851,15 @@
             "title": "Entries",
             "type": "array"
           },
+          "mode": {
+            "default": "buy",
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
           "region": {
             "default": "Europe",
             "maxLength": 64,
@@ -3018,6 +3036,16 @@
             "title": "Listings",
             "type": "array"
           },
+          "sell": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SearchSellInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "warnings": {
             "items": {
               "type": "string"
@@ -3030,6 +3058,175 @@
           "entry"
         ],
         "title": "SearchRow",
+        "type": "object"
+      },
+      "SearchSellInfo": {
+        "properties": {
+          "ask_exit_ppu": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ask Exit Ppu"
+          },
+          "buy_ppu": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Buy Ppu"
+          },
+          "buy_world": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Buy World"
+          },
+          "cover_profit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Profit"
+          },
+          "cover_roi_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cover Roi Pct"
+          },
+          "data_age_h": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Age H"
+          },
+          "days_to_sell": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Days To Sell"
+          },
+          "distinct_sellers": {
+            "title": "Distinct Sellers",
+            "type": "integer"
+          },
+          "est_wait_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Est Wait Days"
+          },
+          "home_listing_count": {
+            "title": "Home Listing Count",
+            "type": "integer"
+          },
+          "home_lowest": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Home Lowest"
+          },
+          "profit_per_unit": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Profit Per Unit"
+          },
+          "rival_stock": {
+            "title": "Rival Stock",
+            "type": "integer"
+          },
+          "roi_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Roi Pct"
+          },
+          "sales_7d": {
+            "title": "Sales 7D",
+            "type": "integer"
+          },
+          "sell_ppu": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sell Ppu"
+          },
+          "units_sold_7d": {
+            "title": "Units Sold 7D",
+            "type": "integer"
+          },
+          "volume_proof": {
+            "$ref": "#/components/schemas/VolumeProof"
+          }
+        },
+        "required": [
+          "volume_proof",
+          "units_sold_7d",
+          "sales_7d",
+          "distinct_sellers",
+          "home_listing_count",
+          "rival_stock"
+        ],
+        "title": "SearchSellInfo",
         "type": "object"
       },
       "ShareCode": {
@@ -3915,6 +4112,15 @@
             "title": "Scan Interval Min",
             "type": "integer"
           },
+          "search_mode": {
+            "default": "buy",
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Search Mode",
+            "type": "string"
+          },
           "share_sender": {
             "default": "",
             "maxLength": 80,
@@ -4111,6 +4317,15 @@
             "maximum": 240.0,
             "title": "Scan Interval Min",
             "type": "integer"
+          },
+          "search_mode": {
+            "default": "buy",
+            "enum": [
+              "buy",
+              "sell"
+            ],
+            "title": "Search Mode",
+            "type": "string"
           },
           "share_sender": {
             "default": "",

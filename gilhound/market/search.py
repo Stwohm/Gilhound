@@ -11,10 +11,14 @@ from urllib.parse import urlencode
 
 from gilhound.market.http import HttpClient
 from gilhound.market.items import UNAVAILABLE, ItemCatalog, market_url
+from gilhound.market.profit import profit_per_unit, sellable_qty, wait_days
 from gilhound.market.universalis import Snapshot, Universalis
-from gilhound.market.volume import recent
+from gilhound.market.volume import recent, volume_proof
 from gilhound.market.workers import parallel
 from gilhound.models import (
+    DEFAULT_BUYER_TAX,
+    DEFAULT_SELLABLE_DAYS,
+    DEFAULT_SELLER_TAX,
     DataCenter,
     ItemRef,
     Listing,
@@ -26,6 +30,7 @@ from gilhound.models import (
     SearchResolution,
     SearchResult,
     SearchRow,
+    SearchSellInfo,
 )
 
 XIV_SEARCH = "https://v2.xivapi.com/api/search"
@@ -125,6 +130,9 @@ def run_search(
     progress: Callable[[int, int], None] | None = None,
     home_world: str = "Cerberus",
     travel_cost: Mapping[str, int] | None = None,
+    buyer_tax: float = DEFAULT_BUYER_TAX,
+    seller_tax: float = DEFAULT_SELLER_TAX,
+    sellable_days: float = DEFAULT_SELLABLE_DAYS,
     marketable: Callable[[], Iterable[int]] | None = None,
     catalog: ItemCatalog | None = None,
     http: HttpClient | None = None,
@@ -167,10 +175,11 @@ def run_search(
             progress(done, total)
 
     def current(location: str, keys: tuple[int, ...], *, home: bool) -> dict[int, Snapshot]:
+        sell_home = home and params.mode == "sell"
         try:
             return api.current(
                 location, list(keys), entries=200 if home else 0, projected=True,
-                include_retainers=False, worlds=worlds,
+                include_retainers=sell_home, include_buyers=sell_home, worlds=worlds,
             )
         except HTTPError as exc:
             if exc.code != 404:
@@ -195,8 +204,11 @@ def run_search(
         now = clock()
         for iid in keys:
             for row in by_id[iid]:
-                populate(row, regional.get(iid), home.get(iid), dcs, now, params.top,
-                         travel_cost or {}, home_world)
+                populate(
+                    row, regional.get(iid), home.get(iid), dcs, now, params.top,
+                    travel_cost or {}, home_world, sell=params.mode == "sell",
+                    buyer_tax=buyer_tax, seller_tax=seller_tax, sellable_days=sellable_days,
+                )
                 done += 1
         if progress:
             progress(done, total)
@@ -215,10 +227,13 @@ def run_search(
 def populate(
     row: SearchRow, regional: Snapshot | None, home: Snapshot | None,
     dcs: Mapping[str, str], now: float, top: int, costs: Mapping[str, int], home_world: str,
+    *, sell: bool = False, buyer_tax: float = DEFAULT_BUYER_TAX,
+    seller_tax: float = DEFAULT_SELLER_TAX, sellable_days: float = DEFAULT_SELLABLE_DAYS,
 ) -> None:
     def quotes(snapshot: Snapshot) -> Iterable[SearchListing]:
         return (quote(r, dcs, now) for r in snapshot.listings if not row.entry.hq_only or r.hq)
 
+    listings = []
     if regional is None:
         row.error = "Regional listings unavailable for this item."
     else:
@@ -226,11 +241,59 @@ def populate(
         row.listings = listings[:top]
         if row.entry.quantity is not None:
             row.cover = cover(listings, row.entry.quantity, costs, home_world)
+    home_listings = []
+    sales = []
     if home is None:
         row.warnings.append("Home-world market data unavailable.")
     else:
-        row.home_cheapest = next(quotes(home), None)
+        home_listings = [r for r in home.listings if not row.entry.hq_only or r.hq]
+        if home_listings:
+            row.home_cheapest = quote(home_listings[0], dcs, now)
         sales = [s for s in recent(home.sales, now) if not row.entry.hq_only or s.hq]
         if sales:
             row.home_median_7d = median(s.ppu for s in sales)
             row.home_sale_age_h = max(0, now - max(s.ts for s in sales)) / 3600
+
+    if not sell:
+        return
+    if home is not None and not sales:
+        row.warnings.append("No home sales in 7 days")
+    buy = next((r for r in listings if r.world.casefold() != home_world.casefold()), None)
+    if buy is None:
+        row.warnings.append("No regional buy listing outside the home world")
+
+    price = row.home_median_7d
+    low = row.home_cheapest.ppu if row.home_cheapest else None
+    proof = volume_proof(sales, now)
+    rival = sum(r.qty for r in home_listings if price is not None and r.ppu <= price)
+    info = SearchSellInfo(
+        volume_proof=proof, units_sold_7d=sum(s.qty for s in sales), sales_7d=len(sales),
+        sell_ppu=price, home_lowest=low,
+        ask_exit_ppu=min(price, low) if price is not None and low is not None else None,
+        distinct_sellers=len({r.retainer_hash for r in home_listings} - {""}),
+        home_listing_count=len(home_listings), rival_stock=rival,
+    )
+    row.sell = info
+    if buy is None:
+        return
+    info.buy_world, info.buy_ppu, info.data_age_h = buy.world, buy.ppu, buy.data_age_h
+    if price is None:
+        return
+
+    velocity = proof.units_per_day
+    capped = sellable_qty(buy.qty, velocity, sellable_days)
+    if not capped:
+        row.warnings.append("No sellable units within the sell window")
+    # Same basis as the Scan rows: travel is spread over the units that can sell in the window.
+    gain = profit_per_unit(
+        price, buy.ppu, seller_tax=seller_tax, buyer_tax=buyer_tax,
+        travel_cost=costs.get(buy.dc or "", 0), qty=capped or buy.qty,
+    )
+    info.profit_per_unit = gain
+    info.roi_pct = gain / (buy.ppu * (1 + buyer_tax)) * 100
+    if capped:
+        info.days_to_sell = capped / velocity
+        info.est_wait_days = wait_days(rival, capped, velocity)
+    if row.cover and row.cover.total_cost:
+        info.cover_profit = price * (1 - seller_tax) * row.cover.covered - row.cover.total_cost
+        info.cover_roi_pct = info.cover_profit / row.cover.total_cost * 100

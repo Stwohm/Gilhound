@@ -12,10 +12,13 @@ from gilhound.api.app import create_app
 from gilhound.cli import main
 from gilhound.market.http import HttpClient, RateLimiter
 from gilhound.market.items import SHEET, ItemCatalog
+from gilhound.market.presets import _opportunities
 from gilhound.market.search import XIV_SEARCH, resolve_item, run_search
-from gilhound.market.universalis import BASE
+from gilhound.market.universalis import BASE, Universalis
 from gilhound.models import (
+    ItemRef,
     SavedSearch,
+    ScanParams,
     SearchEntry,
     SearchListChange,
     SearchName,
@@ -45,10 +48,13 @@ def sale(ppu: int, hq: bool, seconds_ago: int) -> dict:
     }
 
 
-def current_url(ids: str, region: str = "Europe", entries: int = 0) -> str:
+def current_url(ids: str, region: str = "Europe", entries: int = 0, *, sell: bool = False) -> str:
     prefix = "items." if "," in ids else ""
     listing_fields = ("worldName", "worldID", "pricePerUnit", "quantity", "hq", "lastReviewTime")
     sale_fields = ("pricePerUnit", "quantity", "hq", "timestamp") if entries else ()
+    if sell:
+        listing_fields = ("retainerName", *listing_fields)
+        sale_fields = (*sale_fields, "buyerName")
     fields = [f"{prefix}listings.{key}" for key in listing_fields]
     fields.extend(f"{prefix}recentHistory.{key}" for key in sale_fields)
     query = urlencode({"entries": entries, "fields": ",".join([*fields, "unresolvedItems"])})
@@ -79,6 +85,27 @@ def replay(tmp_path: Path) -> Iterator[tuple[HttpClient, Session]]:
             "rows": [{"row_id": 101, "fields": {"Icon": {"path": "ui/icon/test.tex"}}}],
         },
     }
+    sell_home = {
+        "listings": [
+            listing(1, 201, 3, True), listing(1, 220, 2, True),
+            {**listing(1, 280, 10, True), "retainerName": "Synthetic seller two"},
+            {**listing(1, 41, 1, False), "retainerName": "Synthetic seller three"},
+        ],
+        "recentHistory": [
+            {**sale(241, True, 60), "quantity": 7},
+            {**sale(251, True, 7200), "quantity": 7, "buyerName": "Synthetic buyer two"},
+            {**sale(246, True, 86400), "quantity": 7},
+            sale(7, False, 500), sale(21, True, 8 * 86400),
+        ],
+    }
+    pages[current_url("101", "Cerberus", 200, sell=True)] = sell_home
+    pages[f"{BASE}/Cerberus/101?listings=50&entries=100&hq=true"] = sell_home
+    names = {1: "Cerberus", 2: "Ragnarok", 3: "Odin"}
+    pages[f"{BASE}/Europe/101?listings=5&entries=0&hq=true"] = {
+        "listings": [{**row, "worldName": names[row["worldID"]]} for row in regional],
+    }
+    history = f"{BASE}/history/Cerberus/101?entriesToReturn=80&entriesWithin=1209600&minSalePrice=0"
+    pages[history] = {"entries": sell_home["recentHistory"]}
     group = ",".join(map(str, range(200, 300)))
     for ids in (group, "300"):
         empty = {"items": {iid: {"listings": []} for iid in ids.split(",")}}
@@ -240,3 +267,98 @@ def test_cli_search_uses_saved_region_and_flags(
     assert result["region"] == "Cerberus"
     assert result["rows"][0]["entry"]["quantity"] == 3
     assert result["rows"][0]["listings"][0]["hq"]
+
+
+def test_sell_matches_flip_and_prices_quantity_cover(replay: tuple[HttpClient, Session]) -> None:
+    http, session = replay
+    costs = {"Light": 40, "Chaos": 10}
+    entry = SearchEntry(item_id=101, hq_only=True, quantity=5)
+    params = SearchParams(mode="sell", entries=[entry], top=1)
+    result = run_search(params, http=http, clock=session.now, travel_cost=costs)
+    row = result.rows[0]
+    sell = row.sell
+    assert sell and row.cover
+    scan_params = ScanParams(
+        home_world="Cerberus", buy_region="Europe", seller_tax=0.05, travel_cost=costs,
+    )
+    [(_, scan)] = _opportunities(
+        ItemRef(id=101, name=NAMES[101], hq=True), scan_params, Universalis(http),
+        session.now(), {"Odin": "Light", "Ragnarok": "Chaos"}, legacy=False,
+    )
+    assert sell.sell_ppu == scan.home_median_7d == 246
+    for field in (
+        "volume_proof", "units_sold_7d", "sales_7d", "home_lowest", "ask_exit_ppu",
+        "distinct_sellers", "home_listing_count", "rival_stock", "buy_world", "buy_ppu",
+        "profit_per_unit", "roi_pct", "days_to_sell", "est_wait_days", "data_age_h",
+    ):
+        assert getattr(sell, field) == getattr(scan, field), field
+    assert sell.distinct_sellers == sell.volume_proof.distinct_buyers_7d == 2
+    assert sell.volume_proof.top_buyer_share == pytest.approx(2 / 3)
+    assert sell.home_listing_count == 3
+    assert sell.rival_stock == 5
+    assert row.cover.covered == 6 and row.cover.total_cost == 648
+    cover_gain = 246 * 0.95 * 6 - 648
+    assert sell.cover_profit == pytest.approx(cover_gain)
+    assert sell.cover_roi_pct == pytest.approx(100 * cover_gain / 648)
+    assert "retainer" not in result.model_dump_json().casefold()
+    assert "buyer_hash" not in result.model_dump_json()
+
+
+def test_sell_home_region_has_no_buy_basis(replay: tuple[HttpClient, Session]) -> None:
+    http, session = replay
+    result = run_search(
+        SearchParams(
+            mode="sell", region="cerberus", entries=[SearchEntry(item_id=101, quantity=1)],
+        ),
+        http=http, clock=session.now,
+    )
+    row = result.rows[0]
+    assert row.sell and row.sell.sell_ppu == 243.5
+    assert row.cover and row.cover.covered == 1
+    for field in (
+        "buy_world", "buy_ppu", "profit_per_unit", "roi_pct", "days_to_sell", "est_wait_days",
+        "data_age_h", "cover_profit", "cover_roi_pct",
+    ):
+        assert getattr(row.sell, field) is None
+    assert row.warnings == ["No regional buy listing outside the home world"]
+
+
+def test_sell_without_recent_sales_keeps_off_world_quote(
+    replay: tuple[HttpClient, Session],
+) -> None:
+    http, _ = replay
+    result = run_search(
+        SearchParams(mode="sell", entries=[SearchEntry(item_id=101)], top=1),
+        http=http, clock=lambda: NOW + 8 * 86400,
+    )
+    row = result.rows[0]
+    assert row.sell and not row.error
+    assert row.listings[0].world == "Cerberus"
+    assert row.sell.buy_world == "Odin" and row.sell.buy_ppu == 71
+    assert row.warnings == ["No home sales in 7 days"]
+    assert row.sell.sell_ppu is row.sell.profit_per_unit is row.sell.days_to_sell is None
+    assert row.sell.units_sold_7d == row.sell.sales_7d == row.sell.rival_stock == 0
+    assert row.sell.volume_proof.model_dump() == {
+        "units_per_day": 0.0, "distinct_buyers_7d": 0, "days_with_sales": 0,
+        "top_buyer_share": 0.0, "last_sale_age_h": None,
+    }
+
+
+def test_cli_sell_mode_saved_default_and_explicit_buy(
+    replay: tuple[HttpClient, Session], tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setenv("APPDATA", str(tmp_path))
+    root = tmp_path / "Gilhound"
+    root.mkdir()
+    write_json(root / "items.json", NAMES)
+    SearchListStore(root).change(SearchListChange(
+        action="create", name="Sell",
+        search=SavedSearch(mode="sell", entries=[SearchEntry(item_id=101)]),
+    ))
+    for flags in (["101", "--mode", "sell"], ["--list", "Sell"]):
+        assert main(["search", *flags, "--json"]) == 0
+        row = json.loads(capsys.readouterr().out)["rows"][0]
+        assert row["sell"]["buy_world"] == "Odin"
+    assert main(["search", "--list", "Sell", "--mode", "buy", "--json"]) == 0
+    assert "sell" not in json.loads(capsys.readouterr().out)["rows"][0]

@@ -76,7 +76,7 @@ class SettingsStore:
 
     def save(self, settings: UserSettings) -> UserSettings:
         fields = dict(settings)
-        for field in ("webhook_url", "column_order"):
+        for field in ("webhook_url", "column_order", "search_mode"):
             if field not in settings.model_fields_set:
                 fields.pop(field)
         return self.update(fields)[1]

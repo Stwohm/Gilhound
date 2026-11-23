@@ -176,6 +176,10 @@ td button { padding: 4px 8px; }
 .column-menu { display: flex; width: max-content; gap: 4px; margin-top: 4px; }
 .search-form { display: grid; gap: 12px; }
 .search-form .form-actions { align-items: end; margin-top: 0; }
+.search-mode { display: inline-flex; }
+.search-mode button:first-child { border-radius: 6px 0 0 6px; }
+.search-mode button:last-child { border-radius: 0 6px 6px 0; }
+.search-mode button[aria-pressed="true"] { border-color: var(--accent); color: var(--green); background: var(--green-bg); }
 .search-entry { padding: 8px 0; border-bottom: 1px solid var(--line); }
 .search-entry .form-actions { align-items: center; }
 .search-entry input[type="number"] { width: 7rem; }

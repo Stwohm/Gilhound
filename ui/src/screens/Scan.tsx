@@ -2,28 +2,26 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { PartnerBadge, usePartnerFilter, visiblePartnerRow } from "../Partner";
 import { api } from "../api/client";
 import { mergeColumnOrder } from "../columnOrder";
-import { Item, Notice, PageTitle, Section, Table, age, errorMessage, gil, number, time } from "../common";
-import type { Schema } from "../common";
+import { Item, Notice, PageTitle, Section, Table, errorMessage, gil, marketCell, marketColumns, number, pct, time } from "../common";
+import type { MarketColumn, Schema } from "../common";
 import { checkQuotes, route } from "../Travel";
 import { purchasePlan } from "../purchasePlan";
 import ProfileEditor from "./ProfileEditor";
 
 type Row = Schema<"ScanRow">;
 type Result = Schema<"ScanResult">;
-type Value = number | string | null | undefined;
-type Column = { label: string; group: string; value: (r: Row) => Value; format?: (v: number) => string };
-const pct = (v: number) => number(v) + "%";
+type Column = MarketColumn<Row>;
 const definitions: Column[] = [
-  { label: "Item", group: "Purchase", value: (r) => r.item.name },
-  { label: "Buy world", group: "Purchase", value: (r) => r.buy_world },
+  marketColumns.item,
+  marketColumns.buyWorld,
   { label: "DC", group: "Purchase", value: (r) => r.buy_dc },
-  { label: "Buy price", group: "Purchase", value: (r) => r.buy_ppu, format: gil },
+  marketColumns.buyPrice,
   { label: "Qty at price", group: "Purchase", value: (r) => r.buy_qty_at_price },
   { label: "Listings within 10%", group: "Purchase", value: (r) => r.nearby_listings },
   { label: "Units within 10%", group: "Purchase", value: (r) => r.nearby_units },
   { label: "Second price", group: "Purchase", value: (r) => r.second_buy_price },
   { label: "Next listing gap", group: "Purchase", value: (r) => r.next_listing_gap },
-  { label: "Data age", group: "Purchase", value: (r) => r.data_age_h, format: age },
+  marketColumns.dataAge,
   { label: "Home median", group: "Sales · 7 days", value: (r) => r.home_median_7d },
   {
     label: "Weekly trend",
@@ -33,8 +31,8 @@ const definitions: Column[] = [
   },
   { label: "Units sold", group: "Sales · 7 days", value: (r) => r.units_sold_7d },
   { label: "Sales", group: "Sales · 7 days", value: (r) => r.sales_7d },
-  { label: "Units/day", group: "Sales · 7 days", value: (r) => r.volume_proof.units_per_day },
-  { label: "Buyers (7d)", group: "Sales · 7 days", value: (r) => r.volume_proof.distinct_buyers_7d },
+  marketColumns.unitsPerDay,
+  marketColumns.buyers,
   {
     label: "Top buyer",
     group: "Sales · 7 days",
@@ -46,20 +44,20 @@ const definitions: Column[] = [
   { label: "Min sale price", group: "Sales · 7 days", value: (r) => r.min_sale_price },
   { label: "Max sale price", group: "Sales · 7 days", value: (r) => r.max_sale_price },
   { label: "HQ share", group: "Sales · 7 days", value: (r) => r.hq_sale_share, format: (v) => pct(100 * v) },
-  { label: "Last sale", group: "Sales · 7 days", value: (r) => r.volume_proof.last_sale_age_h, format: age },
+  marketColumns.lastSale,
   { label: "Home listings", group: "Competition", value: (r) => r.home_listing_count },
-  { label: "Sellers", group: "Competition", value: (r) => r.distinct_sellers },
-  { label: "Rival stock", group: "Competition", value: (r) => r.rival_stock },
+  marketColumns.sellers,
+  marketColumns.rivalStock,
   { label: "Home lowest", group: "Competition", value: (r) => r.home_lowest },
   { label: "Units below target", group: "Competition", value: (r) => r.units_below_sell },
-  { label: "Profit/unit", group: "Profit", value: (r) => r.profit_per_unit, format: gil },
+  marketColumns.profit,
   { label: "Median net/unit", group: "Profit", value: r => r.median_profit_per_unit, format: gil },
   { label: "Median capped net", group: "Profit", value: r => r.median_profit_per_unit == null ? null : r.median_profit_per_unit * r.sellable_qty, format: gil },
   { label: "Observed exit", group: "Profit", value: r => r.ask_exit_ppu ?? (r.home_lowest == null ? "No observed ask" : null) },
   { label: "Ask depth", group: "Profit", value: r => r.home_lowest_units },
   { label: "Ask net/unit", group: "Profit", value: r => r.ask_profit_per_unit, format: gil },
   { label: "Ask capped net", group: "Profit", value: r => r.ask_profit_capped, format: gil },
-  { label: "ROI", group: "Profit", value: (r) => r.roi_pct, format: pct },
+  marketColumns.roi,
   { label: "Sellable qty", group: "Profit", value: (r) => r.sellable_qty },
   { label: "Capital needed", group: "Profit", value: (r) => r.capital_needed, format: gil },
   { label: "Capped profit", group: "Profit", value: (r) => r.total_profit_capped, format: gil },
@@ -91,10 +89,6 @@ function readColumns(): string[] {
     /* Storage may be disabled. */
   }
   return initial;
-}
-function display(c: Column, row: Row) {
-  const v = c.value(row);
-  return typeof v === "number" ? (c.format ?? number)(v) : (v ?? "—");
 }
 function heading(label: string, home: string, archived = false) {
   const ageLabel = label === "Data age" ? "Buy listing last seen" : label === "Last sale" ? "Last " + home + " sale" : "";
@@ -132,7 +126,7 @@ function Detail({ row, home, archived }: { row: Row; home: string; archived: boo
                 .map((c) => (
                   <Fragment key={c.label}>
                     <dt>{heading(c.label, home, archived)}</dt>
-                    <dd>{display(c, row)}</dd>
+                    <dd>{marketCell(c, row)}</dd>
                   </Fragment>
                 ))}
             </dl>
@@ -351,7 +345,7 @@ export function ScanResults({ result, archived = false, retry, edit }: { result:
                           {row.large_buy_below_multiple && <small className="warning-text">Large buy below return target</small>}
                         </>
                       ) : (
-                        display(c, row)
+                        marketCell(c, row)
                       )}
                     </td>
                   ))}

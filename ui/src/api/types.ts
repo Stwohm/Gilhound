@@ -1396,6 +1396,12 @@ export interface components {
             /** Entries */
             entries: components["schemas"]["SearchEntry"][];
             /**
+             * Mode
+             * @default buy
+             * @enum {string}
+             */
+            mode: "buy" | "sell";
+            /**
              * Region
              * @default Europe
              */
@@ -1841,6 +1847,12 @@ export interface components {
             /** Entries */
             entries: (components["schemas"]["SearchEntry"] | components["schemas"]["SearchName"])[];
             /**
+             * Mode
+             * @default buy
+             * @enum {string}
+             */
+            mode: "buy" | "sell";
+            /**
              * Region
              * @default Europe
              */
@@ -1887,8 +1899,47 @@ export interface components {
             item?: components["schemas"]["ItemRef"] | null;
             /** Listings */
             listings?: components["schemas"]["SearchListing"][];
+            sell?: components["schemas"]["SearchSellInfo"] | null;
             /** Warnings */
             warnings?: string[];
+        };
+        /** SearchSellInfo */
+        SearchSellInfo: {
+            /** Ask Exit Ppu */
+            ask_exit_ppu?: number | null;
+            /** Buy Ppu */
+            buy_ppu?: number | null;
+            /** Buy World */
+            buy_world?: string | null;
+            /** Cover Profit */
+            cover_profit?: number | null;
+            /** Cover Roi Pct */
+            cover_roi_pct?: number | null;
+            /** Data Age H */
+            data_age_h?: number | null;
+            /** Days To Sell */
+            days_to_sell?: number | null;
+            /** Distinct Sellers */
+            distinct_sellers: number;
+            /** Est Wait Days */
+            est_wait_days?: number | null;
+            /** Home Listing Count */
+            home_listing_count: number;
+            /** Home Lowest */
+            home_lowest?: number | null;
+            /** Profit Per Unit */
+            profit_per_unit?: number | null;
+            /** Rival Stock */
+            rival_stock: number;
+            /** Roi Pct */
+            roi_pct?: number | null;
+            /** Sales 7D */
+            sales_7d: number;
+            /** Sell Ppu */
+            sell_ppu?: number | null;
+            /** Units Sold 7D */
+            units_sold_7d: number;
+            volume_proof: components["schemas"]["VolumeProof"];
         };
         /** ShareCode */
         ShareCode: {
@@ -2241,6 +2292,12 @@ export interface components {
              */
             scan_interval_min: number;
             /**
+             * Search Mode
+             * @default buy
+             * @enum {string}
+             */
+            search_mode: "buy" | "sell";
+            /**
              * Share Sender
              * @default
              */
@@ -2356,6 +2413,12 @@ export interface components {
              * @default 5
              */
             scan_interval_min: number;
+            /**
+             * Search Mode
+             * @default buy
+             * @enum {string}
+             */
+            search_mode: "buy" | "sell";
             /**
              * Share Sender
              * @default

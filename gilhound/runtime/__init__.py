@@ -22,6 +22,8 @@ from gilhound.market.search import resolve_item, run_search, search_regions
 from gilhound.market.snipe import evaluate
 from gilhound.market.universalis import Universalis
 from gilhound.models import (
+    DEFAULT_BUYER_TAX,
+    DEFAULT_SELLER_TAX,
     ItemRef,
     LowStockItems,
     RetainerScanParams,
@@ -104,7 +106,7 @@ class Runtime:
             home_world=settings.home_world,
             buy_region=settings.buy_region,
             preset=preset,
-            seller_tax=0.05,
+            seller_tax=DEFAULT_SELLER_TAX,
             travel_cost=settings.travel_cost,
         )
 
@@ -179,8 +181,11 @@ class Runtime:
         self, params: SearchParams, progress: Callable[[int, int], None] | None = None,
     ) -> SearchResult:
         settings = self.settings.get()
-        return run_search(params, progress=progress, home_world=settings.home_world,
-                          travel_cost=settings.travel_cost, catalog=self.items)
+        return run_search(
+            params, progress=progress, home_world=settings.home_world,
+            travel_cost=settings.travel_cost, buyer_tax=DEFAULT_BUYER_TAX,
+            seller_tax=DEFAULT_SELLER_TAX, catalog=self.items,
+        )
 
     def search_regions(self) -> list[str]:
         return search_regions(Universalis(self.items.http).data_centers())

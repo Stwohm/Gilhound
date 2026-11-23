@@ -134,6 +134,7 @@ def report(runtime: Runtime, args: argparse.Namespace) -> dict:
             entries = [entry.model_copy(update=overrides) for entry in entries]
         response = runtime.search(SearchParams(
             entries=entries, region=args.region or (saved.region if saved else "Europe"),
+            mode=args.mode or (saved.mode if saved else "buy"),
         ))
         result.update(region=response.region, home_world=response.home_world,
                       duration_s=response.duration_s)
@@ -212,6 +213,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     search = commands.add_parser("search", parents=[common])
     search.add_argument("items", metavar="name-or-id", nargs="*")
     search.add_argument("--region")
+    search.add_argument("--mode", choices=("buy", "sell"), help="Search mode (default: buy)")
     search.add_argument("--hq", action="store_true", default=None)
     search.add_argument("--qty", type=int)
     search.add_argument("--list", metavar="NAME")

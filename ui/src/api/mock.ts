@@ -38,6 +38,7 @@ const gatheredItems = new Map<string, boolean>();
 
 let settings: Settings = {
   column_order: {},
+  search_mode: "buy",
   partner_snapshot_hours: 48, partner_cache_min: 45, partner_regular_days: 5, partner_window_days: 14,
   suppress_partner_discord: true, share_sender: "",
   min_net_multiple: 1,
@@ -253,15 +254,39 @@ export const mockApi: Api = {
       });
       const listing = stack(world, world === "Odin" ? "Light" : "Chaos", row.buy_ppu);
       const travel = world === settings.home_world ? 0 : settings.travel_cost?.[listing.dc] ?? 0;
+      const cover = entry.quantity ? {
+        requested: entry.quantity, covered: qty, listings: [listing], worlds: [world],
+        purchase_cost: listing.total, travel_cost: travel, total_cost: listing.total + travel,
+      } : null;
+      const buy = world === settings.home_world ? null : listing;
+      const velocity = row.volume_proof.units_per_day;
+      const capped = Math.min(qty, Math.floor(velocity * 3));
+      const sell = row.home_median_7d;
+      const rival = row.rival_stock ?? 0;
+      const gain = buy ? sell * 0.95 - buy.ppu * 1.05 - travel / qty : null;
+      const coverProfit = buy && cover ? sell * 0.95 * cover.covered - cover.total_cost : null;
       return {
         entry, item: { ...resolved.item, hq }, listings: [listing],
         home_cheapest: row.home_lowest ? stack(settings.home_world, "Chaos", row.home_lowest) : null,
         home_median_7d: row.home_median_7d,
         home_sale_age_h: row.volume_proof.last_sale_age_h,
-        cover: entry.quantity ? {
-          requested: entry.quantity, covered: qty, listings: [listing], worlds: [world],
-          purchase_cost: listing.total, travel_cost: travel, total_cost: listing.total + travel,
-        } : null,
+        cover,
+        ...(params.mode === "sell" && {
+          warnings: buy ? [] : ["No regional buy listing outside the home world"],
+          sell: {
+            volume_proof: row.volume_proof,
+            units_sold_7d: row.units_sold_7d ?? 0, sales_7d: row.sales_7d ?? 0,
+            sell_ppu: sell, home_lowest: row.home_lowest,
+            ask_exit_ppu: row.home_lowest == null ? null : Math.min(sell, row.home_lowest),
+            distinct_sellers: row.distinct_sellers ?? 0, home_listing_count: row.home_listing_count ?? 0,
+            rival_stock: rival, buy_world: buy?.world, buy_ppu: buy?.ppu, data_age_h: buy?.data_age_h,
+            profit_per_unit: gain, roi_pct: buy && gain != null ? gain / (buy.ppu * 1.05) * 100 : null,
+            days_to_sell: buy && velocity ? capped / velocity : null,
+            est_wait_days: buy && velocity ? (rival + capped) / velocity : null,
+            cover_profit: coverProfit,
+            cover_roi_pct: cover && coverProfit != null ? coverProfit / cover.total_cost * 100 : null,
+          },
+        }),
       };
     }));
     return { region: params.region ?? "Europe", home_world: settings.home_world, rows, duration_s: 0.15 };

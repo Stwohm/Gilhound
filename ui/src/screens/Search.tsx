@@ -2,16 +2,26 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import {
   Badge, Field, Item, Notice, PageTitle, Section, Table, age, ageTone, errorMessage, gil,
-  useResource,
+  marketCell, marketColumns, pct, useResource,
 } from "../common";
-import type { Schema } from "../common";
+import type { MarketColumn, Schema, Settings } from "../common";
 import { route } from "../Travel";
 
 type Entry = Schema<"SearchEntry"> | Schema<"SearchName">;
 type ItemRef = Schema<"ItemRef">;
 type Resolution = Schema<"SearchResolution">;
 type Listing = Schema<"SearchListing">;
+type Mode = NonNullable<Schema<"SearchParams">["mode"]>;
+type SellRow = Schema<"SearchSellInfo"> & { item: ItemRef };
 type Draft = { text: string; hq: boolean; qty: string; itemId?: number };
+
+const sellColumns: MarketColumn<SellRow>[] = [
+  marketColumns.item,
+  { label: "Sell price", group: "Sales · 7 days", value: row => row.sell_ppu, format: gil },
+  marketColumns.unitsPerDay, marketColumns.buyers, marketColumns.sellers, marketColumns.rivalStock,
+  marketColumns.buyWorld, marketColumns.buyPrice, marketColumns.profit, marketColumns.roi,
+  marketColumns.lastSale, marketColumns.dataAge,
+];
 
 const basicRegions = ["Europe", "Chaos", "Light"];
 const line = (text = ""): Draft => ({ text, hq: false, qty: "" });
@@ -82,6 +92,13 @@ function Listings({ rows, label, tableKey }: { rows: Listing[]; label: string; t
   </Table>;
 }
 
+function SellPanel({ row }: { row: SellRow }) {
+  return <Table label={`${row.item.name} sell metrics`} tableKey="search-sell">
+    <thead><tr>{sellColumns.map(column => <th scope="col" key={column.label}>{column.label}</th>)}</tr></thead>
+    <tbody><tr>{sellColumns.map(column => <td key={column.label}>{marketCell(column, row)}</td>)}</tr></tbody>
+  </Table>;
+}
+
 function SearchResultCard({ row, home, pick }: {
   row: Schema<"SearchRow">; home: string; pick?: (item: ItemRef) => void;
 }) {
@@ -91,6 +108,8 @@ function SearchResultCard({ row, home, pick }: {
   const cheapest = listings[0];
   const reference = row.home_cheapest;
   const cover = row.cover;
+  const sell = row.sell;
+  const listingTable = <Listings rows={listings} label={`${item?.name ?? input} listings`} tableKey="search-listings" />;
   return <Section title={item ? <>
       {item.icon_url && <img className="search-item-icon" src={item.icon_url} width={32} height={32} alt="" />}
       <Item item={{ ...item, hq: cheapest?.hq ?? item.hq }} buyWorld={cheapest?.world ?? null} showQuality={false} />
@@ -98,14 +117,18 @@ function SearchResultCard({ row, home, pick }: {
     {row.error && <Notice tone="warn">{row.error}</Notice>}
     {!!row.candidates?.length && pick && <Choices items={row.candidates} pick={pick} />}
     {row.warnings?.map(warning => <Notice key={warning} tone="warn">{warning}</Notice>)}
-    {item && <div className="panel-body search-reference">
+    {sell && item && <SellPanel row={{ ...sell, item }} />}
+    {item && !sell && <div className="panel-body search-reference">
       <span><strong>{home} lowest</strong> {reference
         ? <>{gil(reference.ppu)} gil/unit · {gil(reference.qty)} {reference.hq ? "HQ" : "NQ"} · {gil(reference.total)} gil incl. tax · <Seen hours={reference.data_age_h} /></>
         : "—"}</span>
       <span><strong>{home} 7-day median</strong> {row.home_median_7d == null ? "—"
         : <>{gil(row.home_median_7d)} gil/unit · Last sale <Seen hours={row.home_sale_age_h} /></>}</span>
     </div>}
-    {cheapest ? <Listings rows={listings} label={`${item?.name ?? input} listings`} tableKey="search-listings" />
+    {cheapest ? sell ? <details className="panel-body">
+      <summary>Regional listings</summary>
+      {listingTable}
+    </details> : listingTable
       : item && !row.error && <Notice>No matching listings in this region.</Notice>}
     {cover && <details className="panel-body">
       <summary>{cover.covered < cover.requested
@@ -114,13 +137,19 @@ function SearchResultCard({ row, home, pick }: {
         {" · "}{gil(cover.total_cost)} gil incl. travel</summary>
       <p>{gil(cover.purchase_cost)} gil incl. tax · {gil(cover.travel_cost)} gil travel
         {cover.worlds.length > 0 && ` · ${cover.worlds.join(", ")}`}</p>
+      {sell?.cover_profit != null && <p>
+        Estimated profit {gil(sell.cover_profit)} gil
+        {sell.cover_roi_pct != null && ` · ${pct(sell.cover_roi_pct)} ROI`}
+      </p>}
       {cover.listings.length > 0 && <Listings rows={cover.listings}
         label={`${item?.name ?? input} purchase plan`} tableKey="search-cover" />}
     </details>}
   </Section>;
 }
 
-export default function Search({ active, home }: { active: boolean; home: string }) {
+export default function Search({ active, home, settings }: {
+  active: boolean; home: string; settings: ReturnType<typeof useResource<Settings>>;
+}) {
   const library = useResource(api.searchLists);
   const [regions, setRegions] = useState<string[]>(basicRegions);
   const [regionError, setRegionError] = useState("");
@@ -134,10 +163,12 @@ export default function Search({ active, home }: { active: boolean; home: string
   const [issues, setIssues] = useState<Record<number, Resolution>>({});
   const [output, setOutput] = useState<{ result: Schema<"SearchResult">; input: ReturnType<typeof inputEntries> }>();
   const [busy, setBusy] = useState(false);
+  const [savingMode, setSavingMode] = useState(false);
   const [progress, setProgress] = useState<{ done: number; total?: number | null }>();
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [copyFallback, setCopyFallback] = useState("");
+  const mode = settings.data?.search_mode ?? "buy";
   const watch = lines[activeLine];
   const query = watch?.itemId === undefined ? watch?.text.trim() ?? "" : "";
 
@@ -189,7 +220,7 @@ export default function Search({ active, home }: { active: boolean; home: string
     setProgress({ done: 0 });
     try {
       const input = readInput();
-      const result = await api.search({ entries: input.map(row => row.entry), region, top: 10 },
+      const result = await api.search({ entries: input.map(row => row.entry), region, mode, top: 10 },
         (done, total) => setProgress({ done, total }));
       setOutput({ result, input });
       setCopyFallback("");
@@ -201,9 +232,24 @@ export default function Search({ active, home }: { active: boolean; home: string
     }
   }
 
-  function load() {
+  async function changeMode(next: Mode) {
+    if (next === mode) return true;
+    setSavingMode(true);
+    setError("");
+    try {
+      settings.setData(await api.saveSettings({ search_mode: next }));
+      return true;
+    } catch (error) {
+      setError(errorMessage(error));
+      return false;
+    } finally {
+      setSavingMode(false);
+    }
+  }
+
+  async function load() {
     const saved = library.data?.lists?.[selected];
-    if (!saved) return;
+    if (!saved || !await changeMode(saved.mode ?? "buy")) return;
     setLines(saved.entries.map(loadLine));
     setRegion(saved.region ?? "Europe");
     setIssues({});
@@ -244,7 +290,7 @@ export default function Search({ active, home }: { active: boolean; home: string
         }
         setIssues(issues);
         if (Object.keys(issues).length) throw new Error("Resolve the highlighted items before saving.");
-        change.search = { entries, region };
+        change.search = { entries, region, mode };
       }
       library.setData(await api.editSearchLists(change));
       setSelected(action === "delete" ? "" : name);
@@ -266,7 +312,9 @@ export default function Search({ active, home }: { active: boolean; home: string
   }
 
   const stops = [...new Set(output?.result.rows.flatMap(row =>
-    row.cover ? row.cover.worlds : row.listings?.[0] ? [row.listings[0].world] : []) ?? [])];
+    row.cover ? row.cover.worlds : row.sell
+      ? row.sell.buy_world ? [row.sell.buy_world] : []
+      : row.listings?.[0] ? [row.listings[0].world] : []) ?? [])];
   const routeStops = output && stops.length
     ? [...stops.filter(world => world !== output.result.home_world), output.result.home_world] : [];
   const routeText = routeStops.map(route).join("\n");
@@ -286,21 +334,33 @@ export default function Search({ active, home }: { active: boolean; home: string
   const suggested = captured?.item ? [captured.item] : captured?.candidates ?? [];
   const hasItems = lines.some(row => row.text.trim());
   return <>
-    <PageTitle title="Search" description="Compare listings and plan whole-stack market purchases." />
+    <PageTitle title="Search" description={mode === "buy"
+      ? "Compare listings and plan whole-stack market purchases."
+      : "Check demand and resale profit on your home world."} />
     <Section title="Item search">
       <form className="panel-body" onSubmit={event => { event.preventDefault(); void run(); }}>
-        <fieldset className="search-form" disabled={busy}>
+        <fieldset className="search-form" disabled={busy || savingMode}>
           <div className="form-actions">
             <Field label="Saved list"><select value={selected} onChange={event => setSelected(event.currentTarget.value)}>
               <option value="">Choose a list</option>
               {Object.keys(library.data?.lists ?? {}).sort((a, b) => a.localeCompare(b)).map(name =>
                 <option key={name}>{name}</option>)}
             </select></Field>
-            <button type="button" disabled={!selected} onClick={load}>Load</button>
+            <button type="button" disabled={!selected} onClick={() => void load()}>Load</button>
             <button type="button" disabled={!selected || !hasItems} onClick={() => void changeList("save")}>Save</button>
             <button type="button" disabled={!hasItems} onClick={() => void changeList("create")}>Save as</button>
             <button type="button" disabled={!selected} onClick={() => void changeList("rename")}>Rename</button>
             <button type="button" disabled={!selected} onClick={() => void changeList("delete")}>Delete</button>
+          </div>
+          <div className="form-actions">
+            <Field label="Region or world"><select value={region} onChange={event => setRegion(event.currentTarget.value)}>
+              {options.map(option => <option key={option}>{option}</option>)}
+            </select></Field>
+            <div className="search-mode" role="group" aria-label="Search mode">
+              {(["buy", "sell"] as const).map(value =>
+                <button key={value} type="button" aria-pressed={mode === value}
+                  onClick={() => void changeMode(value)}>{value === "buy" ? "Buy" : "Sell"}</button>)}
+            </div>
           </div>
           <Field label="Item names or IDs, one per line"><textarea rows={5}
             value={lines.map(row => row.text).join("\n")}
@@ -327,9 +387,6 @@ export default function Search({ active, home }: { active: boolean; home: string
             {!!issues[index]?.candidates?.length && <Choices items={issues[index].candidates!} pick={item => pick(index, item)} />}
           </div>)}
           <div className="form-actions">
-            <Field label="Region or world"><select value={region} onChange={event => setRegion(event.currentTarget.value)}>
-              {options.map(option => <option key={option}>{option}</option>)}
-            </select></Field>
             <span title={low?.reason ?? (low ? undefined : "Checking Restocky low-stock data…")}>
               <button type="button" disabled={!low?.entries?.length} onClick={addLowStock}>Add low-stock items</button>
             </span>

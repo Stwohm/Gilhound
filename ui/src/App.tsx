@@ -114,7 +114,7 @@ export default function App() {
       <UpdateBanner version={info?.update_available ? info.latest_version : null} />
       <div className="retained-screen" hidden={page.id !== "scan"}><Scan settings={preferences} /></div>
       <div className="retained-screen" hidden={page.id !== "retainer"}><Retainer settings={preferences} /></div>
-      <div className="retained-screen" hidden={page.id !== "search"}><Search active={page.id === "search"} home={preferences.home_world} /></div>
+      <div className="retained-screen" hidden={page.id !== "search"}><Search active={page.id === "search"} home={preferences.home_world} settings={settings} /></div>
       {screens[page.id]}
     </ColumnOrderProvider></main>
   </div></TravelProvider>;

@@ -78,6 +78,7 @@ class Universalis:
         hq: bool | None = None,
         projected: bool = False,
         include_retainers: bool = True,
+        include_buyers: bool = False,
         worlds: dict[int, str] | None = None,
     ) -> dict[int, Snapshot]:
         if not 1 <= len(ids) <= 100:
@@ -96,6 +97,8 @@ class Universalis:
             ]
             if entries:
                 fields.extend(f"{prefix}recentHistory.{key}" for key in SALE_FIELDS)
+                if include_buyers:
+                    fields.append(f"{prefix}recentHistory.buyerName")
             query["fields"] = ",".join([*fields, "unresolvedItems"])
         path = ",".join(map(str, ids))
         raw = self.http.request(f"{BASE}/{quote(location, safe='')}/{path}?{urlencode(query)}")

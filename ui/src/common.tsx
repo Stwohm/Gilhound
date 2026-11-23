@@ -10,6 +10,7 @@ export type Schema<K extends keyof components["schemas"]> = components["schemas"
 export type Settings = Schema<"UserSettings-Output">;
 export const defaults: Settings = {
   column_order: {},
+  search_mode: "buy",
   partner_snapshot_hours: 48, partner_cache_min: 45, partner_regular_days: 5, partner_window_days: 14,
   suppress_partner_discord: true, share_sender: "",
   min_net_multiple: 1,
@@ -38,7 +39,50 @@ export const age = (hours: number | null | undefined) => {
   return `${number(hours)} h`;
 };
 export const ageTone = (hours: number) => hours < 1 ? "good" : hours < 6 ? "warn" : "muted";
+export const pct = (value: number) => number(value) + "%";
 export const errorMessage = (error: unknown) => error instanceof Error ? error.message : "Something went wrong. Try again.";
+
+type CellValue = number | string | null | undefined;
+export type MarketColumn<Row> = {
+  label: string;
+  group: string;
+  value: (row: Row) => CellValue;
+  format?: (value: number) => string;
+  signed?: boolean;
+};
+type MarketMetrics = {
+  item: Schema<"ItemRef">;
+  volume_proof: Schema<"VolumeProof">;
+  buy_world?: string | null;
+  buy_ppu?: number | null;
+  data_age_h?: number | null;
+  distinct_sellers?: number | null;
+  rival_stock?: number | null;
+  profit_per_unit?: number | null;
+  roi_pct?: number | null;
+};
+
+export const marketColumns = {
+  item: { label: "Item", group: "Purchase", value: r => r.item.name },
+  buyWorld: { label: "Buy world", group: "Purchase", value: r => r.buy_world },
+  buyPrice: { label: "Buy price", group: "Purchase", value: r => r.buy_ppu, format: gil },
+  dataAge: { label: "Data age", group: "Purchase", value: r => r.data_age_h, format: age },
+  unitsPerDay: { label: "Units/day", group: "Sales · 7 days", value: r => r.volume_proof.units_per_day },
+  buyers: { label: "Buyers (7d)", group: "Sales · 7 days", value: r => r.volume_proof.distinct_buyers_7d },
+  lastSale: { label: "Last sale", group: "Sales · 7 days", value: r => r.volume_proof.last_sale_age_h, format: age },
+  sellers: { label: "Sellers", group: "Competition", value: r => r.distinct_sellers },
+  rivalStock: { label: "Rival stock", group: "Competition", value: r => r.rival_stock },
+  profit: { label: "Profit/unit", group: "Profit", value: r => r.profit_per_unit, format: gil, signed: true },
+  roi: { label: "ROI", group: "Profit", value: r => r.roi_pct, format: pct, signed: true },
+} satisfies Record<string, MarketColumn<MarketMetrics>>;
+
+export function marketCell<Row>(column: MarketColumn<Row>, row: Row) {
+  const value = column.value(row);
+  if (typeof value !== "number") return value ?? "—";
+  const formatted = (column.format ?? number)(value);
+  return column.signed && value !== 0
+    ? <span className={value > 0 ? "profit" : "loss"}>{formatted}</span> : formatted;
+}
 
 export function useResource<T>(load: () => Promise<T>) {
   const [data, setData] = useState<T>();

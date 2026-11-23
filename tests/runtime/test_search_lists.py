@@ -57,3 +57,31 @@ def test_column_orders_are_independent_and_persistent(client: TestClient, tmp_pa
     }
     assert client.put(endpoint, json={"table": "scan", "order": []}).json() == []
     assert client.get(endpoint).json() == {"sales": ["Units", "Item"]}
+
+
+def test_search_list_mode_round_trip_and_legacy_default(client: TestClient, tmp_path: Path) -> None:
+    store = SearchListStore(tmp_path / "state")
+    store.path.write_text('{"lists":{"Legacy":{"entries":[{"item_id":101}]}}}', encoding="utf-8")
+    assert store.get("Legacy").mode == "buy"
+    endpoint = "/api/search-lists"
+    response = client.post(endpoint, json={
+        "action": "create", "name": "Sell",
+        "search": {"entries": [{"item_id": 101}], "mode": "sell"},
+    })
+    assert response.status_code == 200
+    assert response.json()["lists"]["Sell"]["mode"] == "sell"
+    assert store.get("Sell").mode == "sell"
+    assert store.get("Legacy").mode == "buy"
+
+
+def test_search_mode_setting_persists_alongside_column_order(
+    client: TestClient, tmp_path: Path,
+) -> None:
+    assert client.get("/api/settings").json()["search_mode"] == "buy"
+    assert client.patch("/api/settings", json={"search_mode": "sell"}).status_code == 200
+    assert client.put("/api/column-order", json={
+        "table": "search-sell", "order": ["Sell price", "Item"],
+    }).status_code == 200
+    saved = SettingsStore(tmp_path / "state" / "settings.json").get()
+    assert saved.search_mode == "sell"
+    assert saved.column_order == {"search-sell": ["Sell price", "Item"]}
